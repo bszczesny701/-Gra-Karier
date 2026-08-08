@@ -161,7 +161,7 @@ export class App {
       `
       <section class="panel">
         <h2>Nowy zawodnik</h2>
-        <p class="muted">Ustaw profil. Potem 4 oferty z III ligi. Pozycje: napastnik, ofensywny / defensywny pomocnik, obrońca.</p>
+        <p class="muted">Ustaw profil. Potem 4 oferty z II i III ligi. Pozycje: napastnik, ofensywny / defensywny pomocnik, obrońca.</p>
         <label class="field"><span>Imię i nazwisko</span>
           <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" /></label>
         <label class="field"><span>Pozycja</span><select id="player-pos">${options}</select></label>
@@ -225,7 +225,7 @@ export class App {
         return `
           <button class="choice" data-offer="${o.clubId}">
             <strong>${c.name}</strong>
-            <span>III liga · ${formatStars(c.stars)} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł</span>
+            <span>${getLeague(o.leagueId).name} · ${formatStars(c.stars)} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł</span>
             <span><strong>Szansa na grę ≈ ${chance}%</strong> — ${o.message}</span>
           </button>`
       })
@@ -233,7 +233,7 @@ export class App {
     return this.shell(
       `
       <section class="panel">
-        <h2>Oferty z III ligi</h2>
+        <h2>Oferty z II i III ligi</h2>
         <p class="muted">${p.name} · OVR ${p.overall} · ${p.age} lat. Wybierz klub na start kariery.</p>
         <div class="choices">${cards}</div>
       </section>`,

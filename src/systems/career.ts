@@ -149,11 +149,12 @@ function contractYearsForOffer(leagueId: string, kind: 'transfer' | 'loan' = 'tr
 }
 
 export function generateStartingOffers(player: Player): TransferOffer[] {
-  const league = getLeague('liga-3')
   return pickStartingClubIds(4).map((clubId) => {
     const club = getClub(clubId)
+    const league = getLeagueForClub(clubId)
     const playChance = estimatePlayChance(player, clubId)
     const wage = Math.round(club.wage * (0.85 + player.overall / 200))
+    const years = league.tier === 3 ? 2 : 2
     return {
       clubId,
       leagueId: league.id,
@@ -161,15 +162,15 @@ export function generateStartingOffers(player: Player): TransferOffer[] {
       signingBonus: Math.round(wage * 1.5 + player.overall * 12),
       playChance,
       kind: 'transfer' as const,
-      contractYears: 2,
+      contractYears: years,
       message:
         playChance >= 65
-          ? 'Trener liczy na Ciebie w pierwszym składzie. Kontrakt 2 lata.'
+          ? `Trener liczy na Ciebie w pierwszym składzie. Kontrakt ${years} lata.`
           : playChance >= 45
-            ? 'Szansa na regularne minuty. Kontrakt 2 lata.'
+            ? `Szansa na regularne minuty. Kontrakt ${years} lata.`
             : playChance >= 30
-              ? 'Konkurencja o miejsce — start z rotacji. Kontrakt 2 lata.'
-              : 'Raczej ławka. Kontrakt 2 lata.',
+              ? `Konkurencja o miejsce — start z rotacji. Kontrakt ${years} lata.`
+              : `Raczej ławka. Kontrakt ${years} lata.`,
     }
   })
 }
@@ -216,7 +217,7 @@ export function acceptStartingOffer(state: GameState, clubId: string): void {
   state.transferOffers = []
   pushLog(
     state,
-    `Start w ${club.name} (III liga). Kontrakt ${player.contract.yearsLeft} lata. Szansa ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
+    `Start w ${club.name} (${league.name}). Kontrakt ${player.contract.yearsLeft} lata. Szansa ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
   )
   state.screen = 'hub'
 }

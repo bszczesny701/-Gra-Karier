@@ -301,20 +301,42 @@ export function getLeagueForClub(clubId: string): League {
 }
 
 export function starterClubOptions(): Array<{ clubId: string; label: string; minOverall: number }> {
-  return getLeague('liga-3').clubIds.map((clubId) => ({
+  const iii = getLeague('liga-3').clubIds.map((clubId) => ({
     clubId,
     label: `${getClub(clubId).name} · III liga`,
     minOverall: 45,
   }))
+  const ii = getLeague('liga-ii').clubIds.map((clubId) => ({
+    clubId,
+    label: `${getClub(clubId).name} · II liga`,
+    minOverall: 48,
+  }))
+  return [...iii, ...ii]
 }
 
+/** Losowe oferty startowe z II i III ligi (zawsze mix). */
 export function pickStartingClubIds(count = 4): string[] {
-  const ids = [...getLeague('liga-3').clubIds]
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[ids[i], ids[j]] = [ids[j]!, ids[i]!]
+  const iii = [...getLeague('liga-3').clubIds]
+  const ii = [...getLeague('liga-ii').clubIds]
+  const shuffle = (arr: string[]) => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j]!, arr[i]!]
+    }
+    return arr
   }
-  return ids.slice(0, Math.min(count, ids.length))
+  shuffle(iii)
+  shuffle(ii)
+  const picked: string[] = []
+  if (count >= 2) {
+    picked.push(iii[0]!, ii[0]!)
+  }
+  const rest = shuffle([...iii.slice(1), ...ii.slice(1)])
+  for (const id of rest) {
+    if (picked.length >= count) break
+    picked.push(id)
+  }
+  return picked.slice(0, Math.min(count, picked.length))
 }
 
 export function ovrForHigherLeague(tier: number): number {
