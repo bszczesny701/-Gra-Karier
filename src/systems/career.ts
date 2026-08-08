@@ -26,9 +26,16 @@ import {
   appearanceChance,
   describeRival,
   makeRival,
-  simulateFirstHalf,
-  simulateSecondHalf,
 } from './seasonSim'
+import {
+  buildWinterSnapshotFromLive,
+  finalizeMatchdaySeason,
+  initSeasonMatchdayFields,
+  nextPlayerFixture,
+  playNextMatchday,
+  resolveGoalMoment,
+  startSeasonCalendar,
+} from './matchday'
 import { playerTablePosition, sortedStandings } from './standings'
 import {
   applyAgingDecline,
@@ -83,6 +90,7 @@ export function createSeason(
   year: number,
   inject: 'promote' | 'relegate' | 'none' = 'none',
   strengthMods: Record<string, number> = {},
+  playerOverall = 50,
 ): SeasonState {
   const league = getLeague(leagueId)
   let clubIds = [...league.clubIds]
@@ -98,7 +106,7 @@ export function createSeason(
     clubIds = clubIds.map((id) => (id === replaceId ? clubId : id))
   }
 
-  return {
+  const season: SeasonState = {
     year,
     leagueId,
     clubId,
@@ -117,9 +125,30 @@ export function createSeason(
     injuryCare: 0,
     rival: makeRival(clubId, year, strengthMods),
     rivalPressure: 0,
-    phase: 'ready',
+    phase: 'playing',
     halfStats: null,
+    fixtures: [],
+    fixtureIndex: 0,
+    matchMood: 50,
+    liveStats: {
+      appearances: 0,
+      goals: 0,
+      assists: 0,
+      ratingSum: 0,
+      matchesMissedInjury: 0,
+      injuryLabels: [],
+      appsThisSeason: 0,
+      injuryAtApp: -1,
+      overallBefore: playerOverall,
+      fixturesForPlayer: 0,
+      scorerEntries: [],
+    },
+    lastMatch: null,
+    pendingGoalMoment: null,
+    winterBreakTaken: false,
   }
+  initSeasonMatchdayFields(season, playerOverall)
+  return season
 }
 
 export function estimatePlayChance(
@@ -213,7 +242,14 @@ export function acceptStartingOffer(state: GameState, clubId: string): void {
   trackClub(player, clubId)
   bumpPeak(player)
 
-  state.season = createSeason(clubId, league.id, 2026, 'none', state.clubStrengthMods ?? {})
+  state.season = createSeason(
+    clubId,
+    league.id,
+    2026,
+    'none',
+    state.clubStrengthMods ?? {},
+    player.overall,
+  )
   state.transferOffers = []
   pushLog(
     state,
@@ -347,72 +383,139 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
   state.screen = 'hub'
 }
 
-/** 1. połowa → przerwa zimowa */
-export function runFirstHalf(state: GameState): void {
+function applyMatchdayOutcome(state: GameState, outcome: ReturnType<typeof playNextMatchday>): void {
   const player = state.player!
   const season = state.season!
-  const snap = simulateFirstHalf(player, season, state.clubStrengthMods ?? {})
-  state.winterSnapshot = snap
-  state.season = { ...season, phase: 'firstHalfDone', midTransferDone: true }
-  state.screen = 'winterBreak'
-  pushLog(
-    state,
-    `Przerwa zimowa: ${snap.place}. miejsce, ${snap.appearances} meczów, ${snap.goals} G. ${snap.rivalNote}`,
-  )
-}
 
-/** 2. połowa → kluczowe mecze / raport */
-export function runSecondHalf(state: GameState): void {
-  const player = state.player!
-  const season = state.season!
-  const report = simulateSecondHalf(player, season, state.clubStrengthMods ?? {})
-  state.seasonReport = report
-  state.winterSnapshot = null
-  state.season = {
-    ...season,
-    standings: report.standings,
-    phase: 'ready',
-    halfStats: null,
-    preseasonDone: true,
-    midTransferDone: true,
+  if (outcome.kind === 'goalMoment') {
+    const pending = season.pendingGoalMoment!
+    state.pendingKeyMatch = {
+      homeId: pending.homeId,
+      awayId: pending.awayId,
+      opponentId: pending.opponentId,
+      reason: 'title',
+      label: pending.label,
+      description: pending.description,
+      stake: 'leaguePoints',
+    }
+    state.screen = 'keyMatch'
+    pushLog(state, `Okazja bramkowa vs ${getClub(pending.opponentId).name}!`)
+    return
   }
 
-  player.seasonsPlayed += 1
-  bumpPeak(player)
-  trackClub(player, report.clubId)
-  if (report.title) player.titles += 1
+  if (outcome.kind === 'winter') {
+    state.winterSnapshot = outcome.snapshot
+    state.season = { ...season, phase: 'winterDone', midTransferDone: true }
+    state.screen = 'winterBreak'
+    pushLog(
+      state,
+      `Przerwa zimowa: ${outcome.snapshot.place}. miejsce, ${outcome.snapshot.appearances} meczów, ${outcome.snapshot.goals} G. ${outcome.snapshot.rivalNote}`,
+    )
+    return
+  }
 
-  if (report.keyMatchesPending.length) {
-    state.pendingKeyQueue = [...report.keyMatchesPending]
-    state.pendingKeyMatch = state.pendingKeyQueue.shift() ?? null
-    state.screen = 'keyMatch'
-    pushLog(state, `Sezon domknięty. Kluczowe mecze: ${report.keyMatchesPending.length}.`)
-  } else {
+  if (outcome.kind === 'seasonDone') {
+    const report = outcome.report
+    state.seasonReport = report
+    state.winterSnapshot = null
+    state.season = {
+      ...season,
+      standings: report.standings,
+      phase: 'done',
+      halfStats: null,
+      preseasonDone: true,
+      midTransferDone: true,
+    }
+    player.seasonsPlayed += 1
+    bumpPeak(player)
+    trackClub(player, report.clubId)
+    if (report.title) player.titles += 1
     state.pendingKeyMatch = null
     state.pendingKeyQueue = []
     state.screen = 'seasonReport'
     pushLog(state, `Sezon ${report.year} — ${report.place}. miejsce.`)
-  }
-}
-
-/** Hub: start sezonu = zawsze 1. połowa (zima potem). */
-export function runFullSeason(state: GameState): void {
-  const season = state.season!
-  if (season.phase === 'firstHalfDone' && season.halfStats) {
-    runSecondHalf(state)
     return
   }
-  runFirstHalf(state)
+
+  // matchResult
+  state.screen = 'matchResult'
+  const m = outcome.match
+  const home = getClub(m.homeId).short
+  const away = getClub(m.awayId).short
+  pushLog(state, `${home} ${m.homeGoals}:${m.awayGoals} ${away} — ${m.narrative}`)
+}
+
+/** Hub: kolejny mecz Twojego klubu (+ tło kolejki). */
+export function playCareerMatchday(state: GameState): void {
+  const player = state.player!
+  const season = state.season!
+  const outcome = playNextMatchday(player, season, state.clubStrengthMods ?? {})
+  applyMatchdayOutcome(state, outcome)
+}
+
+/** Po ekranie wyniku meczu. */
+export function dismissMatchResult(state: GameState): void {
+  const player = state.player!
+  const season = state.season!
+  if (season.phase === 'winterDone' && !state.winterSnapshot) {
+    const snapshot = buildWinterSnapshotFromLive(player, season)
+    state.winterSnapshot = snapshot
+    season.midTransferDone = true
+    state.screen = 'winterBreak'
+    pushLog(
+      state,
+      `Przerwa zimowa: ${snapshot.place}. miejsce, ${snapshot.appearances} meczów, ${snapshot.goals} G. ${snapshot.rivalNote}`,
+    )
+    return
+  }
+  if (!nextPlayerFixture(season) && season.phase !== 'winterDone') {
+    const report = finalizeMatchdaySeason(player, season, state.clubStrengthMods ?? {})
+    applyMatchdayOutcome(state, { kind: 'seasonDone', report })
+    return
+  }
+  state.screen = 'hub'
+}
+
+/** Legacy aliases — hub woła playCareerMatchday. */
+export function runFullSeason(state: GameState): void {
+  playCareerMatchday(state)
+}
+
+export function runFirstHalf(state: GameState): void {
+  playCareerMatchday(state)
+}
+
+export function runSecondHalf(state: GameState): void {
+  playCareerMatchday(state)
 }
 
 export function continueAfterWinter(state: GameState): void {
-  runSecondHalf(state)
+  const season = state.season!
+  season.phase = 'playing'
+  season.winterBreakTaken = true
+  state.winterSnapshot = null
+  state.screen = 'hub'
+  pushLog(state, 'Koniec przerwy zimowej — wracasz do gry.')
 }
 
 export function resolveKeyMatch(state: GameState, moment: MatchMomentResult): void {
+  const player = state.player!
+  const season = state.season
+
+  if (season?.pendingGoalMoment) {
+    const outcome = resolveGoalMoment(
+      player,
+      season,
+      moment.score,
+      state.clubStrengthMods ?? {},
+    )
+    state.pendingKeyMatch = null
+    applyMatchdayOutcome(state, outcome)
+    return
+  }
+
   const match = state.pendingKeyMatch
   const report = state.seasonReport
-  const player = state.player!
   if (!match || !report) return
 
   applyKeyMatchToReport(report, player, moment.score, moment.action, match)
@@ -794,7 +897,9 @@ export function stayAtClub(state: GameState): void {
 }
 
 export function openWinterTransfers(state: GameState): void {
-  if (!state.season || state.season.phase !== 'firstHalfDone') return
+  if (!state.season || (state.season.phase !== 'winterDone' && !state.season.winterBreakTaken)) {
+    return
+  }
   state.transferOffers = generateMidSeasonOffers(state)
   if (!state.transferOffers.length) {
     pushLog(state, 'Brak ofert zimowych.')
@@ -804,7 +909,9 @@ export function openWinterTransfers(state: GameState): void {
 }
 
 export function openWinterLoans(state: GameState): void {
-  if (!state.season || state.season.phase !== 'firstHalfDone') return
+  if (!state.season || (state.season.phase !== 'winterDone' && !state.season.winterBreakTaken)) {
+    return
+  }
   const loans = generateLoanOffers(
     state,
     state.season.clubId,
@@ -821,7 +928,7 @@ export function openWinterLoans(state: GameState): void {
 
 export function openMidSeasonTransfers(state: GameState): void {
   if (!state.season || state.season.midTransferDone) return
-  if (state.season.phase === 'firstHalfDone') {
+  if (state.season.phase === 'winterDone' || state.screen === 'winterBreak') {
     openWinterTransfers(state)
     return
   }
@@ -836,7 +943,7 @@ export function openMidSeasonTransfers(state: GameState): void {
 
 export function hasMidSeasonOffers(state: GameState): boolean {
   if (!state.player || !state.season || state.season.midTransferDone) return false
-  if (state.season.phase === 'firstHalfDone') return false
+  if (state.season.phase === 'winterDone' || state.screen === 'winterBreak') return false
   return generateMidSeasonOffers(state).length > 0
 }
 
@@ -846,7 +953,7 @@ export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
   const season = state.season!
   if (!offer || !season) return
 
-  const winter = season.phase === 'firstHalfDone' && season.halfStats
+  const winter = Boolean(state.winterSnapshot)
   player.money += offer.signingBonus
   player.morale = clamp(player.morale + 5, 1, 100)
   player.reputation = clamp(player.reputation + 3, 0, 100)
@@ -857,7 +964,6 @@ export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
       parentLeagueId: season.leagueId,
       returnAfterSeason: true,
     }
-    // kontrakt rodzica bez zmian
   } else {
     player.loan = null
     player.contract = {
@@ -868,18 +974,33 @@ export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
   }
 
   trackClub(player, clubId)
-  const half = winter ? season.halfStats : null
-  const next = createSeason(clubId, offer.leagueId, season.year, 'none', state.clubStrengthMods ?? {})
+  const preserved = winter
+    ? {
+        ...season.liveStats,
+        scorerEntries: season.liveStats.scorerEntries.map((e) => ({ ...e })),
+      }
+    : null
+  const mood = season.matchMood
+  const next = createSeason(
+    clubId,
+    offer.leagueId,
+    season.year,
+    'none',
+    state.clubStrengthMods ?? {},
+    player.overall,
+  )
   next.preseasonDone = true
   next.midTransferDone = true
 
-  if (winter && half) {
-    // Kontynuacja 2. połowy w nowym klubie — osobiste stats z 1. połowy zostają
-    next.phase = 'firstHalfDone'
-    next.halfStats = {
-      ...half,
-      // nowy klub = nowe fixtures; zachowujemy dorobek osobisty
-    }
+  if (winter && preserved) {
+    const mid = Math.ceil(next.fixtures.length / 2)
+    startSeasonCalendar(player, next, state.clubStrengthMods ?? {}, {
+      preserveLive: preserved,
+      fixtureIndex: mid,
+      winterTaken: true,
+    })
+    next.matchMood = mood
+    next.phase = 'playing'
     state.season = next
     state.transferOffers = []
     pushLog(
@@ -912,7 +1033,7 @@ export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
 
 export function declineMidSeasonTransfers(state: GameState): void {
   if (state.season) {
-    if (state.season.phase === 'firstHalfDone') {
+    if (state.winterSnapshot || state.season.phase === 'winterDone') {
       state.transferOffers = []
       state.screen = 'winterBreak'
       pushLog(state, 'Zostajesz — dokańczasz sezon w klubie.')
@@ -926,7 +1047,7 @@ export function declineMidSeasonTransfers(state: GameState): void {
 }
 
 export function acceptOffer(state: GameState, clubId: string): void {
-  if (state.season && (state.season.phase === 'firstHalfDone' || !state.seasonReport)) {
+  if (state.season && !state.seasonReport) {
     acceptMidSeasonOffer(state, clubId)
     return
   }
@@ -1043,6 +1164,7 @@ function beginNextSeason(
     report.year + 1,
     inject,
     state.clubStrengthMods,
+    state.player?.overall ?? 50,
   )
   state.seasonReport = null
   state.winterSnapshot = null

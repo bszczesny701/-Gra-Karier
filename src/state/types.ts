@@ -19,13 +19,63 @@ export type Screen =
   | 'hub'
   | 'decision'
   | 'keyMatch'
+  | 'matchResult'
   | 'seasonReport'
   | 'transferChoice'
   | 'seasonEnd'
   | 'winterBreak'
   | 'careerEnd'
 
-export type SeasonPhase = 'ready' | 'firstHalfDone' | 'secondHalf'
+/** playing = w trakcie, winterDone = po zimie, done = sezon domknięty */
+export type SeasonPhase = 'playing' | 'winterDone' | 'done' | 'ready' | 'firstHalfDone' | 'secondHalf'
+
+export interface LeagueFixture {
+  homeId: string
+  awayId: string
+}
+
+export interface MatchDayResult {
+  homeId: string
+  awayId: string
+  homeGoals: number
+  awayGoals: number
+  opponentId: string
+  played: boolean
+  playerGoals: number
+  playerAssists: number
+  rating: number | null
+  moodBefore: number
+  moodAfter: number
+  narrative: string
+}
+
+export interface PendingGoalMoment {
+  fixtureIndex: number
+  homeId: string
+  awayId: string
+  opponentId: string
+  boost: number
+  matchAssists: number
+  moodBefore: number
+  baseHomeGoals: number
+  baseAwayGoals: number
+  label: string
+  description: string
+}
+
+export interface LiveSeasonStats {
+  appearances: number
+  goals: number
+  assists: number
+  ratingSum: number
+  matchesMissedInjury: number
+  injuryLabels: string[]
+  appsThisSeason: number
+  injuryAtApp: number
+  overallBefore: number
+  fixturesForPlayer: number
+  scorerEntries: ScorerEntry[]
+}
 
 export interface Attributes {
   pace: number
@@ -133,10 +183,18 @@ export interface SeasonState {
   midTransferDone: boolean
   injuryCare: number
   rival: PositionalRival
-  /** Tymczasowy modyfikator kary rywala (−2…+2) z decyzji */
   rivalPressure: number
   phase: SeasonPhase
+  /** Legacy half-season — nieużywane w v11 */
   halfStats: SeasonHalfProgress | null
+  /** Terminarz ligowy (budowany raz) */
+  fixtures: LeagueFixture[]
+  fixtureIndex: number
+  matchMood: number
+  liveStats: LiveSeasonStats
+  lastMatch: MatchDayResult | null
+  pendingGoalMoment: PendingGoalMoment | null
+  winterBreakTaken: boolean
 }
 
 export interface PendingKeyMatch {
@@ -259,8 +317,8 @@ export interface GameState {
   clubStrengthMods: Record<string, number>
 }
 
-export const SAVE_KEY = 'gra-karier-save-v10'
-export const SAVE_VERSION = 10
+export const SAVE_KEY = 'gra-karier-save-v11'
+export const SAVE_VERSION = 11
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

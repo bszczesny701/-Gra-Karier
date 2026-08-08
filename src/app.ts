@@ -5,6 +5,7 @@ import {
   applyPreseasonDecision,
   continueAfterWinter,
   declineMidSeasonTransfers,
+  dismissMatchResult,
   draftNewCareer,
   estimatePlayChance,
   hasMidSeasonOffers,
@@ -13,12 +14,13 @@ import {
   openTransferChoice,
   openWinterLoans,
   openWinterTransfers,
+  playCareerMatchday,
   resolveKeyMatch,
-  runFullSeason,
   sortedStandings,
   stayAtClub,
 } from './systems/career'
 import { appearanceChance, describeRival } from './systems/seasonSim'
+import { nextPlayerFixture } from './systems/matchday'
 import { mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type { GameState, MatchAction, Position, PreferredFoot } from './state/types'
@@ -87,6 +89,10 @@ export class App {
       case 'keyMatch':
         this.root.innerHTML = this.keyMatchHtml()
         this.bindKeyMatch()
+        break
+      case 'matchResult':
+        this.root.innerHTML = this.matchResultHtml()
+        this.bindMatchResult()
         break
       case 'seasonReport':
         this.root.innerHTML = this.seasonReportHtml()
@@ -260,6 +266,12 @@ export class App {
     )
     const clubPower = getEffectiveStrength(s.clubId, mods)
     const midOffers = hasMidSeasonOffers(this.state)
+    const next = nextPlayerFixture(s)
+    const nextLine = next
+      ? `<p class="meta">Następny mecz: <strong>${getClub(next.homeId).name}</strong> vs <strong>${getClub(next.awayId).name}</strong></p>
+         <p class="meta">Forma meczowa: <strong>${Math.round(s.matchMood)}</strong> · kolejka ~${Math.min(s.fixtureIndex + 1, s.fixtures.length)}/${s.fixtures.length}</p>
+         <p class="muted">Sezon: ${s.liveStats.appearances} meczy · ${s.liveStats.goals} G · ${s.liveStats.assists} A</p>`
+      : `<p class="muted">Terminarz domknięty — raport sezonu.</p>`
     const log = this.state.log
       .slice(0, 4)
       .map((l) => `<li>${l}</li>`)
@@ -302,7 +314,8 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">Najpierw 1. połowa → przerwa zimowa (oferty / wypożyczenie) → 2. połowa. Młody + dużo minut = szybszy rozwój.</p>
+        ${nextLine}
+        <p class="muted">Grajesz mecz po meczu. Czasem wpadnie okazja bramkowa (minigierka). W połowie terminarza — przerwa zimowa.</p>
         <div class="actions">
           ${
             s.preseasonDone
@@ -315,7 +328,7 @@ export class App {
               : ''
           }
           <button class="btn primary" id="btn-season">${
-            s.phase === 'firstHalfDone' ? 'Dokończ sezon (2. połowa)' : 'Rozegraj 1. połowę'
+            next ? 'Następny mecz' : 'Zakończ sezon'
           }</button>
         </div>
       </section>
@@ -338,7 +351,7 @@ export class App {
       this.go(() => openMidSeasonTransfers(this.state))
     })
     this.root.querySelector('#btn-season')?.addEventListener('click', () => {
-      this.go(() => runFullSeason(this.state))
+      this.go(() => playCareerMatchday(this.state))
     })
     this.root.querySelector('#btn-reset')?.addEventListener('click', () => {
       if (!confirm('Na pewno zacząć od nowa?')) return
@@ -388,9 +401,36 @@ export class App {
   }
 
   private keyMatchHtml(): string {
+    const goalMoment = this.state.season?.pendingGoalMoment
     const k = this.state.pendingKeyMatch!
     const home = getClub(k.homeId)
     const away = getClub(k.awayId)
+    if (goalMoment) {
+      if (!this.selectedAction) {
+        return this.shell(
+          `
+          <section class="panel">
+            <p class="eyebrow">${goalMoment.label}</p>
+            <h2>${home.name} vs ${away.name}</h2>
+            <p>${goalMoment.description}</p>
+            <p class="muted">Przeciwnik: ${getClub(goalMoment.opponentId).name}. Tylko strzał decyduje o golu.</p>
+            <div class="actions">
+              <button class="btn primary" id="btn-shoot">Strzał na bramkę</button>
+            </div>
+          </section>`,
+          'Okazja',
+        )
+      }
+      return this.shell(
+        `
+        <section class="panel">
+          <p class="eyebrow">${goalMoment.label}</p>
+          <h2>Strzał</h2>
+          <div class="ball-wrap"><canvas id="moment-canvas"></canvas></div>
+        </section>`,
+        'Akcja',
+      )
+    }
     if (!this.selectedAction) {
       return this.shell(
         `
@@ -420,15 +460,18 @@ export class App {
   }
 
   private bindKeyMatch(): void {
+    const goalMoment = Boolean(this.state.season?.pendingGoalMoment)
     if (!this.selectedAction) {
       this.root.querySelector('#btn-shoot')?.addEventListener('click', () => {
         this.selectedAction = 'shoot'
         this.render()
       })
-      this.root.querySelector('#btn-pass')?.addEventListener('click', () => {
-        this.selectedAction = 'pass'
-        this.render()
-      })
+      if (!goalMoment) {
+        this.root.querySelector('#btn-pass')?.addEventListener('click', () => {
+          this.selectedAction = 'pass'
+          this.render()
+        })
+      }
       return
     }
     const action = this.selectedAction
@@ -444,6 +487,41 @@ export class App {
       },
       { difficulty },
     )
+  }
+
+  private matchResultHtml(): string {
+    const m = this.state.season!.lastMatch!
+    const home = getClub(m.homeId)
+    const away = getClub(m.awayId)
+    const moodDelta = Math.round(m.moodAfter - m.moodBefore)
+    const moodArrow =
+      moodDelta > 0 ? `↑ +${moodDelta}` : moodDelta < 0 ? `↓ ${moodDelta}` : '→ 0'
+    return this.shell(
+      `
+      <section class="panel">
+        <p class="eyebrow">Wynik meczu</p>
+        <h2>${home.name} ${m.homeGoals}:${m.awayGoals} ${away.name}</h2>
+        <table class="summary-table">
+          <tbody>
+            <tr><td>Występ</td><td><strong>${m.played ? 'Tak' : 'Nie'}</strong></td></tr>
+            <tr><td>Gole / asysty</td><td><strong>${m.playerGoals}</strong> G · <strong>${m.playerAssists}</strong> A</td></tr>
+            <tr><td>Ocena</td><td><strong>${m.rating != null ? Math.round(m.rating * 10) / 10 : '—'}</strong></td></tr>
+            <tr><td>Forma meczowa</td><td><strong>${Math.round(m.moodAfter)}</strong> (${moodArrow})</td></tr>
+          </tbody>
+        </table>
+        <p class="muted">${m.narrative}</p>
+        <div class="actions">
+          <button class="btn primary" id="btn-match-next">Dalej</button>
+        </div>
+      </section>`,
+      'Mecz',
+    )
+  }
+
+  private bindMatchResult(): void {
+    this.root.querySelector('#btn-match-next')?.addEventListener('click', () => {
+      this.go(() => dismissMatchResult(this.state))
+    })
   }
 
   private seasonReportHtml(): string {
@@ -615,7 +693,8 @@ export class App {
 
   private transferChoiceHtml(): string {
     const offers = this.state.transferOffers
-    const winter = this.state.season?.phase === 'firstHalfDone'
+    const winter =
+      this.state.season?.phase === 'winterDone' || this.state.season?.winterBreakTaken
     const midSeason = Boolean(this.state.season && !this.state.seasonReport)
     const forced = this.state.seasonReport && !this.state.seasonReport.contractRenewed
     const cards = offers
@@ -705,7 +784,7 @@ export class App {
         </table>
         <p class="muted">${w.narrative}</p>
         <div class="actions">
-          <button class="btn primary" id="btn-winter-continue">Zostaję — 2. połowa</button>
+          <button class="btn primary" id="btn-winter-continue">Zostaję — dalej sezon</button>
           <button class="btn ghost" id="btn-winter-offers">Oferty zimowe</button>
           <button class="btn ghost" id="btn-winter-loan">Szukaj wypożyczenia</button>
         </div>

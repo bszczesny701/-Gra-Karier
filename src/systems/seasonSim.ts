@@ -4,7 +4,6 @@ import type {
   ClubStanding,
   CupStage,
   FormLabel,
-  KeyMatchReason,
   PendingKeyMatch,
   Player,
   PositionalRival,
@@ -78,11 +77,11 @@ const NPC_LAST = [
   'Woźniak', 'Dąbrowski', 'Kozłowski', 'Jankowski', 'Piotrowski', 'Grabowski', 'Pawlak',
 ]
 
-function rngInt(n: number): number {
+export function rngInt(n: number): number {
   return Math.floor(Math.random() * n)
 }
 
-function chance(p: number): boolean {
+export function chance(p: number): boolean {
   return Math.random() < p
 }
 
@@ -129,7 +128,7 @@ export function describeRival(player: Player, rival: PositionalRival): string {
 }
 
 /** 3 napastników/pomocników na klub — gole nie lecą na jedną osobę. */
-function ensureClubScorers(
+export function ensureClubScorers(
   map: Map<string, ScorerEntry>,
   clubId: string,
   year: number,
@@ -151,7 +150,7 @@ function ensureClubScorers(
 }
 
 /** Rozdziel gole meczu między trzech strzelców; ~12% „inni” (nie na listę). */
-function distributeClubGoals(
+export function distributeClubGoals(
   map: Map<string, ScorerEntry>,
   clubId: string,
   year: number,
@@ -177,7 +176,7 @@ function distributeClubGoals(
   }
 }
 
-function updateStanding(row: ClubStanding, gf: number, ga: number): void {
+export function updateStanding(row: ClubStanding, gf: number, ga: number): void {
   row.played++
   row.goalsFor += gf
   row.goalsAgainst += ga
@@ -192,7 +191,7 @@ function updateStanding(row: ClubStanding, gf: number, ga: number): void {
   }
 }
 
-function scoreline(att: number, def: number): number {
+export function scoreline(att: number, def: number): number {
   const expected = Math.max(0.08, (att - def) / 36 + 0.82)
   let g = 0
   for (let i = 0; i < 4; i++) if (chance(expected / 4)) g++
@@ -275,7 +274,7 @@ export function appearanceChance(
 }
 
 /** Szansa w trakcie sezonu — chwilowy humor meczowy + rywal. */
-function matchAppearanceChance(
+export function matchAppearanceChance(
   player: Player,
   matchMood: number,
   clubId: string,
@@ -292,7 +291,7 @@ function matchAppearanceChance(
  * Pełny terminarz ligowy — każdy klub gra z każdym.
  * Małe ligi (≤10): dwurundowo. Większe (Ekstraklasa): jedna runda.
  */
-function buildSeasonFixtures(
+export function buildSeasonFixtures(
   clubIds: string[],
 ): Array<{ homeId: string; awayId: string }> {
   const ids = [...clubIds]
@@ -324,13 +323,13 @@ function buildSeasonFixtures(
   return [...firstHalf, ...secondHalf]
 }
 
-function bumpScorer(map: Map<string, ScorerEntry>, key: string, entry: ScorerEntry, goals: number): void {
+export function bumpScorer(map: Map<string, ScorerEntry>, key: string, entry: ScorerEntry, goals: number): void {
   const cur = map.get(key)
   if (cur) cur.goals += goals
   else map.set(key, { ...entry, goals })
 }
 
-function scorerMapFromEntries(entries: ScorerEntry[]): Map<string, ScorerEntry> {
+export function scorerMapFromEntries(entries: ScorerEntry[]): Map<string, ScorerEntry> {
   const map = new Map<string, ScorerEntry>()
   const npcIdx: Record<string, number> = {}
   for (const e of entries) {
@@ -409,94 +408,7 @@ function simulatePolishCup(
   return { stage: furthest, playerGoals, playerApps }
 }
 
-function buildKeyMatches(
-  season: SeasonState,
-  place: number,
-  clubIds: string[],
-  cupStage: CupStage,
-): PendingKeyMatch[] {
-  const keys: PendingKeyMatch[] = []
-  const league = getLeague(season.leagueId)
-  const clubCount = clubIds.length
-  const own = season.clubId
-  const others = clubIds.filter((id) => id !== own)
-  const opp = (i: number) => others[i % others.length]!
-
-  const push = (
-    reason: KeyMatchReason,
-    label: string,
-    description: string,
-    stake: PendingKeyMatch['stake'],
-    opponentId: string,
-  ) => {
-    if (keys.length >= 2) return
-    const home = keys.length % 2 === 0
-    keys.push({
-      homeId: home ? own : opponentId,
-      awayId: home ? opponentId : own,
-      opponentId,
-      reason,
-      label,
-      description,
-      stake,
-    })
-  }
-
-  if (cupStage === 'final' || cupStage === 'sf') {
-    push(
-      'cup',
-      cupStage === 'final' ? 'Finał Pucharu Polski' : 'Półfinał Pucharu Polski',
-      `Kluczowa akcja w Pucharze Polski przeciwko ${getClub(opp(3)).name}.`,
-      'cupProgress',
-      opp(3),
-    )
-  }
-
-  if (league.tier > 1 && place <= 2) {
-    push(
-      'promotion',
-      'Mecz o awans',
-      `${getClub(own).name} walczy o awans. Jedna akcja może przesądzić sezon.`,
-      'leaguePoints',
-      opp(1),
-    )
-  }
-
-  if (league.tier === 1 && place <= 2) {
-    push(
-      'title',
-      'Walka o mistrzostwo',
-      `Czołówka Ekstraklasy — starcie z ${getClub(opp(0)).name}.`,
-      'leaguePoints',
-      opp(0),
-    )
-  }
-
-  const relegationZone = league.tier === 1 ? clubCount - 2 : clubCount - 1
-  if (league.tier < 4 && place >= relegationZone) {
-    push(
-      'relegation',
-      'Walka o utrzymanie',
-      `Strefa spadkowa. Musisz pomóc ${getClub(own).name}.`,
-      'leaguePoints',
-      opp(2),
-    )
-  }
-
-  if (keys.length === 0 && (cupStage === 'qf' || cupStage === 'r16')) {
-    push(
-      'cup',
-      'Mecz Pucharu Polski',
-      `Ważny mecz PP z ${getClub(opp(4)).name}.`,
-      'cupProgress',
-      opp(4),
-    )
-  }
-
-  return keys.slice(0, 2)
-}
-
-interface FixtureBatchState {
+export interface FixtureBatchState {
   appearances: number
   goals: number
   assists: number
@@ -674,7 +586,7 @@ function runFixtureBatch(
   }
 }
 
-function tweakRivalForm(rival: PositionalRival, appearances: number, goals: number, halfApps: number): void {
+export function tweakRivalForm(rival: PositionalRival, appearances: number, goals: number, halfApps: number): void {
   if (appearances >= Math.max(3, halfApps * 0.45) && goals >= 2) {
     rival.form = clamp(rival.form - (3 + rngInt(3)), 28, 78)
   } else if (appearances >= Math.max(2, halfApps * 0.35)) {
@@ -822,7 +734,7 @@ export function simulateFirstHalf(
   }
 }
 
-function finalizeSeasonReport(
+export function finalizeSeasonReport(
   player: Player,
   season: SeasonState,
   strengthMods: Record<string, number>,
@@ -1031,7 +943,8 @@ function finalizeSeasonReport(
   const playerScorerRank = scorers.findIndex((s) => s.isPlayer)
   const rank = playerScorerRank >= 0 ? playerScorerRank + 1 : null
 
-  const keyMatchesPending = buildKeyMatches(season, place, clubIds, cup.stage)
+  // Minigierka w trakcie sezonu zastępuje post-season key matches
+  const keyMatchesPending: PendingKeyMatch[] = []
 
   const promotion = league.country === 'PL' && league.tier > 1 && place <= 2
   const relegation =
