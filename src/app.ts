@@ -388,30 +388,69 @@ export class App {
           `<tr class="${s.isPlayer ? 'mine' : ''}"><td>${i + 1}</td><td>${s.name}</td><td>${getClub(s.clubId).short}</td><td>${s.goals}</td></tr>`,
       )
       .join('')
-    const ovrTxt =
+
+    const ovrArrow =
+      r.overallDelta > 0 ? '↑' : r.overallDelta < 0 ? '↓' : '→'
+    const ovrClass =
+      r.overallDelta > 0 ? 'up' : r.overallDelta < 0 ? 'down' : 'flat'
+    const ovrChange =
       r.overallDelta > 0
-        ? `+${r.overallDelta} (${r.overallBefore} → ${r.overallAfter})`
+        ? `+${r.overallDelta}`
         : r.overallDelta < 0
-          ? `${r.overallDelta} (${r.overallBefore} → ${r.overallAfter})`
-          : `bez zmian (${r.overallAfter})`
+          ? `${r.overallDelta}`
+          : '0'
+
+    const fate = r.promotion
+      ? 'Awans klubu (zostajesz w tym samym klubie)'
+      : r.relegation
+        ? 'Spadek klubu (zostajesz w tym samym klubie)'
+        : r.title
+          ? 'Mistrzostwo Polski'
+          : 'Bez zmiany ligi'
 
     return this.shell(
       `
       <section class="panel">
         <p class="eyebrow">${league.name} · ${r.year}</p>
         <h2>Podsumowanie sezonu</h2>
-        <p>${r.narrative}</p>
-        <div class="stat-grid compact">
-          <div><span>Miejsce</span><strong>${r.place}</strong></div>
-          <div><span>Punkty</span><strong>${r.points}</strong></div>
-          <div><span>Występy</span><strong>${r.appearances}/${r.possibleAppearances}</strong></div>
-          <div><span>Gole</span><strong>${r.goals}</strong></div>
-          <div><span>Asysty</span><strong>${r.assists}</strong></div>
-          <div><span>Śr. ocena</span><strong>${r.avgRating || '—'}</strong></div>
-          <div><span>Forma</span><strong>${r.formLabel}</strong></div>
-          <div><span>OVR</span><strong>${ovrTxt}</strong></div>
-        </div>
-        <p class="meta">${r.cupLabel}${r.playerScorerRank ? ` · Król strzelców: Twoje miejsce #${r.playerScorerRank}` : ''}</p>
+        <p class="muted">${club.name} · ${r.place}. miejsce · ${r.points} pkt</p>
+
+        <table class="summary-table">
+          <tbody>
+            <tr>
+              <td>Overall</td>
+              <td class="${ovrClass}"><span class="arrow">${ovrArrow}</span> <strong>${ovrChange}</strong> <span class="muted">(${r.overallBefore} → ${r.overallAfter})</span></td>
+            </tr>
+            <tr>
+              <td>Forma</td>
+              <td><strong>${r.formLabel}</strong> <span class="muted">(${r.avgForm})</span></td>
+            </tr>
+            <tr>
+              <td>Występy</td>
+              <td><strong>${r.appearances}</strong> / ${r.possibleAppearances} <span class="muted">ligi + puchar</span></td>
+            </tr>
+            <tr>
+              <td>Gole / asysty</td>
+              <td><strong>${r.goals}</strong> G · <strong>${r.assists}</strong> A</td>
+            </tr>
+            <tr>
+              <td>Śr. ocena</td>
+              <td><strong>${r.avgRating || '—'}</strong></td>
+            </tr>
+            <tr>
+              <td>Puchar Polski</td>
+              <td><strong>${r.cupLabel}</strong></td>
+            </tr>
+            <tr>
+              <td>Król strzelców</td>
+              <td>${r.playerScorerRank ? `<strong>#${r.playerScorerRank}</strong>` : '<span class="muted">poza podium listy</span>'}</td>
+            </tr>
+            <tr>
+              <td>Los klubu</td>
+              <td><strong>${fate}</strong></td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section class="panel">
@@ -436,9 +475,9 @@ export class App {
 
       <section class="panel">
         <h3>Co dalej?</h3>
-        <p class="muted">Zostań w klubie albo zobacz oferty transferowe (min. 2).</p>
+        <p class="muted">„Zostań” = ten sam klub${r.promotion ? ' (awansuje z Tobą)' : r.relegation ? ' (spada z Tobą)' : ''}.</p>
         <div class="actions">
-          <button class="btn primary" id="btn-stay">Zostań w ${club.short}</button>
+          <button class="btn primary" id="btn-stay">Zostań w ${club.name}</button>
           <button class="btn ghost" id="btn-leave">Szukaj transferu</button>
         </div>
       </section>

@@ -43,13 +43,32 @@ export function createPlayer(options: CreateCareerOptions): Player {
   }
 }
 
-export function createSeason(clubId: string, leagueId: string, year: number): SeasonState {
+export function createSeason(
+  clubId: string,
+  leagueId: string,
+  year: number,
+  inject: 'promote' | 'relegate' | 'none' = 'none',
+): SeasonState {
   const league = getLeague(leagueId)
+  let clubIds = [...league.clubIds]
+
+  // Zostajesz w tym samym klubie przy awansie/spadku — wstawiamy go do nowej ligi
+  if (!clubIds.includes(clubId)) {
+    const byStrength = [...clubIds].sort(
+      (a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength,
+    )
+    const replaceId =
+      inject === 'relegate'
+        ? byStrength[byStrength.length - 1]!
+        : byStrength[0]!
+    clubIds = clubIds.map((id) => (id === replaceId ? clubId : id))
+  }
+
   return {
     year,
     leagueId,
     clubId,
-    standings: league.clubIds.map((id) => ({
+    standings: clubIds.map((id) => ({
       clubId: id,
       played: 0,
       won: 0,
@@ -254,13 +273,13 @@ export function stayAtClub(state: GameState): void {
   player.age += 1
   player.money += getClub(report.clubId).wage * 3
   pushLog(state, `Zostajesz w ${getClub(report.clubId).name} na kolejny sezon.`)
-  beginNextSeason(state, report.clubId, report.leagueId)
+  // Zawsze ten sam klub — awans/spadek przenosi klub, nie zawodnika do obcego zespołu
+  beginNextSeason(state, report.clubId, report.leagueId, true)
 }
 
 export function acceptOffer(state: GameState, clubId: string): void {
   const offer = state.transferOffers.find((o) => o.clubId === clubId)
   const player = state.player!
-  const report = state.seasonReport!
   if (!offer) return
 
   player.age += 1
@@ -269,45 +288,48 @@ export function acceptOffer(state: GameState, clubId: string): void {
   player.reputation = clamp(player.reputation + 2, 0, 100)
   pushLog(state, `Transfer do ${getClub(clubId).name} (${getLeague(offer.leagueId).name}).`)
   state.transferOffers = []
-  beginNextSeason(state, clubId, offer.leagueId)
-  void report
+  beginNextSeason(state, clubId, offer.leagueId, false)
 }
 
-function beginNextSeason(state: GameState, clubId: string, leagueId: string): void {
+function beginNextSeason(
+  state: GameState,
+  clubId: string,
+  leagueId: string,
+  staying: boolean,
+): void {
   const report = state.seasonReport!
   let nextLeagueId = leagueId
   let nextClubId = clubId
+  let inject: 'promote' | 'relegate' | 'none' = 'none'
 
-  // awans/spadek klubu jeśli zawodnik zostaje
-  if (clubId === report.clubId) {
+  if (staying && clubId === report.clubId) {
     const league = getLeague(report.leagueId)
     if (report.promotion) {
       const up = leagueByTier(league.tier - 1)
       if (up) {
         nextLeagueId = up.id
-        nextClubId = up.clubIds.includes(clubId)
-          ? clubId
-          : [...up.clubIds].sort((a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength)[0]!
+        nextClubId = report.clubId
+        inject = 'promote'
         pushLog(
           state,
-          report.place === 1
-            ? `Mistrzostwo ligi i awans do ${getLeague(nextLeagueId).name}!`
-            : `Awans (miejsce ${report.place}) do ${getLeague(nextLeagueId).name}!`,
+          `${getClub(report.clubId).name} awansuje do ${up.name} — zostajesz w klubie.`,
         )
       }
     } else if (report.relegation) {
       const down = leagueByTier(league.tier + 1)
       if (down) {
         nextLeagueId = down.id
-        nextClubId = down.clubIds.includes(clubId)
-          ? clubId
-          : [...down.clubIds].sort((a, b) => CLUBS[b]!.strength - CLUBS[a]!.strength)[0]!
-        pushLog(state, `Spadek do ${getLeague(nextLeagueId).name}.`)
+        nextClubId = report.clubId
+        inject = 'relegate'
+        pushLog(
+          state,
+          `${getClub(report.clubId).name} spada do ${down.name} — zostajesz w klubie.`,
+        )
       }
     }
   }
 
-  state.season = createSeason(nextClubId, nextLeagueId, report.year + 1)
+  state.season = createSeason(nextClubId, nextLeagueId, report.year + 1, inject)
   state.seasonReport = null
   state.pendingKeyMatch = null
   state.pendingKeyQueue = []

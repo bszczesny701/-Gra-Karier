@@ -257,6 +257,41 @@ h3 {
   margin-top: 4px;
 }
 
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 0.95rem;
+}
+
+.summary-table td {
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.summary-table td:first-child {
+  color: var(--muted);
+  width: 38%;
+}
+
+.summary-table .arrow {
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+.summary-table .up {
+  color: var(--accent);
+}
+
+.summary-table .down {
+  color: var(--danger);
+}
+
+.summary-table .flat {
+  color: var(--muted);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

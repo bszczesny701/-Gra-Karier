@@ -1,5 +1,6 @@
 import { CLUBS, getClub, getLeague } from '../data/clubs'
 import type {
+  Attributes,
   ClubStanding,
   CupStage,
   KeyMatchReason,
@@ -12,6 +13,44 @@ import type {
 import { clamp, cupStageLabel, formLabelFromAvg } from '../state/types'
 import { calcOverall } from './playerFactory'
 import { playerTablePosition, sortedStandings } from './standings'
+
+/** Podnosi atrybuty tak, by overall faktycznie zmienił się o targetDelta (±). */
+function applyOverallChange(player: Player, targetDelta: number): number {
+  const before = player.overall
+  if (targetDelta === 0) return 0
+
+  const focusOrder: Array<keyof Attributes> =
+    player.position === 'NP'
+      ? ['shooting', 'pace', 'stamina', 'passing', 'defending']
+      : player.position === 'POM'
+        ? ['passing', 'shooting', 'stamina', 'pace', 'defending']
+        : player.position === 'OB'
+          ? ['defending', 'stamina', 'pace', 'passing', 'shooting']
+          : ['passing', 'defending', 'stamina', 'pace', 'shooting']
+
+  let guard = 0
+  if (targetDelta > 0) {
+    let i = 0
+    while (player.overall < before + targetDelta && guard < 40) {
+      const key = focusOrder[i % focusOrder.length]!
+      player.attrs[key] = clamp(player.attrs[key] + 1)
+      player.overall = calcOverall(player.attrs, player.position)
+      i++
+      guard++
+    }
+  } else {
+    let i = 0
+    while (player.overall > before + targetDelta && guard < 40) {
+      const key = focusOrder[i % focusOrder.length]!
+      player.attrs[key] = clamp(player.attrs[key] - 1)
+      player.overall = calcOverall(player.attrs, player.position)
+      i++
+      guard++
+    }
+  }
+
+  return player.overall - before
+}
 
 const NPC_FIRST = [
   'Adam', 'Kamil', 'Piotr', 'Michał', 'Jakub', 'Bartosz', 'Tomasz', 'Mateusz', 'Damian', 'Filip',
@@ -160,13 +199,14 @@ function simulatePolishCup(
 function buildKeyMatches(
   season: SeasonState,
   place: number,
-  clubCount: number,
+  clubIds: string[],
   cupStage: CupStage,
 ): PendingKeyMatch[] {
   const keys: PendingKeyMatch[] = []
   const league = getLeague(season.leagueId)
+  const clubCount = clubIds.length
   const own = season.clubId
-  const others = league.clubIds.filter((id) => id !== own)
+  const others = clubIds.filter((id) => id !== own)
   const opp = (i: number) => others[i % others.length]!
 
   const push = (
@@ -246,15 +286,17 @@ function buildKeyMatches(
 
 export function simulateFullSeason(player: Player, season: SeasonState): SeasonReport {
   const league = getLeague(season.leagueId)
-  const clubCount = league.clubIds.length
-  const allFixtures = buildSeasonFixtures(league.clubIds)
+  // Kluby z aktualnego sezonu (po awansie/spadku mogą różnić się od szablonu ligi)
+  const clubIds = season.standings.map((s) => s.clubId)
+  const clubCount = clubIds.length
+  const allFixtures = buildSeasonFixtures(clubIds)
   const playerFixtures = allFixtures.filter(
     (f) => f.homeId === season.clubId || f.awayId === season.clubId,
   )
   const fixturesForPlayer = playerFixtures.length
   const overallBefore = player.overall
 
-  const standings: ClubStanding[] = league.clubIds.map((id) => ({
+  const standings: ClubStanding[] = clubIds.map((id) => ({
     clubId: id,
     played: 0,
     won: 0,
@@ -266,7 +308,7 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   }))
 
   const scorerMap = new Map<string, ScorerEntry>()
-  for (const clubId of league.clubIds) {
+  for (const clubId of clubIds) {
     if (clubId === season.clubId) continue
     bumpScorer(
       scorerMap,
@@ -417,28 +459,15 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
 
   const avgForm = formSamples ? formSum / formSamples : player.form
 
-  let ovrGain = 0
-  if (leagueApps >= fixturesForPlayer * 0.55 && avgForm >= 60) ovrGain += 1
-  if (leagueApps >= fixturesForPlayer * 0.7 && leagueAvgRating >= 7) ovrGain += 1
-  if (goals >= 8) ovrGain += 1
-  if (cup.stage === 'winner' || cup.stage === 'final') ovrGain += 1
-  if (avgForm < 40 || leagueApps < fixturesForPlayer * 0.25) ovrGain -= 1
-  ovrGain = clamp(ovrGain, -1, 3)
+  let ovrTarget = 0
+  if (leagueApps >= fixturesForPlayer * 0.55 && avgForm >= 60) ovrTarget += 1
+  if (leagueApps >= fixturesForPlayer * 0.7 && leagueAvgRating >= 7) ovrTarget += 1
+  if (goals >= 8) ovrTarget += 1
+  if (cup.stage === 'winner' || cup.stage === 'final') ovrTarget += 1
+  if (avgForm < 40 || leagueApps < fixturesForPlayer * 0.25) ovrTarget -= 1
+  ovrTarget = clamp(ovrTarget, -1, 3)
 
-  if (ovrGain > 0) {
-    const focus =
-      player.position === 'NP'
-        ? 'shooting'
-        : player.position === 'POM'
-          ? 'passing'
-          : player.position === 'OB'
-            ? 'defending'
-            : 'pace'
-    player.attrs[focus] = clamp(player.attrs[focus] + ovrGain)
-    if (ovrGain >= 2) player.attrs.stamina = clamp(player.attrs.stamina + 1)
-  } else if (ovrGain < 0) {
-    player.attrs.stamina = clamp(player.attrs.stamina - 1)
-  }
+  applyOverallChange(player, ovrTarget)
 
   player.form = clamp(Math.round(avgForm), 1, 100)
   player.overall = calcOverall(player.attrs, player.position)
@@ -457,6 +486,9 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   )
   player.money += getClub(season.clubId).wage * 8
 
+  const finalOverall = player.overall
+  const finalDelta = finalOverall - overallBefore
+
   const sorted = sortedStandings({ ...season, standings })
   const place = sorted.findIndex((s) => s.clubId === season.clubId) + 1
   const myRow = standings.find((s) => s.clubId === season.clubId)!
@@ -468,9 +500,8 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   const playerScorerRank = scorers.findIndex((s) => s.isPlayer)
   const rank = playerScorerRank >= 0 ? playerScorerRank + 1 : null
 
-  const keyMatchesPending = buildKeyMatches(season, place, clubCount, cup.stage)
+  const keyMatchesPending = buildKeyMatches(season, place, clubIds, cup.stage)
 
-  // Awans: top 2 z III/I ligi. Spadek: ostatnie 2 w Ekstraklasie / ostatnie 2 w I lidze
   const promotion = league.tier > 1 && place <= 2
   const relegation =
     league.tier === 1
@@ -482,11 +513,11 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
 
   let narrative = `${getClub(season.clubId).name} kończy sezon na ${place}. miejscu (${myRow.points} pkt, ${myRow.played} meczów). `
   narrative += `Zagrałeś ${leagueApps}/${fixturesForPlayer} meczów ligowych (+ puchar). Forma: ${formLabelFromAvg(avgForm)}. `
-  if (ovrGain > 0) narrative += `Overall wzrósł o ${ovrGain} (${overallBefore} → ${player.overall}). `
-  else if (ovrGain < 0) narrative += `Overall spadł (${overallBefore} → ${player.overall}). `
-  else narrative += `Overall bez dużych zmian (${player.overall}). `
-  if (promotion) narrative += 'Awans! '
-  if (relegation) narrative += 'Spadek. '
+  if (finalDelta > 0) narrative += `Overall ↑ +${finalDelta} (${overallBefore} → ${finalOverall}). `
+  else if (finalDelta < 0) narrative += `Overall ↓ ${finalDelta} (${overallBefore} → ${finalOverall}). `
+  else narrative += `Overall bez zmian (${finalOverall}). `
+  if (promotion) narrative += 'Awans klubu! '
+  if (relegation) narrative += 'Spadek klubu. '
   if (title) narrative += 'Mistrzostwo Polski! '
   narrative += cupStageLabel(cup.stage) + '.'
 
@@ -505,8 +536,8 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     avgForm: Math.round(avgForm),
     formLabel: formLabelFromAvg(avgForm),
     overallBefore,
-    overallAfter: player.overall,
-    overallDelta: player.overall - overallBefore,
+    overallAfter: finalOverall,
+    overallDelta: finalDelta,
     cupStage: cup.stage,
     cupLabel: cupStageLabel(cup.stage),
     scorers,
