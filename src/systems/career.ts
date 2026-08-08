@@ -664,8 +664,106 @@ function LEAGUES_SAFE() {
 }
 
 export function openTransferChoice(state: GameState): void {
+  const player = state.player!
+  // Przy aktywnym wypożyczeniu oferty liczymy względem klubu-rodzica
+  if (player.loan?.returnAfterSeason && state.seasonReport) {
+    const parentClub = player.loan.parentClubId
+    const parentLeague = player.loan.parentLeagueId
+    state.seasonReport = {
+      ...state.seasonReport,
+      // zachowaj stats z wypożyczenia, ale „dom” = rodzic (do ofert / powrotu)
+      clubId: parentClub,
+      leagueId: parentLeague,
+    }
+    pushLog(
+      state,
+      `Koniec wypożyczenia — wracasz do ${getClub(parentClub).name}. Możesz zostać albo wybrać transfer.`,
+    )
+    player.loan = null
+  }
   state.transferOffers = generateTransferOffers(state)
   state.screen = 'transferChoice'
+}
+
+/** Powrót z wypożyczenia + dalsza ścieżka kontraktowa u rodzica. */
+function returnFromLoanThenContinue(state: GameState): void {
+  const report = state.seasonReport!
+  const player = state.player!
+  const parentClub = player.loan!.parentClubId
+  const parentLeague = player.loan!.parentLeagueId
+  player.loan = null
+  pushLog(state, `Koniec wypożyczenia — wracasz do ${getClub(parentClub).name}.`)
+
+  // Raport „domu” = rodzic (awans/spadek dotyczyło klubu z wypożyczenia — nie przenosimy)
+  state.seasonReport = {
+    ...report,
+    clubId: parentClub,
+    leagueId: parentLeague,
+    promotion: false,
+    relegation: false,
+  }
+
+  const underContract = player.contract.yearsLeft > 1
+  if (!report.contractRenewed && !underContract) {
+    pushLog(
+      state,
+      `${getClub(parentClub).name}: kontrakt się skończył — szukasz nowego klubu.`,
+    )
+    openTransferChoice(state)
+    return
+  }
+
+  if (underContract) {
+    player.contract.yearsLeft -= 1
+    player.contract.clubId = parentClub
+  } else if (report.contractRenewed) {
+    player.contract = {
+      clubId: parentClub,
+      yearsLeft: report.proposedContractYears || 2,
+      wage: Math.max(player.contract.wage, getClub(parentClub).wage),
+    }
+    pushLog(state, `Nowy kontrakt w ${getClub(parentClub).name}: ${player.contract.yearsLeft} lat.`)
+  }
+
+  if (birthdayAndAge(state, player)) return
+  player.money += player.contract.wage * 3
+  beginNextSeason(state, parentClub, parentLeague, true)
+}
+
+export function stayAtClub(state: GameState): void {
+  const report = state.seasonReport!
+  const player = state.player!
+
+  if (player.loan?.returnAfterSeason) {
+    returnFromLoanThenContinue(state)
+    return
+  }
+
+  const underContract = player.contract.yearsLeft > 1
+  if (!report.contractRenewed && !underContract) {
+    pushLog(
+      state,
+      `${getClub(report.clubId).name} nie przedłuża kontraktu. Musisz szukać nowego klubu.`,
+    )
+    openTransferChoice(state)
+    return
+  }
+
+  if (underContract) {
+    player.contract.yearsLeft -= 1
+    player.contract.clubId = report.clubId
+  } else if (report.contractRenewed) {
+    player.contract = {
+      clubId: report.clubId,
+      yearsLeft: report.proposedContractYears || 2,
+      wage: Math.max(player.contract.wage, getClub(report.clubId).wage),
+    }
+    pushLog(state, `Nowy kontrakt: ${player.contract.yearsLeft} lat, pensja ~${player.contract.wage} zł.`)
+  }
+
+  if (birthdayAndAge(state, player)) return
+  player.money += player.contract.wage * 3
+  beginNextSeason(state, report.clubId, report.leagueId, true)
 }
 
 export function openWinterTransfers(state: GameState): void {
@@ -728,8 +826,8 @@ export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
 
   if (offer.kind === 'loan') {
     player.loan = {
-      parentClubId: player.contract.clubId || season.clubId,
-      parentLeagueId: getLeagueForClub(player.contract.clubId || season.clubId).id,
+      parentClubId: season.clubId,
+      parentLeagueId: season.leagueId,
       returnAfterSeason: true,
     }
     // kontrakt rodzica bez zmian
@@ -800,49 +898,6 @@ export function declineMidSeasonTransfers(state: GameState): void {
   state.screen = 'hub'
 }
 
-export function stayAtClub(state: GameState): void {
-  const report = state.seasonReport!
-  const player = state.player!
-
-  // Wypożyczenie — powrót do rodzica
-  if (player.loan?.returnAfterSeason) {
-    const parentClub = player.loan.parentClubId
-    const parentLeague = player.loan.parentLeagueId
-    player.loan = null
-    pushLog(state, `Koniec wypożyczenia — wracasz do ${getClub(parentClub).name}.`)
-    if (birthdayAndAge(state, player)) return
-    player.money += player.contract.wage * 3
-    beginNextSeason(state, parentClub, parentLeague, true)
-    return
-  }
-
-  const underContract = player.contract.yearsLeft > 1
-  if (!report.contractRenewed && !underContract) {
-    pushLog(
-      state,
-      `${getClub(report.clubId).name} nie przedłuża kontraktu. Musisz szukać nowego klubu.`,
-    )
-    openTransferChoice(state)
-    return
-  }
-
-  if (underContract) {
-    player.contract.yearsLeft -= 1
-    player.contract.clubId = report.clubId
-  } else if (report.contractRenewed) {
-    player.contract = {
-      clubId: report.clubId,
-      yearsLeft: report.proposedContractYears || 2,
-      wage: Math.max(player.contract.wage, getClub(report.clubId).wage),
-    }
-    pushLog(state, `Nowy kontrakt: ${player.contract.yearsLeft} lat, pensja ~${player.contract.wage} zł.`)
-  }
-
-  if (birthdayAndAge(state, player)) return
-  player.money += player.contract.wage * 3
-  beginNextSeason(state, report.clubId, report.leagueId, true)
-}
-
 export function acceptOffer(state: GameState, clubId: string): void {
   if (state.season && (state.season.phase === 'firstHalfDone' || !state.seasonReport)) {
     acceptMidSeasonOffer(state, clubId)
@@ -855,17 +910,15 @@ export function acceptOffer(state: GameState, clubId: string): void {
 
   // Przy żywym kontrakcie transfer = nowy kontrakt; wypożyczenie zachowuje rodzica
   if (offer.kind === 'loan') {
+    const parentClub = state.seasonReport?.clubId ?? player.contract.clubId
+    const parentLeague =
+      state.seasonReport?.leagueId ?? getLeagueForClub(parentClub).id
     player.loan = {
-      parentClubId: player.contract.clubId,
-      parentLeagueId: getLeagueForClub(player.contract.clubId).id,
+      parentClubId: parentClub,
+      parentLeagueId: parentLeague,
       returnAfterSeason: true,
     }
   } else {
-    // Wyjście przy latach > 0 tylko gdy klub nie przedłużył / force
-    const forced = state.seasonReport && !state.seasonReport.contractRenewed
-    if (player.contract.yearsLeft > 0 && !forced && state.seasonReport) {
-      // transfer za zgodą — nowy kontrakt
-    }
     player.loan = null
     player.contract = {
       clubId,

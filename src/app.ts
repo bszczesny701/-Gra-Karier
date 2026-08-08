@@ -573,16 +573,30 @@ export class App {
       <section class="panel">
         <h3>Co dalej?</h3>
         ${
-          r.contractRenewed
-            ? `<p class="muted">„Zostań” = ten sam klub${r.promotion ? ' (awansuje z Tobą)' : r.relegation ? ' (spada z Tobą)' : ''}.</p>
+          (() => {
+            const onLoan = Boolean(this.state.player?.loan?.returnAfterSeason)
+            const parentName = onLoan
+              ? getClub(this.state.player!.loan!.parentClubId).name
+              : club.name
+            if (onLoan) {
+              return `<p class="muted">Wypożyczenie się kończy — wracasz do <strong>${parentName}</strong> (albo szukasz transferu).</p>
+        <div class="actions">
+          <button class="btn primary" id="btn-stay">Wróć do ${parentName}</button>
+          <button class="btn ghost" id="btn-leave">Szukaj transferu</button>
+        </div>`
+            }
+            if (r.contractRenewed) {
+              return `<p class="muted">„Zostań” = ten sam klub${r.promotion ? ' (awansuje z Tobą)' : r.relegation ? ' (spada z Tobą)' : ''}.</p>
         <div class="actions">
           <button class="btn primary" id="btn-stay">Zostań w ${club.name}</button>
           <button class="btn ghost" id="btn-leave">Szukaj transferu</button>
         </div>`
-            : `<p class="muted">Klub nie przedłuża kontraktu — musisz wybrać ofertę (przy słabej formie często słabsze kluby).</p>
+            }
+            return `<p class="muted">Klub nie przedłuża kontraktu — musisz wybrać ofertę (przy słabej formie często słabsze kluby).</p>
         <div class="actions">
           <button class="btn primary" id="btn-leave">Zobacz oferty</button>
         </div>`
+          })()
         }
       </section>
     `,
