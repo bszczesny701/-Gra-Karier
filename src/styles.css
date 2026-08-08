@@ -251,6 +251,27 @@ h3 {
   font-size: 1.05rem;
 }
 
+.stats-help {
+  margin-top: 12px;
+  font-size: 0.88rem;
+}
+
+.stats-help summary {
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+}
+
+.stats-help ul {
+  margin: 8px 0 0;
+  padding-left: 1.1rem;
+  line-height: 1.45;
+}
+
+.stats-help li {
+  margin-bottom: 4px;
+}
+
 .table-wrap {
   max-height: 280px;
   overflow: auto;
