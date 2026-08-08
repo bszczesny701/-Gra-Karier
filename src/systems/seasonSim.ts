@@ -243,13 +243,15 @@ export function appearanceChance(
     league.tier === 4
       ? 0.85 // III liga
       : league.tier === 3
-        ? 0.78 // II liga — OVR 67+ może być pewniakiem
+        ? 0.78 // II liga
         : league.tier === 2
           ? 0.68 // I liga
-          : 0.62 // Ekstraklasa
+          : league.tier === 1
+            ? 0.62 // Ekstraklasa
+            : 0.52 // Top 5 Europy
 
   // Lekka kara tylko gdy ledwo doganiasz skład w II+/I
-  if (league.tier <= 3 && gap < 2) {
+  if (league.tier >= 1 && league.tier <= 3 && gap < 2) {
     playChance = Math.min(playChance, tierCap - 0.06)
   }
   if (league.tier === 3 && player.overall < 52) {
@@ -258,7 +260,7 @@ export function appearanceChance(
   if (league.tier === 2 && player.overall < 58) {
     playChance = Math.min(playChance, 0.42)
   }
-  if (league.tier === 1 && gap < -8) {
+  if (league.tier <= 1 && gap < -8) {
     playChance = Math.min(playChance, 0.22)
   }
   if (gap <= -18) playChance = Math.min(playChance, 0.05)
@@ -367,10 +369,15 @@ function simulatePolishCup(
   let playerGoals = 0
   let playerApps = 0
   const own = getClub(playerClubId)
-  const rivalsPool = Object.keys(CLUBS).filter((id) => id !== playerClubId)
+  const ownLeague = getLeagueForClub(playerClubId)
+  const rivalsPool = Object.keys(CLUBS).filter((id) => {
+    if (id === playerClubId) return false
+    return getClub(id).country === own.country || getLeagueForClub(id).tier <= ownLeague.tier + 1
+  })
+  const pool = rivalsPool.length ? rivalsPool : Object.keys(CLUBS).filter((id) => id !== playerClubId)
 
   for (const round of rounds) {
-    const rivalId = rivalsPool[rngInt(rivalsPool.length)]!
+    const rivalId = pool[rngInt(pool.length)]!
     const cupRival = getClub(rivalId)
     const played = chance(
       appearanceChance(player, playerClubId, strengthMods, rival, rivalPressure),
@@ -902,6 +909,10 @@ function finalizeSeasonReport(
     else if (appRate < 0.2) perfForm -= 5
     else if (appRate < 0.3) perfForm -= 2
   }
+  // Start kariery (niski OVR): jeszcze mocniejszy boost z minut
+  if (player.overall <= 52 && young && appRate >= 0.4) {
+    perfForm += player.overall <= 48 ? 8 : 5
+  }
 
   const luckSpan = player.overall <= 50 ? 18 : player.overall <= 62 ? 14 : 10
   const luck = Math.random() * luckSpan - luckSpan * 0.32
@@ -939,6 +950,11 @@ function finalizeSeasonReport(
     if (veryYoung && appRate >= 0.65 && formLabel !== 'słaba' && ovrTarget < 2 && player.overall < 72) {
       ovrTarget = 2
     }
+    // Z 45–52 OVR: dużo gry = pewniejszy skok
+    if (player.overall <= 52 && appRate >= 0.55 && formLabel !== 'słaba') {
+      ovrTarget = Math.max(ovrTarget, veryYoung ? 2 : 1)
+      if (player.overall <= 48 && appRate >= 0.65 && veryYoung) ovrTarget = Math.max(ovrTarget, 3)
+    }
   }
 
   if (young && ovrTarget >= 0 && rating >= 7.15 && appRate >= 0.45) {
@@ -969,7 +985,7 @@ function finalizeSeasonReport(
     else if (player.overall >= 75) ovrTarget = Math.min(ovrTarget, young ? 2 : 1)
   }
 
-  ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget)
+  ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget, player.overall)
   applyOverallChange(player, ovrTarget)
 
   player.form = 50
@@ -1017,14 +1033,16 @@ function finalizeSeasonReport(
 
   const keyMatchesPending = buildKeyMatches(season, place, clubIds, cup.stage)
 
-  const promotion = league.tier > 1 && place <= 2
+  const promotion = league.country === 'PL' && league.tier > 1 && place <= 2
   const relegation =
-    league.tier === 1
-      ? place >= clubCount - 1
-      : league.tier < 4
-        ? place >= clubCount
-        : false
-  const title = league.tier === 1 && place === 1
+    league.country !== 'PL' || league.tier <= 0
+      ? false
+      : league.tier === 1
+        ? place >= clubCount - 1
+        : league.tier < 4
+          ? place >= clubCount
+          : false
+  const title = place === 1 && league.tier <= 1
 
   const underContract = player.contract.yearsLeft > 1
   let contractRenewed: boolean

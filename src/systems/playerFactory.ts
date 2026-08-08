@@ -49,8 +49,8 @@ export function moneyFromStart(overall: number, clubWage: number): number {
 
 export function reputationFromStart(overall: number, leagueTier: number): number {
   const tierBonus =
-    leagueTier === 1 ? 18 : leagueTier === 2 ? 10 : leagueTier === 3 ? 5 : 0
-  return clamp(5 + (overall - 45) + tierBonus, 0, 45)
+    leagueTier <= 0 ? 28 : leagueTier === 1 ? 18 : leagueTier === 2 ? 10 : leagueTier === 3 ? 5 : 0
+  return clamp(5 + (overall - 45) + tierBonus, 0, 55)
 }
 
 /**

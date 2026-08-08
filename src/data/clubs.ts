@@ -1,76 +1,192 @@
+export type ClubCountry = 'PL' | 'ENG' | 'ESP' | 'ITA'
+
 export interface Club {
   id: string
   name: string
   short: string
   strength: number
   wage: number
+  /** Prestige 1–5, kroki co 0.5 */
+  stars: number
+  country: ClubCountry
 }
 
 export interface League {
   id: string
   name: string
+  /**
+   * 0 = top 5 Europy (PL/ENG/ESP/ITA top)
+   * 1 = Ekstraklasa
+   * 2 = I liga … 4 = III liga
+   */
   tier: number
+  country: ClubCountry
   clubIds: string[]
 }
 
-export const CLUBS: Record<string, Club> = {
-  // III liga — start kariery (tier 4)
-  'hutnik-krakow': { id: 'hutnik-krakow', name: 'Hutnik Kraków', short: 'HUT', strength: 40, wage: 700 },
-  'polonia-bytom': { id: 'polonia-bytom', name: 'Polonia Bytom', short: 'PBT', strength: 42, wage: 750 },
-  'resovia': { id: 'resovia', name: 'Resovia Rzeszów', short: 'RES', strength: 41, wage: 720 },
-  'chojniczanka': { id: 'chojniczanka', name: 'Chojniczanka', short: 'CHO', strength: 39, wage: 680 },
-  'stal-stalowa': { id: 'stal-stalowa', name: 'Stal Stalowa Wola', short: 'SSW', strength: 43, wage: 780 },
-  'podbeskidzie': { id: 'podbeskidzie', name: 'Podbeskidzie', short: 'POD', strength: 44, wage: 800 },
-  'gks-tichy': { id: 'gks-tichy', name: 'GKS Tychy', short: 'TYC', strength: 45, wage: 820 },
-  'wieczysta': { id: 'wieczysta', name: 'Wieczysta Kraków', short: 'WIE', strength: 46, wage: 850 },
-
-  // II liga (tier 3)
-  'znicz': { id: 'znicz', name: 'Znicz Pruszków', short: 'ZNI', strength: 48, wage: 1100 },
-  'kalisz': { id: 'kalisz', name: 'KKS Kalisz', short: 'KAL', strength: 47, wage: 1050 },
-  'belchatow': { id: 'belchatow', name: 'GKS Bełchatów', short: 'BEL', strength: 49, wage: 1150 },
-  'elblag': { id: 'elblag', name: 'Olimpia Elbląg', short: 'ELB', strength: 45, wage: 950 },
-  'wisla-pulawy': { id: 'wisla-pulawy', name: 'Wisła Puławy', short: 'WPU', strength: 46, wage: 1000 },
-  'polkowice': { id: 'polkowice', name: 'Górnik Polkowice', short: 'GPO', strength: 44, wage: 900 },
-  'stomil': { id: 'stomil', name: 'Stomil Olsztyn', short: 'STO', strength: 47, wage: 1020 },
-  'ruch': { id: 'ruch', name: 'Ruch Chorzów', short: 'RCH', strength: 51, wage: 1300 },
-
-  // I liga (tier 2)
-  'wisla-krakow': { id: 'wisla-krakow', name: 'Wisła Kraków', short: 'WIS', strength: 58, wage: 2200 },
-  'slask-wroclaw': { id: 'slask-wroclaw', name: 'Śląsk Wrocław', short: 'SLW', strength: 56, wage: 2000 },
-  'lks-lodz': { id: 'lks-lodz', name: 'ŁKS Łódź', short: 'LKS', strength: 54, wage: 1800 },
-  'polonia-warszawa': { id: 'polonia-warszawa', name: 'Polonia Warszawa', short: 'PWA', strength: 53, wage: 1700 },
-  'miedz-legnica': { id: 'miedz-legnica', name: 'Miedź Legnica', short: 'MIE', strength: 52, wage: 1600 },
-  'odra-opole': { id: 'odra-opole', name: 'Odra Opole', short: 'ODR', strength: 50, wage: 1400 },
-  'gornik-leczna': { id: 'gornik-leczna', name: 'Górnik Łęczna', short: 'GLE', strength: 49, wage: 1350 },
-  'stal-rzeszow': { id: 'stal-rzeszow', name: 'Stal Rzeszów', short: 'STR', strength: 51, wage: 1500 },
-
-  // Ekstraklasa (tier 1)
-  'lech-poznan': { id: 'lech-poznan', name: 'Lech Poznań', short: 'LPO', strength: 78, wage: 5200 },
-  'rakow': { id: 'rakow', name: 'Raków Częstochowa', short: 'RAK', strength: 77, wage: 5000 },
-  'legia': { id: 'legia', name: 'Legia Warszawa', short: 'LEG', strength: 76, wage: 5100 },
-  'jagiellonia': { id: 'jagiellonia', name: 'Jagiellonia Białystok', short: 'JAG', strength: 74, wage: 4500 },
-  'widzew': { id: 'widzew', name: 'Widzew Łódź', short: 'WID', strength: 73, wage: 4300 },
-  'pogon': { id: 'pogon', name: 'Pogoń Szczecin', short: 'POG', strength: 71, wage: 4000 },
-  'gornik-zabrze': { id: 'gornik-zabrze', name: 'Górnik Zabrze', short: 'GOR', strength: 72, wage: 4100 },
-  'cracovia': { id: 'cracovia', name: 'Cracovia', short: 'CRA', strength: 70, wage: 3800 },
-  'lechia': { id: 'lechia', name: 'Lechia Gdańsk', short: 'LGD', strength: 68, wage: 3600 },
-  'piast': { id: 'piast', name: 'Piast Gliwice', short: 'PIA', strength: 66, wage: 3200 },
-  'korona': { id: 'korona', name: 'Korona Kielce', short: 'KOR', strength: 65, wage: 3000 },
-  'zaglebie': { id: 'zaglebie', name: 'Zagłębie Lubin', short: 'ZAG', strength: 67, wage: 3400 },
-  'radomiak': { id: 'radomiak', name: 'Radomiak Radom', short: 'RAD', strength: 64, wage: 2900 },
-  'motor': { id: 'motor', name: 'Motor Lublin', short: 'MOT', strength: 63, wage: 2800 },
-  'gks-katowice': { id: 'gks-katowice', name: 'GKS Katowice', short: 'KAT', strength: 62, wage: 2700 },
-  'wisla-plock': { id: 'wisla-plock', name: 'Wisła Płock', short: 'WPL', strength: 61, wage: 2600 },
-  'arka': { id: 'arka', name: 'Arka Gdynia', short: 'ARK', strength: 60, wage: 2500 },
-  'termalica': { id: 'termalica', name: 'Termalica Nieciecza', short: 'TNE', strength: 58, wage: 2300 },
+/** Format: ★★★½☆ albo 3.5★ */
+export function formatStars(stars: number): string {
+  const s = Math.round(stars * 2) / 2
+  const full = Math.floor(s)
+  const half = s - full >= 0.5
+  const empty = Math.max(0, 5 - full - (half ? 1 : 0))
+  return `${'★'.repeat(full)}${half ? '½' : ''}${'☆'.repeat(empty)}`
 }
 
-/** tier 1 = Ekstraklasa … tier 4 = III liga */
+export function starsLabel(stars: number): string {
+  const s = Math.round(stars * 2) / 2
+  return `${s}★`
+}
+
+function c(
+  id: string,
+  name: string,
+  short: string,
+  strength: number,
+  wage: number,
+  stars: number,
+  country: ClubCountry = 'PL',
+): Club {
+  return { id, name, short, strength, wage, stars, country }
+}
+
+export const CLUBS: Record<string, Club> = {
+  // III liga — ~1–1.5★
+  'hutnik-krakow': c('hutnik-krakow', 'Hutnik Kraków', 'HUT', 40, 700, 1),
+  'polonia-bytom': c('polonia-bytom', 'Polonia Bytom', 'PBT', 42, 750, 1),
+  'resovia': c('resovia', 'Resovia Rzeszów', 'RES', 41, 720, 1),
+  'chojniczanka': c('chojniczanka', 'Chojniczanka', 'CHO', 39, 680, 1),
+  'stal-stalowa': c('stal-stalowa', 'Stal Stalowa Wola', 'SSW', 43, 780, 1.5),
+  'podbeskidzie': c('podbeskidzie', 'Podbeskidzie', 'POD', 44, 800, 1.5),
+  'gks-tichy': c('gks-tichy', 'GKS Tychy', 'TYC', 45, 820, 1.5),
+  'wieczysta': c('wieczysta', 'Wieczysta Kraków', 'WIE', 46, 850, 1.5),
+
+  // II liga — ~1.5–2★
+  'znicz': c('znicz', 'Znicz Pruszków', 'ZNI', 48, 1100, 1.5),
+  'kalisz': c('kalisz', 'KKS Kalisz', 'KAL', 47, 1050, 1.5),
+  'belchatow': c('belchatow', 'GKS Bełchatów', 'BEL', 49, 1150, 2),
+  'elblag': c('elblag', 'Olimpia Elbląg', 'ELB', 45, 950, 1.5),
+  'wisla-pulawy': c('wisla-pulawy', 'Wisła Puławy', 'WPU', 46, 1000, 1.5),
+  'polkowice': c('polkowice', 'Górnik Polkowice', 'GPO', 44, 900, 1.5),
+  'stomil': c('stomil', 'Stomil Olsztyn', 'STO', 47, 1020, 1.5),
+  'ruch': c('ruch', 'Ruch Chorzów', 'RCH', 51, 1300, 2),
+
+  // I liga — ~2–3★
+  'wisla-krakow': c('wisla-krakow', 'Wisła Kraków', 'WIS', 58, 2200, 2.5),
+  'slask-wroclaw': c('slask-wroclaw', 'Śląsk Wrocław', 'SLW', 56, 2000, 2.5),
+  'lks-lodz': c('lks-lodz', 'ŁKS Łódź', 'LKS', 54, 1800, 2),
+  'polonia-warszawa': c('polonia-warszawa', 'Polonia Warszawa', 'PWA', 53, 1700, 2),
+  'miedz-legnica': c('miedz-legnica', 'Miedź Legnica', 'MIE', 52, 1600, 2),
+  'odra-opole': c('odra-opole', 'Odra Opole', 'ODR', 50, 1400, 2),
+  'gornik-leczna': c('gornik-leczna', 'Górnik Łęczna', 'GLE', 49, 1350, 2),
+  'stal-rzeszow': c('stal-rzeszow', 'Stal Rzeszów', 'STR', 51, 1500, 2),
+
+  // Ekstraklasa — ~3–4★
+  'lech-poznan': c('lech-poznan', 'Lech Poznań', 'LPO', 78, 5200, 4),
+  'rakow': c('rakow', 'Raków Częstochowa', 'RAK', 77, 5000, 4),
+  'legia': c('legia', 'Legia Warszawa', 'LEG', 76, 5100, 4),
+  'jagiellonia': c('jagiellonia', 'Jagiellonia Białystok', 'JAG', 74, 4500, 3.5),
+  'widzew': c('widzew', 'Widzew Łódź', 'WID', 73, 4300, 3.5),
+  'pogon': c('pogon', 'Pogoń Szczecin', 'POG', 71, 4000, 3.5),
+  'gornik-zabrze': c('gornik-zabrze', 'Górnik Zabrze', 'GOR', 72, 4100, 3.5),
+  'cracovia': c('cracovia', 'Cracovia', 'CRA', 70, 3800, 3.5),
+  'lechia': c('lechia', 'Lechia Gdańsk', 'LGD', 68, 3600, 3),
+  'piast': c('piast', 'Piast Gliwice', 'PIA', 66, 3200, 3),
+  'korona': c('korona', 'Korona Kielce', 'KOR', 65, 3000, 3),
+  'zaglebie': c('zaglebie', 'Zagłębie Lubin', 'ZAG', 67, 3400, 3),
+  'radomiak': c('radomiak', 'Radomiak Radom', 'RAD', 64, 2900, 3),
+  'motor': c('motor', 'Motor Lublin', 'MOT', 63, 2800, 3),
+  'gks-katowice': c('gks-katowice', 'GKS Katowice', 'KAT', 62, 2700, 3),
+  'wisla-plock': c('wisla-plock', 'Wisła Płock', 'WPL', 61, 2600, 2.5),
+  'arka': c('arka', 'Arka Gdynia', 'ARK', 60, 2500, 2.5),
+  'termalica': c('termalica', 'Termalica Nieciecza', 'TNE', 58, 2300, 2.5),
+
+  // Premier League
+  'man-city': c('man-city', 'Manchester City', 'MCI', 93, 22000, 5, 'ENG'),
+  'liverpool': c('liverpool', 'Liverpool', 'LIV', 91, 20000, 5, 'ENG'),
+  'arsenal': c('arsenal', 'Arsenal', 'ARS', 89, 18000, 4.5, 'ENG'),
+  'chelsea': c('chelsea', 'Chelsea', 'CHE', 87, 17000, 4.5, 'ENG'),
+  'man-united': c('man-united', 'Manchester United', 'MUN', 85, 16000, 4, 'ENG'),
+  'tottenham': c('tottenham', 'Tottenham', 'TOT', 83, 14000, 4, 'ENG'),
+  'newcastle': c('newcastle', 'Newcastle', 'NEW', 80, 12000, 3.5, 'ENG'),
+  'brighton': c('brighton', 'Brighton', 'BHA', 77, 10000, 3.5, 'ENG'),
+
+  // La Liga
+  'real-madrid': c('real-madrid', 'Real Madrid', 'RMA', 94, 23000, 5, 'ESP'),
+  'barcelona': c('barcelona', 'Barcelona', 'BAR', 92, 21000, 5, 'ESP'),
+  'atletico': c('atletico', 'Atlético Madrid', 'ATM', 88, 16000, 4.5, 'ESP'),
+  'sevilla': c('sevilla', 'Sevilla', 'SEV', 81, 11000, 4, 'ESP'),
+  'real-sociedad': c('real-sociedad', 'Real Sociedad', 'RSO', 78, 9500, 3.5, 'ESP'),
+  'villarreal': c('villarreal', 'Villarreal', 'VIL', 77, 9000, 3.5, 'ESP'),
+  'athletic': c('athletic', 'Athletic Bilbao', 'ATH', 76, 8500, 3.5, 'ESP'),
+  'valencia': c('valencia', 'Valencia', 'VAL', 73, 7500, 3, 'ESP'),
+
+  // Serie A
+  'inter': c('inter', 'Inter Mediolan', 'INT', 91, 19000, 5, 'ITA'),
+  'milan': c('milan', 'AC Milan', 'MIL', 88, 17000, 4.5, 'ITA'),
+  'juventus': c('juventus', 'Juventus', 'JUV', 87, 16500, 4.5, 'ITA'),
+  'napoli': c('napoli', 'Napoli', 'NAP', 85, 14000, 4, 'ITA'),
+  'roma': c('roma', 'AS Roma', 'ROM', 83, 12000, 4, 'ITA'),
+  'lazio': c('lazio', 'Lazio', 'LAZ', 80, 10500, 3.5, 'ITA'),
+  'atalanta': c('atalanta', 'Atalanta', 'ATA', 81, 11000, 3.5, 'ITA'),
+  'fiorentina': c('fiorentina', 'Fiorentina', 'FIO', 75, 8000, 3, 'ITA'),
+}
+
+/** tier 0 = top Europa; 1–4 = Polska */
 export const LEAGUES: League[] = [
+  {
+    id: 'premier-league',
+    name: 'Premier League',
+    tier: 0,
+    country: 'ENG',
+    clubIds: [
+      'man-city',
+      'liverpool',
+      'arsenal',
+      'chelsea',
+      'man-united',
+      'tottenham',
+      'newcastle',
+      'brighton',
+    ],
+  },
+  {
+    id: 'la-liga',
+    name: 'La Liga',
+    tier: 0,
+    country: 'ESP',
+    clubIds: [
+      'real-madrid',
+      'barcelona',
+      'atletico',
+      'sevilla',
+      'real-sociedad',
+      'villarreal',
+      'athletic',
+      'valencia',
+    ],
+  },
+  {
+    id: 'serie-a',
+    name: 'Serie A',
+    tier: 0,
+    country: 'ITA',
+    clubIds: [
+      'inter',
+      'milan',
+      'juventus',
+      'napoli',
+      'roma',
+      'lazio',
+      'atalanta',
+      'fiorentina',
+    ],
+  },
   {
     id: 'liga-1',
     name: 'Ekstraklasa',
     tier: 1,
+    country: 'PL',
     clubIds: [
       'lech-poznan',
       'rakow',
@@ -96,6 +212,7 @@ export const LEAGUES: League[] = [
     id: 'liga-2',
     name: 'I liga',
     tier: 2,
+    country: 'PL',
     clubIds: [
       'wisla-krakow',
       'slask-wroclaw',
@@ -111,6 +228,7 @@ export const LEAGUES: League[] = [
     id: 'liga-ii',
     name: 'II liga',
     tier: 3,
+    country: 'PL',
     clubIds: [
       'znicz',
       'kalisz',
@@ -126,6 +244,7 @@ export const LEAGUES: League[] = [
     id: 'liga-3',
     name: 'III liga',
     tier: 4,
+    country: 'PL',
     clubIds: [
       'hutnik-krakow',
       'polonia-bytom',
@@ -151,7 +270,6 @@ export function getClub(id: string): Club {
   return club
 }
 
-/** Siła klubu z bonusami (awans / spadek). */
 export function getEffectiveStrength(
   clubId: string,
   mods: Record<string, number> = {},
@@ -159,8 +277,16 @@ export function getEffectiveStrength(
   return getClub(clubId).strength + (mods[clubId] ?? 0)
 }
 
-export function leagueByTier(tier: number): League | undefined {
-  return LEAGUES.find((l) => l.tier === tier)
+/** Awans/spadek tylko w obrębie kraju. */
+export function leagueByTier(
+  tier: number,
+  country: ClubCountry = 'PL',
+): League | undefined {
+  return LEAGUES.find((l) => l.tier === tier && l.country === country)
+}
+
+export function foreignTopLeagues(): League[] {
+  return LEAGUES.filter((l) => l.tier === 0)
 }
 
 export const STARTER_CLUB_ID = 'hutnik-krakow'
@@ -181,7 +307,6 @@ export function starterClubOptions(): Array<{ clubId: string; label: string; min
   }))
 }
 
-/** Losowe 4 oferty z III ligi na start kariery. */
 export function pickStartingClubIds(count = 4): string[] {
   const ids = [...getLeague('liga-3').clubIds]
   for (let i = ids.length - 1; i > 0; i--) {
@@ -191,9 +316,9 @@ export function pickStartingClubIds(count = 4): string[] {
   return ids.slice(0, Math.min(count, ids.length))
 }
 
-/** Minimalny OVR, by kluby z danej ligi interesowały się zawodnikiem. */
 export function ovrForHigherLeague(tier: number): number {
-  if (tier <= 1) return 66
+  if (tier <= 0) return 74
+  if (tier === 1) return 66
   if (tier === 2) return 58
   if (tier === 3) return 52
   return 48

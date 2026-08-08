@@ -1,5 +1,6 @@
 import {
   CLUBS,
+  foreignTopLeagues,
   getClub,
   getEffectiveStrength,
   getLeague,
@@ -445,10 +446,13 @@ export function generateMidSeasonOffers(state: GameState): TransferOffer[] {
   const player = state.player!
   const season = state.season!
   const currentLeague = getLeague(season.leagueId)
-  const higher = leagueByTier(currentLeague.tier - 1)
+  const higher = leagueByTier(currentLeague.tier - 1, currentLeague.country)
   const offers: TransferOffer[] = []
 
-  if (higher && player.overall >= ovrThresholdForTier(higher.tier)) {
+  if (
+    (higher && player.overall >= ovrThresholdForTier(higher.tier)) ||
+    (currentLeague.tier <= 1 && player.overall >= ovrThresholdForTier(0))
+  ) {
     offers.push(
       ...buildOffersForPlayer(player, season.clubId, currentLeague, {
         goals: state.winterSnapshot?.goals ?? 0,
@@ -491,7 +495,7 @@ export function generateLoanOffers(
   const player = state.player!
   if (player.loan) return []
   const currentLeague = getLeague(currentLeagueId)
-  const lower = leagueByTier(currentLeague.tier + 1)
+  const lower = leagueByTier(currentLeague.tier + 1, currentLeague.country)
   const targets: string[] = []
   const pool = [
     ...currentLeague.clubIds.filter((id) => id !== currentClubId),
@@ -542,7 +546,8 @@ function dedupeOffers(offers: TransferOffer[]): TransferOffer[] {
 }
 
 function ovrThresholdForTier(tier: number): number {
-  if (tier <= 1) return 64
+  if (tier <= 0) return 74
+  if (tier === 1) return 64
   if (tier === 2) return 56
   if (tier === 3) return 50
   return 46
@@ -611,16 +616,22 @@ function buildOffersForPlayer(
     }
   }
 
-  const higher = leagueByTier(currentLeague.tier - 1)
-  const lower = leagueByTier(currentLeague.tier + 1)
+  const higher = leagueByTier(currentLeague.tier - 1, currentLeague.country)
+  const lower = leagueByTier(currentLeague.tier + 1, currentLeague.country)
 
   if (ctx.midSeason) {
     if (higher && player.overall >= ovrThresholdForTier(higher.tier)) {
       addFromLeague(higher.id, 2, 'Okno zimowe — wyższa liga.')
     }
+    // Z Ekstraklasy / wysokiego OVR: top Europa zimą
+    if (currentLeague.tier <= 1 && player.overall >= ovrThresholdForTier(0)) {
+      for (const fl of foreignTopLeagues()) {
+        addFromLeague(fl.id, 1, `${fl.name} — zainteresowanie zimą.`)
+      }
+    }
     addFromLeague(currentLeague.id, 1, 'Oferta z ligi w trakcie sezonu.')
     if (lower) addFromLeague(lower.id, 1, 'Niższa liga — więcej minut.', true)
-    return offers.slice(0, 3)
+    return offers.slice(0, 4)
   }
 
   if (form === 'fatalna' || form === 'słaba') {
@@ -636,9 +647,19 @@ function buildOffersForPlayer(
         player.overall >= ovrThresholdForTier(higher.tier))
     ) {
       addFromLeague(higher.id, 2, 'Wyższa liga interesuje się Tobą.')
-      const top = leagueByTier(higher.tier - 1)
+      const top = leagueByTier(higher.tier - 1, currentLeague.country)
       if (top && player.overall >= ovrThresholdForTier(top.tier) + 2) {
         addFromLeague(top.id, 1, 'Skok o dwie ligi.')
+      }
+    }
+    // Big 5 — tylko z wysokiego OVR / top PL
+    if (
+      (currentLeague.tier <= 1 || player.overall >= 72) &&
+      player.overall >= ovrThresholdForTier(0)
+    ) {
+      for (const fl of foreignTopLeagues()) {
+        if (fl.id === currentLeague.id) continue
+        addFromLeague(fl.id, 1, `${fl.name} patrzy na Ciebie.`)
       }
     }
     addFromLeague(currentLeague.id, 2, 'Klub z Twojej ligi.')
@@ -655,11 +676,17 @@ function buildOffersForPlayer(
     break
   }
 
-  return offers.slice(0, 4)
+  return offers.slice(0, 5)
 }
 
 function LEAGUES_SAFE() {
-  return [getLeague('liga-3'), getLeague('liga-ii'), getLeague('liga-2'), getLeague('liga-1')]
+  return [
+    getLeague('liga-3'),
+    getLeague('liga-ii'),
+    getLeague('liga-2'),
+    getLeague('liga-1'),
+    ...foreignTopLeagues(),
+  ]
 }
 
 export function openTransferChoice(state: GameState): void {
@@ -955,7 +982,7 @@ function beginNextSeason(
   if (staying && clubId === report.clubId && !state.player!.loan) {
     const league = getLeague(report.leagueId)
     if (report.promotion) {
-      const up = leagueByTier(league.tier - 1)
+      const up = leagueByTier(league.tier - 1, league.country)
       if (up) {
         nextLeagueId = up.id
         nextClubId = report.clubId
@@ -991,7 +1018,7 @@ function beginNextSeason(
         }
       }
     } else if (report.relegation) {
-      const down = leagueByTier(league.tier + 1)
+      const down = leagueByTier(league.tier + 1, league.country)
       if (down) {
         nextLeagueId = down.id
         nextClubId = report.clubId

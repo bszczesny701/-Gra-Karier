@@ -1,4 +1,4 @@
-import { getClub, getEffectiveStrength, getLeague } from './data/clubs'
+import { getClub, getEffectiveStrength, getLeague, formatStars, starsLabel } from './data/clubs'
 import {
   acceptOffer,
   acceptStartingOffer,
@@ -27,7 +27,7 @@ import { createEmptyState, footLabel } from './state/types'
 const POSITIONS: { id: Position; label: string }[] = [
   { id: 'NP', label: 'Napastnik' },
   { id: 'POM', label: 'Pomocnik' },
-  { id: 'ŚO', label: 'Środkowy' },
+  { id: 'ŚO', label: 'Środkowy pomocnik' },
   { id: 'OB', label: 'Obrońca' },
 ]
 
@@ -161,7 +161,7 @@ export class App {
       `
       <section class="panel">
         <h2>Nowy zawodnik</h2>
-        <p class="muted">Ustaw profil. Potem dostaniesz 4 oferty z III ligi — z szansą na grę.</p>
+        <p class="muted">Ustaw profil. Potem 4 oferty z III ligi. Pozycje: napastnik, pomocnik, środkowy pomocnik, obrońca.</p>
         <label class="field"><span>Imię i nazwisko</span>
           <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" /></label>
         <label class="field"><span>Pozycja</span><select id="player-pos">${options}</select></label>
@@ -225,7 +225,7 @@ export class App {
         return `
           <button class="choice" data-offer="${o.clubId}">
             <strong>${c.name}</strong>
-            <span>III liga · pensja ~${o.wage} zł · premia ${o.signingBonus} zł</span>
+            <span>III liga · ${formatStars(c.stars)} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł</span>
             <span><strong>Szansa na grę ≈ ${chance}%</strong> — ${o.message}</span>
           </button>`
       })
@@ -283,7 +283,7 @@ export class App {
           </div>
           <div class="money">${p.money} zł</div>
         </div>
-        <p class="meta">${league.name} · sezon ${s.year} · siła klubu ${clubPower} · szansa na grę ≈ ${chance}%</p>
+        <p class="meta">${league.name} · ${formatStars(club.stars)} (${starsLabel(club.stars)}) · sezon ${s.year} · siła ${clubPower} · gra ≈ ${chance}%</p>
         ${contractLine}
         ${rivalLine}
         ${loanLine}
@@ -488,7 +488,7 @@ export class App {
       <section class="panel">
         <p class="eyebrow">${league.name} · ${r.year}</p>
         <h2>Podsumowanie sezonu</h2>
-        <p class="muted">${club.name} · ${r.place}. miejsce · ${r.points} pkt</p>
+        <p class="muted">${club.name} · ${formatStars(club.stars)} · ${r.place}. miejsce · ${r.points} pkt</p>
 
         <table class="summary-table">
           <tbody>
@@ -632,7 +632,7 @@ export class App {
         return `
           <button class="choice" data-offer="${o.clubId}">
             <strong>${kind}${c.name}</strong>
-            <span>${l.name} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł${play}</span>
+            <span>${l.name} · ${formatStars(c.stars)} (${starsLabel(c.stars)}) · pensja ~${o.wage} zł · premia ${o.signingBonus} zł${play}</span>
             <span>${o.message}</span>
           </button>`
       })

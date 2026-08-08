@@ -266,14 +266,18 @@ export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
 }
 
-/** Limity zmiany OVR po sezonie wg wieku. */
-export function clampSeasonOvrDelta(age: number, raw: number): number {
+/** Limity zmiany OVR po sezonie wg wieku (i poziomu OVR). */
+export function clampSeasonOvrDelta(age: number, raw: number, overall = 55): number {
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
-  const maxUp = age <= 21 ? 3 : age <= 25 ? 2 : 2
+  const lowOvr = overall <= 52
+  const maxUp = age <= 21 ? (lowOvr ? 4 : 3) : age <= 25 ? (lowOvr ? 3 : 2) : 2
   let delta = Math.max(maxDown, Math.min(maxUp, Math.round(raw)))
 
-  if (age <= 21 && delta >= 3) {
+  if (age <= 21 && delta >= 3 && !lowOvr) {
     if (Math.random() > 0.28) delta = 2
+  }
+  if (age <= 21 && delta >= 4 && lowOvr) {
+    if (Math.random() > 0.45) delta = 3
   }
   if (age > 25 && delta >= 2) {
     if (Math.random() > 0.4) delta = 1
@@ -304,11 +308,12 @@ export function formLabelFromAvg(avg: number, overall = 55): FormLabel {
 }
 
 export function formPotentialBias(overall: number): number {
-  if (overall <= 48) return clamp(14 + Math.round((48 - overall) * 0.9), 10, 20)
-  if (overall <= 55) return Math.round(14 - (overall - 48) * 1.4)
-  if (overall <= 65) return Math.round(4 - (overall - 55) * 0.9)
-  if (overall <= 75) return Math.round(-5 - (overall - 65) * 0.8)
-  return clamp(Math.round(-13 - (overall - 75) * 1.0), -20, -10)
+  // Start ~45: dużo łatwiej o dobrą/świetną formę
+  if (overall <= 48) return clamp(18 + Math.round((48 - overall) * 1.2), 14, 26)
+  if (overall <= 55) return Math.round(16 - (overall - 48) * 1.5)
+  if (overall <= 65) return Math.round(5 - (overall - 55) * 0.9)
+  if (overall <= 75) return Math.round(-4 - (overall - 65) * 0.8)
+  return clamp(Math.round(-12 - (overall - 75) * 1.0), -20, -8)
 }
 
 export function performanceFormScore(
