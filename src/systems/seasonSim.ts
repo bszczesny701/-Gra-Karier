@@ -10,14 +10,33 @@ import type {
   SeasonReport,
   SeasonState,
 } from '../state/types'
-import { clamp, clampSeasonOvrDelta, cupStageLabel, formLabelFromAvg, performanceFormScore } from '../state/types'
+import {
+  CAREER_OVR_CAP,
+  clamp,
+  clampSeasonOvrDelta,
+  cupStageLabel,
+  formLabelFromAvg,
+  performanceFormScore,
+} from '../state/types'
 import { calcOverall } from './playerFactory'
 import { playerTablePosition, sortedStandings } from './standings'
+
+function syncPlayerOverall(player: Player): number {
+  player.overall = Math.min(CAREER_OVR_CAP, calcOverall(player.attrs, player.position))
+  return player.overall
+}
 
 /** Podnosi atrybuty tak, by overall faktycznie zmienił się o targetDelta (±). */
 function applyOverallChange(player: Player, targetDelta: number): number {
   const before = player.overall
   if (targetDelta === 0) return 0
+
+  // Nie przebijamy sufitu kariery
+  let delta = targetDelta
+  if (delta > 0) {
+    delta = Math.min(delta, Math.max(0, CAREER_OVR_CAP - before))
+    if (delta === 0) return 0
+  }
 
   const focusOrder: Array<keyof Attributes> =
     player.position === 'NP'
@@ -29,21 +48,21 @@ function applyOverallChange(player: Player, targetDelta: number): number {
           : ['passing', 'defending', 'stamina', 'pace', 'shooting']
 
   let guard = 0
-  if (targetDelta > 0) {
+  if (delta > 0) {
     let i = 0
-    while (player.overall < before + targetDelta && guard < 40) {
+    while (player.overall < before + delta && player.overall < CAREER_OVR_CAP && guard < 40) {
       const key = focusOrder[i % focusOrder.length]!
       player.attrs[key] = clamp(player.attrs[key] + 1)
-      player.overall = calcOverall(player.attrs, player.position)
+      syncPlayerOverall(player)
       i++
       guard++
     }
   } else {
     let i = 0
-    while (player.overall > before + targetDelta && guard < 40) {
+    while (player.overall > before + delta && guard < 40) {
       const key = focusOrder[i % focusOrder.length]!
       player.attrs[key] = clamp(player.attrs[key] - 1)
-      player.overall = calcOverall(player.attrs, player.position)
+      syncPlayerOverall(player)
       i++
       guard++
     }
@@ -659,47 +678,42 @@ export function simulateFullSeason(
     else if (rating < 7.3 && formLabel === 'świetna' && avgForm < 82) formLabel = 'dobra'
   }
 
-  // OVR z formy — młodzi rosną szybciej, ale ocena meczowa trzyma sufit
+  // OVR z formy — młodzi rosną szybciej niż starzy, ale bez gwarantowanych +2/+3
   let ovrTarget = 0
   const young = player.age <= 25
   const veryYoung = player.age <= 21
 
-  if (formLabel === 'świetna') ovrTarget = young ? 3 : 2
-  else if (formLabel === 'dobra') ovrTarget = young ? 2 : 1
-  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.55) ? 2 : 1) : chance(0.35) ? 1 : 0
-  else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.4) ? 0 : -1) : -1
+  if (formLabel === 'świetna') ovrTarget = young ? 2 : 1
+  else if (formLabel === 'dobra') ovrTarget = young ? 1 : chance(0.55) ? 1 : 0
+  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.4) ? 1 : 0) : chance(0.22) ? 1 : 0
+  else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.55) ? 0 : -1) : -1
   else if (formLabel === 'fatalna') ovrTarget = -2
 
-  if (young) {
-    if (leagueApps >= fixturesForPlayer * 0.4 && ovrTarget >= 0 && rating >= 6.6) {
-      if (veryYoung && rating >= 6.8) ovrTarget += 1
-      else if (chance(0.4) && rating >= 7.0) ovrTarget += 1
-    }
-    if (formLabel === 'świetna' && rating >= 7.3 && chance(0.45)) ovrTarget += 1
-    if (formLabel !== 'słaba' && formLabel !== 'fatalna' && ovrTarget < 1) ovrTarget = 1
-    if (
-      veryYoung &&
-      formLabel !== 'fatalna' &&
-      formLabel !== 'słaba' &&
-      rating >= 6.7 &&
-      leagueApps >= fixturesForPlayer * 0.35 &&
-      ovrTarget < 2
-    ) {
-      ovrTarget = 2
-    }
+  // Bonus tylko za naprawdę mocny sezon (nie za samo „bycie młodym”)
+  if (young && ovrTarget >= 0 && rating >= 7.15 && leagueApps >= fixturesForPlayer * 0.45) {
+    if (formLabel === 'świetna' && chance(veryYoung ? 0.4 : 0.28)) ovrTarget += 1
+    else if (formLabel === 'dobra' && veryYoung && chance(0.2)) ovrTarget += 1
   }
 
-  if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 6.5) ovrTarget += 1
-  if (player.position === 'NP' && goals >= 10 && rating >= 6.6) ovrTarget += 1
-  if (player.position === 'POM' && goals + assists >= 9 && rating >= 6.6) ovrTarget += 1
+  if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 6.8 && chance(0.55)) ovrTarget += 1
+  if (player.position === 'NP' && goals >= 12 && rating >= 6.9) ovrTarget += 1
+  if (player.position === 'POM' && goals + assists >= 11 && rating >= 6.9) ovrTarget += 1
   if (leagueApps < fixturesForPlayer * 0.15 && formLabel !== 'świetna') ovrTarget -= 1
   if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
 
-  // Twardy sufit ze średniej oceny: 6.8 → max +2, nie +4
+  // Twardy sufit ze średniej oceny: 6.8 → max +1, 7.2+ → max +2/+3
   if (rating > 0) {
     const ratingCap =
-      rating < 6.4 ? (young ? 1 : 0) : rating < 6.9 ? 2 : rating < 7.2 ? 3 : young ? 4 : 3
+      rating < 6.5 ? (young ? 1 : 0) : rating < 6.9 ? 1 : rating < 7.25 ? 2 : young ? 3 : 2
     ovrTarget = Math.min(ovrTarget, ratingCap)
+  }
+
+  // Malejące zwroty bliżej sufitu kariery (80)
+  if (ovrTarget > 0) {
+    if (player.overall >= 78) ovrTarget = Math.min(ovrTarget, chance(0.35) ? 1 : 0)
+    else if (player.overall >= 75) ovrTarget = Math.min(ovrTarget, 1)
+    else if (player.overall >= 70) ovrTarget = Math.min(ovrTarget, young ? 2 : 1)
+    ovrTarget = Math.min(ovrTarget, Math.max(0, CAREER_OVR_CAP - player.overall))
   }
 
   ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget)
@@ -708,7 +722,7 @@ export function simulateFullSeason(
 
   // Forma nie jest trwałym atrybutem — reset
   player.form = 50
-  player.overall = calcOverall(player.attrs, player.position)
+  syncPlayerOverall(player)
   player.morale = clamp(
     player.morale +
       (formLabel === 'świetna'

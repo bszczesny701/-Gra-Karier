@@ -10,6 +10,7 @@ import {
 } from '../data/clubs'
 import { CAREER_EVENTS, pickEvent, type ChoiceEffect } from '../data/events'
 import {
+  CAREER_OVR_CAP,
   clamp,
   type CreateCareerOptions,
   type GameState,
@@ -209,7 +210,7 @@ function applyEffect(player: Player, effect: ChoiceEffect): void {
       // obsługiwane w applyPreseasonDecision na sezonie
       break
   }
-  player.overall = calcOverall(player.attrs, player.position)
+  player.overall = Math.min(CAREER_OVR_CAP, calcOverall(player.attrs, player.position))
 }
 
 export function openPreseasonDecision(state: GameState): void {

@@ -193,23 +193,27 @@ export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
 }
 
+/** Sufit kariery — nawet mega dobra ścieżka ~80 OVR (top Ekstraklasa). */
+export const CAREER_OVR_CAP = 80
+
 /** Limity zmiany OVR po sezonie wg wieku. */
 export function clampSeasonOvrDelta(age: number, raw: number): number {
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
-  // Młodzi mogą rosnąć mocniej (droga do ~70 OVR)
-  const maxUp = age <= 21 ? 5 : age <= 25 ? 4 : 3
+  // Wolniejszy rozwój: młody talent +2–3 max, nie +4/+5 co sezon
+  const maxUp = age <= 21 ? 3 : age <= 25 ? 2 : 2
   let delta = Math.max(maxDown, Math.min(maxUp, Math.round(raw)))
 
-  // U młodych rzadko obcinamy duże skoki — tylko lekko +5
-  if (age <= 25 && delta >= 5) {
-    if (Math.random() > 0.4) delta = 4
+  // +3 u juniorów rzadkie
+  if (age <= 21 && delta >= 3) {
+    if (Math.random() > 0.28) delta = 2
   }
-  // Po 25. +3 rzadsze
-  if (age > 25 && delta >= 3) {
-    if (Math.random() > 0.35) delta = 2
+  // Po 25. +2 też nie co sezon
+  if (age > 25 && delta >= 2) {
+    if (Math.random() > 0.4) delta = 1
   }
-  // Po 32. trudniej rosnąć
-  if (age >= 32 && delta > 1) delta = 1
+  // Po 30. wzrost wyjątkowy
+  if (age >= 30 && delta > 1) delta = 1
+  if (age >= 32 && delta > 0 && Math.random() > 0.35) delta = 0
   if (age >= 35 && delta > 0) delta = 0
 
   return delta
