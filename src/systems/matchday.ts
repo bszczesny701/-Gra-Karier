@@ -167,7 +167,49 @@ function goalMomentChance(player: Player, matchMood: number): number {
   return Math.max(0.18, Math.min(0.42, base + ovrBit + moodBit))
 }
 
-export function momentForPosition(position: Position): {
+function passMoment(position: Position): {
+  action: MatchAction
+  reward: PendingGoalMoment['reward']
+  label: string
+  description: (oppName: string) => string
+} {
+  if (position === 'NP') {
+    return {
+      action: 'pass',
+      reward: 'assist',
+      label: 'Podanie zamiast strzału!',
+      description: (opp) =>
+        `Możesz sam strzelać, ale kolega jest lepiej ustawiony vs ${opp}. Dokładne podanie = asysta.`,
+    }
+  }
+  if (position === 'POM') {
+    return {
+      action: 'pass',
+      reward: 'assist',
+      label: 'Kluczowe podanie!',
+      description: (opp) =>
+        `Przełamanie linii przeciwko ${opp}. Dokładne podanie może dać asystę.`,
+    }
+  }
+  if (position === 'ŚO') {
+    return {
+      action: 'pass',
+      reward: 'assist',
+      label: 'Progresywne podanie!',
+      description: (opp) =>
+        `Wyprowadzenie akcji vs ${opp}. Znajdź wolnego kolegę między liniami.`,
+    }
+  }
+  return {
+    action: 'pass',
+    reward: 'assist',
+    label: 'Podanie z obrony!',
+    description: (opp) =>
+      `Czyste wyprowadzenie vs ${opp}. Podaj do wolnego zawodnika, nie panikuj.`,
+  }
+}
+
+function specialtyMoment(position: Position): {
   action: MatchAction
   reward: PendingGoalMoment['reward']
   label: string
@@ -184,11 +226,11 @@ export function momentForPosition(position: Position): {
   }
   if (position === 'POM') {
     return {
-      action: 'pass',
-      reward: 'assist',
-      label: 'Kluczowe podanie!',
+      action: 'shoot',
+      reward: 'goal',
+      label: 'Strzał z drugiej linii!',
       description: (opp) =>
-        `Przełamanie linii przeciwko ${opp}. Dokładne podanie może dać asystę.`,
+        `Masz przestrzeń przed polem vs ${opp}. Strzał z dystansu może zdecydować.`,
     }
   }
   if (position === 'ŚO') {
@@ -207,6 +249,23 @@ export function momentForPosition(position: Position): {
     description: (opp) =>
       `Chaos w polu karnym vs ${opp}. Wybij piłkę w bezpieczną strefę.`,
   }
+}
+
+/**
+ * Okazja meczowa: każda pozycja może dostać podanie;
+ * poza tym ma swoją specjalność (strzał / odbiór / wybicie).
+ */
+export function momentForPosition(position: Position): {
+  action: MatchAction
+  reward: PendingGoalMoment['reward']
+  label: string
+  description: (oppName: string) => string
+} {
+  // Szansa na podanie u każdej pozycji
+  const passChance =
+    position === 'POM' ? 0.62 : position === 'NP' ? 0.35 : position === 'ŚO' ? 0.4 : 0.32
+  if (chance(passChance)) return passMoment(position)
+  return specialtyMoment(position)
 }
 
 function finishPlayerMatchCore(
