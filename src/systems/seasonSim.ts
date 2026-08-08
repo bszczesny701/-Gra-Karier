@@ -201,8 +201,8 @@ function scoreline(att: number, def: number): number {
 }
 
 /**
- * Szansa na występ — duży przeskok między ligami.
- * II liga: twardy sufit 50%. OVR 55 w II ≈ 35–45%, nie 80%.
+ * Szansa na występ — zależy od OVR vs siła klubu + liga.
+ * II liga: bez sztywnego 50% — klasa nad składem = regularna gra.
  */
 export function appearanceChance(
   player: Player,
@@ -238,22 +238,24 @@ export function appearanceChance(
   }
   playChance -= rivalPressure * 0.03
 
+  // Sufity ligowe — wyższa liga = trudniej o pewne miejsce, ale nie blokujemy gwiazd
   const tierCap =
     league.tier === 4
-      ? 0.78
+      ? 0.85 // III liga
       : league.tier === 3
-        ? 0.5
+        ? 0.78 // II liga — OVR 67+ może być pewniakiem
         : league.tier === 2
-          ? 0.48
-          : 0.52
+          ? 0.68 // I liga
+          : 0.62 // Ekstraklasa
 
-  if (league.tier <= 3 && gap < 6) {
-    playChance = Math.min(playChance, tierCap - 0.04)
+  // Lekka kara tylko gdy ledwo doganiasz skład w II+/I
+  if (league.tier <= 3 && gap < 2) {
+    playChance = Math.min(playChance, tierCap - 0.06)
   }
-  if (league.tier === 3 && player.overall < 58) {
-    playChance = Math.min(playChance, 0.48)
+  if (league.tier === 3 && player.overall < 52) {
+    playChance = Math.min(playChance, 0.45)
   }
-  if (league.tier === 2 && player.overall < 62) {
+  if (league.tier === 2 && player.overall < 58) {
     playChance = Math.min(playChance, 0.42)
   }
   if (league.tier === 1 && gap < -8) {
@@ -262,8 +264,12 @@ export function appearanceChance(
   if (gap <= -18) playChance = Math.min(playChance, 0.05)
   else if (gap <= -12) playChance = Math.min(playChance, 0.14)
 
+  // Duża przewaga klasy = bonus do regularności
+  if (gap >= 12) playChance += 0.08
+  else if (gap >= 8) playChance += 0.04
+
   playChance = Math.min(playChance, tierCap)
-  return Math.max(0.03, Math.min(0.78, playChance))
+  return Math.max(0.03, Math.min(0.88, playChance))
 }
 
 /** Szansa w trakcie sezonu — chwilowy humor meczowy + rywal. */
