@@ -340,7 +340,7 @@ export function pickStartingClubIds(count = 4): string[] {
 }
 
 export function ovrForHigherLeague(tier: number): number {
-  if (tier <= 0) return 74
+  if (tier <= 0) return 72
   if (tier === 1) return 66
   if (tier === 2) return 58
   if (tier === 3) return 52

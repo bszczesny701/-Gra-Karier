@@ -677,11 +677,27 @@ function dedupeOffers(offers: TransferOffer[]): TransferOffer[] {
 }
 
 function ovrThresholdForTier(tier: number): number {
-  if (tier <= 0) return 74
+  if (tier <= 0) return 72 // zagranica — dopiero przy solidnym OVR
   if (tier === 1) return 64
   if (tier === 2) return 56
   if (tier === 3) return 50
   return 46
+}
+
+/** Czy klub zagraniczny / top w ogóle zainteresuje się zawodnikiem (lepszy klub = wyższy próg). */
+function meetsClubOfferBar(player: Player, clubId: string): boolean {
+  const club = getClub(clubId)
+  const league = getLeagueForClub(clubId)
+  // Polska — bez twardego filtra klubowego (liga i tak ogranicza %)
+  if (league.tier > 0) return true
+  // Zagranica: min ~72, a elita dużo wyżej
+  if (player.overall < 72) return false
+  if (club.strength >= 92) return player.overall >= 84 // City / Real / Inter-level
+  if (club.strength >= 88) return player.overall >= 80
+  if (club.strength >= 84) return player.overall >= 77
+  if (club.strength >= 80) return player.overall >= 75
+  if (club.strength >= 76) return player.overall >= 73
+  return player.overall >= 72
 }
 
 function buildOffersForPlayer(
@@ -709,10 +725,15 @@ function buildOffersForPlayer(
     preferWeak = false,
   ) => {
     const league = getLeague(leagueId)
-    let candidates = [...league.clubIds].filter((id) => !used.has(id))
+    let candidates = [...league.clubIds].filter(
+      (id) => !used.has(id) && meetsClubOfferBar(player, id),
+    )
+    if (!candidates.length) return
+
     if (preferWeak) {
       candidates.sort((a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength)
-    } else if (ctx.midSeason || ctx.forceHigher) {
+    } else if (ctx.midSeason || ctx.forceHigher || league.tier <= 0) {
+      // Zagranica / awans: najpierw kluby, do których OVR realnie pasuje
       candidates.sort((a, b) => {
         const ga = player.overall - CLUBS[a]!.strength
         const gb = player.overall - CLUBS[b]!.strength
@@ -749,13 +770,13 @@ function buildOffersForPlayer(
 
   const higher = leagueByTier(currentLeague.tier - 1, currentLeague.country)
   const lower = leagueByTier(currentLeague.tier + 1, currentLeague.country)
+  const canGoAbroad = player.overall >= ovrThresholdForTier(0)
 
   if (ctx.midSeason) {
     if (higher && player.overall >= ovrThresholdForTier(higher.tier)) {
       addFromLeague(higher.id, 2, 'Okno zimowe — wyższa liga.')
     }
-    // Z Ekstraklasy / wysokiego OVR: top Europa zimą
-    if (currentLeague.tier <= 1 && player.overall >= ovrThresholdForTier(0)) {
+    if (canGoAbroad && currentLeague.tier <= 1) {
       for (const fl of foreignTopLeagues()) {
         addFromLeague(fl.id, 1, `${fl.name} — zainteresowanie zimą.`)
       }
@@ -783,11 +804,8 @@ function buildOffersForPlayer(
         addFromLeague(top.id, 1, 'Skok o dwie ligi.')
       }
     }
-    // Big 5 — tylko z wysokiego OVR / top PL
-    if (
-      (currentLeague.tier <= 1 || player.overall >= 72) &&
-      player.overall >= ovrThresholdForTier(0)
-    ) {
+    // Big 5 — dopiero od ~72; konkretny klub filtruje meetsClubOfferBar
+    if (canGoAbroad && (currentLeague.tier <= 1 || player.overall >= 74)) {
       for (const fl of foreignTopLeagues()) {
         if (fl.id === currentLeague.id) continue
         addFromLeague(fl.id, 1, `${fl.name} patrzy na Ciebie.`)
@@ -800,7 +818,7 @@ function buildOffersForPlayer(
   }
 
   while (offers.length < 2) {
-    for (const l of LEAGUES_SAFE()) {
+    for (const l of LEAGUES_SAFE(player.overall)) {
       if (offers.length >= 2) break
       addFromLeague(l.id, 1, 'Oferta rynkowa.', form === 'fatalna' || form === 'słaba')
     }
@@ -810,14 +828,17 @@ function buildOffersForPlayer(
   return offers.slice(0, 5)
 }
 
-function LEAGUES_SAFE() {
-  return [
+function LEAGUES_SAFE(overall: number) {
+  const pl = [
     getLeague('liga-3'),
     getLeague('liga-ii'),
     getLeague('liga-2'),
     getLeague('liga-1'),
-    ...foreignTopLeagues(),
   ]
+  if (overall >= ovrThresholdForTier(0)) {
+    return [...pl, ...foreignTopLeagues()]
+  }
+  return pl
 }
 
 export function openTransferChoice(state: GameState): void {

@@ -200,8 +200,8 @@ export function scoreline(att: number, def: number): number {
 }
 
 /**
- * Szansa na występ — zależy od OVR vs siła klubu + liga.
- * II liga: bez sztywnego 50% — klasa nad składem = regularna gra.
+ * Szansa na występ — OVR vs siła klubu + wyraźna kara wyższej ligi.
+ * Ten sam OVR w Ekstraklasie ≪ I liga.
  */
 export function appearanceChance(
   player: Player,
@@ -218,11 +218,23 @@ export function appearanceChance(
   const strength = getEffectiveStrength(clubId, strengthMods)
   const gap = player.overall - strength
 
-  let playChance = 0.38 + gap * 0.018
-  if (gap < 0) playChance = 0.38 + gap * 0.028
+  // Baza ligowa: wyższa liga = trudniej o „11” przy tym samym gap
+  const tierBase =
+    league.tier === 4
+      ? 0.44 // III
+      : league.tier === 3
+        ? 0.4 // II
+        : league.tier === 2
+          ? 0.36 // I liga
+          : league.tier === 1
+            ? 0.24 // Ekstraklasa
+            : 0.16 // Top Europa
 
-  playChance += (player.reputation - 20) / 600
-  playChance += (player.morale - 55) / 700
+  const gapSlope = gap < 0 ? 0.024 : 0.013
+  let playChance = tierBase + gap * gapSlope
+
+  playChance += (player.reputation - 20) / 700
+  playChance += (player.morale - 55) / 800
   if (player.age >= 34) playChance -= 0.08
   else if (player.age >= 30) playChance -= 0.04
   else if (player.age <= 18) playChance += 0.02
@@ -232,42 +244,49 @@ export function appearanceChance(
     const playerEdge = player.overall + (player.morale - 50) / 10
     if (rivalEdge > playerEdge) {
       const edgeGap = rivalEdge - playerEdge
-      playChance -= Math.min(0.18, Math.max(0.04, 0.04 + edgeGap * 0.012))
+      playChance -= Math.min(0.2, Math.max(0.05, 0.05 + edgeGap * 0.014))
     }
   }
   playChance -= rivalPressure * 0.03
 
-  // Sufity ligowe — wyższa liga = trudniej o pewne miejsce, ale nie blokujemy gwiazd
+  // Sufity — Ekstraklasa wyraźnie niżej niż I liga
   const tierCap =
     league.tier === 4
-      ? 0.85 // III liga
+      ? 0.88
       : league.tier === 3
-        ? 0.78 // II liga
+        ? 0.8
         : league.tier === 2
-          ? 0.68 // I liga
+          ? 0.74 // I liga
           : league.tier === 1
-            ? 0.62 // Ekstraklasa
-            : 0.52 // Top 5 Europy
+            ? 0.56 // Ekstraklasa
+            : 0.45 // Europa
 
-  // Lekka kara tylko gdy ledwo doganiasz skład w II+/I
+  // W Ekstraklasie / Europie: bycie poniżej siły składu boli mocniej
+  if (league.tier === 1 && gap < 0) playChance *= 0.82
+  if (league.tier === 1 && gap < -4) playChance = Math.min(playChance, 0.28)
+  if (league.tier <= 0 && gap < 2) playChance = Math.min(playChance, 0.32)
+  if (league.tier <= 0 && gap < -4) playChance = Math.min(playChance, 0.14)
+
   if (league.tier >= 1 && league.tier <= 3 && gap < 2) {
-    playChance = Math.min(playChance, tierCap - 0.06)
+    playChance = Math.min(playChance, tierCap - 0.08)
   }
   if (league.tier === 3 && player.overall < 52) {
-    playChance = Math.min(playChance, 0.45)
+    playChance = Math.min(playChance, 0.48)
   }
   if (league.tier === 2 && player.overall < 58) {
-    playChance = Math.min(playChance, 0.42)
+    playChance = Math.min(playChance, 0.4)
+  }
+  if (league.tier === 1 && player.overall < 64) {
+    playChance = Math.min(playChance, 0.3)
   }
   if (league.tier <= 1 && gap < -8) {
-    playChance = Math.min(playChance, 0.22)
+    playChance = Math.min(playChance, 0.18)
   }
-  if (gap <= -18) playChance = Math.min(playChance, 0.05)
-  else if (gap <= -12) playChance = Math.min(playChance, 0.14)
+  if (gap <= -18) playChance = Math.min(playChance, 0.04)
+  else if (gap <= -12) playChance = Math.min(playChance, 0.12)
 
-  // Duża przewaga klasy = bonus do regularności
-  if (gap >= 12) playChance += 0.08
-  else if (gap >= 8) playChance += 0.04
+  if (gap >= 12) playChance += 0.06
+  else if (gap >= 8) playChance += 0.03
 
   playChance = Math.min(playChance, tierCap)
   return Math.max(0.03, Math.min(0.88, playChance))
@@ -858,6 +877,22 @@ export function finalizeSeasonReport(
     ovrTarget += 1
   }
 
+  // Młody (≤25): lepszy / silniejszy klub = szybszy rozwój (przy minutach)
+  if (young && formLabel !== 'fatalna' && appRate >= 0.35) {
+    const clubStr = getEffectiveStrength(season.clubId, strengthMods)
+    let clubBonus = 0
+    if (clubStr >= 88 && appRate >= 0.35) clubBonus = chance(0.7) ? 1 : 0
+    else if (clubStr >= 80 && appRate >= 0.4) clubBonus = chance(0.55) ? 1 : 0
+    else if (clubStr >= 72 && appRate >= 0.45) clubBonus = chance(0.42) ? 1 : 0
+    else if (clubStr >= 64 && appRate >= 0.5) clubBonus = chance(0.3) ? 1 : 0
+    else if (clubStr >= 55 && appRate >= 0.55) clubBonus = chance(0.18) ? 1 : 0
+
+    if (veryYoung && clubStr >= 70 && appRate >= 0.5 && chance(0.28)) {
+      clubBonus += 1
+    }
+    ovrTarget += clubBonus
+  }
+
   if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 7.0 && chance(0.4)) ovrTarget += 1
   if (player.position === 'NP' && goals >= 15 && rating >= 7.0 && chance(0.45)) ovrTarget += 1
   if (player.position === 'POM' && goals + assists >= 14 && rating >= 7.0 && chance(0.45)) ovrTarget += 1
@@ -984,7 +1019,11 @@ export function finalizeSeasonReport(
   let narrative = `${getClub(season.clubId).name} kończy sezon na ${place}. miejscu (${myRow.points} pkt, ${myRow.played} meczów). `
   narrative += `Zagrałeś ${leagueApps}/${fixturesForPlayer} meczów ligowych (+ puchar). Forma: ${formLabel}. `
   if (young && appRate >= 0.55 && finalDelta > 0) {
-    narrative += `Dużo minut u młodego zawodnika — rozwój ↑. `
+    const clubStr = getEffectiveStrength(season.clubId, strengthMods)
+    narrative +=
+      clubStr >= 70
+        ? `Silne środowisko + minuty u młodego — rozwój ↑. `
+        : `Dużo minut u młodego zawodnika — rozwój ↑. `
   } else if (young && appRate < 0.25 && finalDelta <= 0) {
     narrative += `Mało gry — trudno o rozwój. `
   }
