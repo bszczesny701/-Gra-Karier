@@ -251,6 +251,12 @@ h3 {
   font-size: 1.05rem;
 }
 
+.table-wrap {
+  max-height: 280px;
+  overflow: auto;
+  margin-top: 4px;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

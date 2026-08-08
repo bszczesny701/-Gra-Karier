@@ -147,7 +147,7 @@ export class App {
       `
       <section class="panel">
         <h2>Nowy zawodnik</h2>
-        <p class="muted">Ustaw profil startowy. Wyższy overall otwiera lepsze kluby.</p>
+        <p class="muted">Ustaw profil startowy. Wyższy overall otwiera I ligę i Ekstraklasę.</p>
         <label class="field"><span>Imię i nazwisko</span>
           <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" /></label>
         <label class="field"><span>Pozycja</span><select id="player-pos">${options}</select></label>
@@ -196,9 +196,11 @@ export class App {
       clubHint.textContent =
         ovr < min
           ? 'Podnieś overall, żeby wybrać ten klub.'
-          : min >= 58
-            ? 'Start w II lidze — trudniejszy początek, lepsze zarobki.'
-            : 'Klasyczny start w III lidze regionalnej.'
+          : min >= 64
+            ? 'Start w Ekstraklasie — najwyższy poziom w Polsce.'
+            : min >= 56
+              ? 'Start w I lidze — krok od Ekstraklasy.'
+              : 'Klasyczny start w III lidze.'
     }
 
     ageInput.addEventListener('input', () => {
@@ -241,7 +243,6 @@ export class App {
     const place = playerTablePosition(s)
     const avgForm = s.formSamples ? Math.round(s.formSum / s.formSamples) : p.form
     const table = sortedStandings(s)
-      .slice(0, 8)
       .map((row, i) => {
         const c = getClub(row.clubId)
         const mine = row.clubId === s.clubId ? ' mine' : ''
@@ -287,10 +288,12 @@ export class App {
 
       <section class="panel">
         <h3>Tabela</h3>
-        <table class="table">
-          <thead><tr><th>#</th><th>Klub</th><th>M</th><th>Pkt</th></tr></thead>
-          <tbody>${table}</tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>#</th><th>Klub</th><th>M</th><th>Pkt</th></tr></thead>
+            <tbody>${table}</tbody>
+          </table>
+        </div>
       </section>
 
       <section class="panel">

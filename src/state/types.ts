@@ -131,8 +131,8 @@ export interface GameState {
   log: string[]
 }
 
-export const SAVE_KEY = 'gra-karier-save-v3'
-export const SAVE_VERSION = 3
+export const SAVE_KEY = 'gra-karier-save-v4'
+export const SAVE_VERSION = 4
 
 export const WEEKS_PER_SEASON = 12
 

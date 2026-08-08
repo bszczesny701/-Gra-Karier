@@ -49,20 +49,21 @@ function scoreGoals(attack: number, defense: number, rng: () => number): number 
   return goals
 }
 
-/** Pary derby w każdej lidze (id klubów). */
+/** Pary derby. */
 const DERBIES: Array<[string, string]> = [
-  ['wisla-mala', 'cracovia-noc'],
-  ['legia-dolna', 'lech-pole'],
-  ['gornik-las', 'slask-rzeka'],
-  ['pogon-wiatr', 'jagiellonia-most'],
-  ['rakow-miasto', 'widzew-tor'],
-  ['piast-brzeg', 'korona-stolica'],
-  ['zaglebie-kopalnia', 'gks-huta'],
-  ['stal-mosty', 'ardia-park'],
-  ['fc-europa', 'palace-side'],
-  ['nordic-united', 'metro-stars'],
-  ['river-capital', 'atlantic-city'],
-  ['golden-gate', 'harbor-club'],
+  // Ekstraklasa
+  ['arka', 'lechia'],
+  ['gornik-zabrze', 'gks-katowice'],
+  ['gornik-zabrze', 'piast'],
+  ['korona', 'radomiak'],
+  ['legia', 'widzew'],
+  // I liga / klasyczne
+  ['wisla-krakow', 'cracovia'],
+  ['lks-lodz', 'widzew'],
+  ['legia', 'polonia-warszawa'],
+  // III liga
+  ['hutnik-krakow', 'wieczysta'],
+  ['polonia-bytom', 'gks-tichy'],
 ]
 
 export function isDerby(a: string, b: string): boolean {
