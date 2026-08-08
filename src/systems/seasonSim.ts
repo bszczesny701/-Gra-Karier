@@ -10,7 +10,7 @@ import type {
   SeasonReport,
   SeasonState,
 } from '../state/types'
-import { clamp, cupStageLabel, formLabelFromAvg } from '../state/types'
+import { clamp, cupStageLabel, formLabelFromAvg, performanceFormScore } from '../state/types'
 import { calcOverall } from './playerFactory'
 import { playerTablePosition, sortedStandings } from './standings'
 
@@ -494,18 +494,64 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     )
   }
 
-  const avgForm = formSamples ? formSum / formSamples : player.form
+  const rawForm = formSamples ? formSum / formSamples : player.form
+  const perfForm = performanceFormScore(
+    player.position,
+    goals,
+    assists,
+    leagueApps,
+    fixturesForPlayer,
+    leagueAvgRating || 5.5,
+  )
+  // Wyniki ważą mocniej niż „samopoczucie” z losowych wahań
+  let avgForm = clamp(rawForm * 0.3 + perfForm * 0.7, 5, 95)
+
+  // Twarde limity dla napastników ze słabym dorobkiem
+  if (player.position === 'NP') {
+    if (goals <= 2) avgForm = Math.min(avgForm, 28)
+    else if (goals <= 4) avgForm = Math.min(avgForm, 38) // max słaba
+    else if (goals <= 6) avgForm = Math.min(avgForm, 52) // max przyzwoita
+    else if (goals < 10) avgForm = Math.min(avgForm, 72) // max dobra
+  }
+  if (player.position === 'POM') {
+    const contrib = goals + assists
+    if (contrib <= 2) avgForm = Math.min(avgForm, 34)
+    else if (contrib <= 4) avgForm = Math.min(avgForm, 50)
+  }
+  if ((player.position === 'OB' || player.position === 'ŚO') && leagueApps < fixturesForPlayer * 0.35) {
+    avgForm = Math.min(avgForm, 40)
+  }
+
   const formLabel = formLabelFromAvg(avgForm)
 
   let ovrTarget = 0
-  if (leagueApps >= fixturesForPlayer * 0.55 && avgForm >= 62) ovrTarget += 1
-  if (leagueApps >= fixturesForPlayer * 0.7 && leagueAvgRating >= 7) ovrTarget += 1
-  if (goals >= 8) ovrTarget += 1
+  if (leagueApps >= fixturesForPlayer * 0.55 && formLabel !== 'słaba' && formLabel !== 'fatalna') {
+    if (avgForm >= 62 && leagueAvgRating >= 6.6) ovrTarget += 1
+  }
+  if (leagueApps >= fixturesForPlayer * 0.7 && leagueAvgRating >= 7.2 && formLabel !== 'fatalna') {
+    ovrTarget += 1
+  }
   if (cup.stage === 'winner' || cup.stage === 'final') ovrTarget += 1
+
+  // Gole/asysty wg pozycji
+  if (player.position === 'NP') {
+    if (goals >= 12) ovrTarget += 1
+    if (goals >= 16) ovrTarget += 1
+    if (goals <= 4) ovrTarget -= 1
+    if (goals <= 2) ovrTarget -= 1
+  } else if (player.position === 'POM') {
+    const contrib = goals + assists
+    if (contrib >= 10) ovrTarget += 1
+    if (contrib <= 3) ovrTarget -= 1
+  } else {
+    if (leagueAvgRating >= 7.3 && leagueApps >= fixturesForPlayer * 0.65) ovrTarget += 1
+    if (leagueAvgRating > 0 && leagueAvgRating < 5.5) ovrTarget -= 1
+  }
+
   if (formLabel === 'słaba') ovrTarget -= 1
   if (formLabel === 'fatalna') ovrTarget -= 2
-  if (avgForm < 40 || leagueApps < fixturesForPlayer * 0.25) ovrTarget -= 1
-  if (leagueAvgRating > 0 && leagueAvgRating < 5.4) ovrTarget -= 1
+  if (leagueApps < fixturesForPlayer * 0.25) ovrTarget -= 1
+  if (leagueAvgRating > 0 && leagueAvgRating < 5.3) ovrTarget -= 1
   ovrTarget = clamp(ovrTarget, -3, 3)
 
   applyOverallChange(player, ovrTarget)
