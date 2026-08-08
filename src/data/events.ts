@@ -3,7 +3,6 @@ import type { Attributes, Position } from '../state/types'
 export type EffectKey =
   | keyof Attributes
   | 'morale'
-  | 'form'
   | 'reputation'
   | 'money'
   | 'staminaDrain'
@@ -40,12 +39,11 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'full',
         label: 'Zostaję do końca',
-        hint: '+tempo, +kondycja, −forma',
+        hint: '+tempo, +kondycja, −morale',
         effects: [
           { key: 'pace', delta: 1 },
           { key: 'stamina', delta: 2 },
-          { key: 'form', delta: -3 },
-          { key: 'morale', delta: 1 },
+          { key: 'morale', delta: -2 },
         ],
       },
       {
@@ -54,16 +52,14 @@ export const CAREER_EVENTS: CareerEvent[] = [
         hint: 'Mały wzrost, bez dużego zmęczenia',
         effects: [
           { key: 'stamina', delta: 1 },
-          { key: 'form', delta: -1 },
         ],
       },
       {
         id: 'skip',
         label: 'Idę do domu',
-        hint: '+forma, −morale sztabu',
+        hint: '+morale, −reputacja sztabu',
         effects: [
-          { key: 'form', delta: 2 },
-          { key: 'morale', delta: -2 },
+          { key: 'morale', delta: 2 },
           { key: 'reputation', delta: -1 },
         ],
       },
@@ -83,21 +79,21 @@ export const CAREER_EVENTS: CareerEvent[] = [
         effects: [
           { key: 'shooting', delta: 2 },
           { key: 'stamina', delta: -1 },
-          { key: 'form', delta: -2 },
+          { key: 'stamina', delta: -2 },
         ],
       },
       {
         id: 'normal',
         label: 'Tylko trening grupowy',
-        hint: 'Stabilna forma',
-        effects: [{ key: 'form', delta: 1 }],
+        hint: '+kondycja',
+        effects: [{ key: 'stamina', delta: 1 }],
       },
       {
         id: 'rest',
         label: 'Wczesny odpoczynek',
-        hint: '+forma, −strzał',
+        hint: '+kondycja, −strzał',
         effects: [
-          { key: 'form', delta: 3 },
+          { key: 'stamina', delta: 3 },
           { key: 'shooting', delta: -1 },
           { key: 'morale', delta: 1 },
         ],
@@ -117,7 +113,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
         hint: '+podanie',
         effects: [
           { key: 'passing', delta: 2 },
-          { key: 'form', delta: -1 },
+          { key: 'stamina', delta: -1 },
           { key: 'morale', delta: 1 },
         ],
       },
@@ -128,7 +124,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
         effects: [
           { key: 'passing', delta: 1 },
           { key: 'pace', delta: 1 },
-          { key: 'form', delta: -2 },
+          { key: 'stamina', delta: -2 },
         ],
       },
       {
@@ -189,11 +185,10 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'party',
         label: 'Idę na całą noc',
-        hint: '+morale, −forma, −reputacja',
+        hint: '+morale, −kondycja, −reputacja',
         effects: [
           { key: 'morale', delta: 4 },
-          { key: 'form', delta: -6 },
-          { key: 'stamina', delta: -2 },
+          { key: 'stamina', delta: -4 },
           { key: 'reputation', delta: -2 },
           { key: 'money', delta: -150 },
         ],
@@ -201,19 +196,19 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'short',
         label: 'Wpadam na godzinę',
-        hint: '+morale, lekki spadek formy',
+        hint: '+morale, lekki spadek kondycji',
         effects: [
           { key: 'morale', delta: 2 },
-          { key: 'form', delta: -2 },
+          { key: 'stamina', delta: -2 },
           { key: 'money', delta: -50 },
         ],
       },
       {
         id: 'home',
         label: 'Zostaję w domu',
-        hint: '+forma, −morale',
+        hint: '+kondycja, −morale',
         effects: [
-          { key: 'form', delta: 3 },
+          { key: 'stamina', delta: 3 },
           { key: 'morale', delta: -1 },
           { key: 'reputation', delta: 1 },
         ],
@@ -262,19 +257,19 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'accept',
         label: 'Przyjmuję',
-        hint: '+pieniądze, −forma',
+        hint: '+pieniądze, −kondycja',
         effects: [
           { key: 'money', delta: 400 },
-          { key: 'form', delta: -2 },
+          { key: 'stamina', delta: -2 },
           { key: 'reputation', delta: 1 },
         ],
       },
       {
         id: 'train',
         label: 'Wolę trening',
-        hint: '+forma, +reputacja w klubie',
+        hint: '+kondycja, +reputacja w klubie',
         effects: [
-          { key: 'form', delta: 2 },
+          { key: 'stamina', delta: 2 },
           { key: 'reputation', delta: 1 },
           { key: 'morale', delta: 1 },
         ],
@@ -290,20 +285,18 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'careful',
         label: 'Oszczędzam się',
-        hint: '+forma, −tempo tymczasowo',
+        hint: '+kondycja, −tempo tymczasowo',
         effects: [
-          { key: 'form', delta: 2 },
+          { key: 'stamina', delta: 2 },
           { key: 'pace', delta: -1 },
-          { key: 'stamina', delta: 1 },
         ],
       },
       {
         id: 'push',
         label: 'Gram przez ból',
-        hint: 'Ryzyko: −kondycja, −forma',
+        hint: 'Ryzyko: −kondycja',
         effects: [
-          { key: 'form', delta: -4 },
-          { key: 'stamina', delta: -2 },
+          { key: 'stamina', delta: -4 },
           { key: 'morale', delta: 1 },
           { key: 'reputation', delta: 1 },
         ],
@@ -313,8 +306,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
         label: 'Pełna rehabilitacja',
         hint: '+kondycja, −pieniądze',
         effects: [
-          { key: 'stamina', delta: 2 },
-          { key: 'form', delta: 1 },
+          { key: 'stamina', delta: 3 },
           { key: 'money', delta: -100 },
         ],
       },
@@ -365,10 +357,10 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'visit',
         label: 'Jadę do domu',
-        hint: '+morale, −forma meczowa',
+        hint: '+morale, −kondycja',
         effects: [
           { key: 'morale', delta: 4 },
-          { key: 'form', delta: -2 },
+          { key: 'stamina', delta: -2 },
           { key: 'money', delta: -80 },
         ],
       },
@@ -379,7 +371,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
         effects: [
           { key: 'reputation', delta: 2 },
           { key: 'morale', delta: -2 },
-          { key: 'form', delta: 1 },
+          { key: 'stamina', delta: 1 },
         ],
       },
     ],

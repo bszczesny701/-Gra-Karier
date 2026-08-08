@@ -113,9 +113,6 @@ function applyEffect(player: Player, effect: ChoiceEffect): void {
     case 'morale':
       player.morale = clamp(player.morale + effect.delta, 1, 100)
       break
-    case 'form':
-      player.form = clamp(player.form + effect.delta, 1, 100)
-      break
     case 'reputation':
       player.reputation = clamp(player.reputation + effect.delta, 0, 100)
       break

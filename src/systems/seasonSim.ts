@@ -97,13 +97,19 @@ function scoreline(att: number, def: number): number {
   return g
 }
 
-/** Szansa na występ — nigdy 100% przy słabej formie/OVR. */
+/** Szansa na występ — z OVR / reputacji / morale (forma nie jest stałą statystyką). */
 export function appearanceChance(player: Player): number {
-  const formPart = player.form / 140
-  const ovrPart = player.overall / 160
-  const repPart = player.reputation / 250
-  const moralePart = player.morale / 300
-  return Math.max(0.12, Math.min(0.88, 0.18 + formPart + ovrPart + repPart + moralePart))
+  const ovrPart = player.overall / 140
+  const repPart = player.reputation / 220
+  const moralePart = player.morale / 280
+  return Math.max(0.18, Math.min(0.9, 0.22 + ovrPart + repPart + moralePart))
+}
+
+/** Szansa w trakcie sezonu — chwilowy humor meczowy, nie zapisana forma. */
+function matchAppearanceChance(player: Player, matchMood: number): number {
+  const base = appearanceChance(player)
+  const moodBit = (matchMood - 50) / 200
+  return Math.max(0.12, Math.min(0.92, base + moodBit))
 }
 
 /**
@@ -175,12 +181,14 @@ function simulatePolishCup(
       playerApps++
       const goalP =
         (player.position === 'NP' ? 0.28 : player.position === 'POM' ? 0.14 : 0.06) *
-        (player.form / 70) *
+        (0.85 + Math.random() * 0.3) *
         (player.attrs.shooting / 70)
       if (chance(Math.min(0.55, goalP))) playerGoals++
     }
 
-    const boost = played ? (player.overall - 50) * 0.07 + (player.form - 50) * 0.05 : -2
+    const boost = played
+      ? (player.overall - 50) * 0.07 + (Math.random() * 6 - 2)
+      : -2
     const ownP = own.strength + boost + Math.random() * 6
     const rivP = rival.strength * round.difficulty + Math.random() * 6
     const win = ownP >= rivP
@@ -327,40 +335,9 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   let goals = 0
   let assists = 0
   let ratingSum = 0
-  let formSum = 0
-  let formSamples = 0
 
-  // Losowy „sezon formy” — rzadko świetny, często przeciętny/słaby
-  const seasonRoll = Math.random()
-  let formBias = 0
-  let volatility = 14
-  if (seasonRoll < 0.15) {
-    // kryzys
-    formBias = -28
-    volatility = 20
-  } else if (seasonRoll < 0.38) {
-    // chłodny
-    formBias = -14
-    volatility = 17
-  } else if (seasonRoll < 0.72) {
-    // normalny
-    formBias = -2
-    volatility = 15
-  } else if (seasonRoll < 0.9) {
-    // dobry
-    formBias = 6
-    volatility = 12
-  } else {
-    // gorący — rzadki
-    formBias = 12
-    volatility = 10
-  }
-
-  let workingForm = clamp(
-    player.form + formBias + (Math.random() * 24 - 12),
-    8,
-    92,
-  )
+  // Chwilowy humor sezonu — startuje od zera każdego roku (nie dziedziczy „fatalnej” formy)
+  let matchMood = clamp(48 + (Math.random() * 20 - 4), 30, 70)
 
   for (const fixture of allFixtures) {
     const { homeId, awayId } = fixture
@@ -372,25 +349,18 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     let matchAssists = 0
 
     if (involvesPlayer) {
-      // duży losowy szok formy między meczami
-      const shock = (Math.random() * 2 - 1) * volatility
-      workingForm = clamp(workingForm + shock * 0.55 + formBias * 0.03, 5, 96)
+      matchMood = clamp(matchMood + (Math.random() * 16 - 8), 15, 90)
+      if (chance(0.05)) matchMood = clamp(matchMood - (6 + Math.random() * 14), 10, 90)
+      if (chance(0.05)) matchMood = clamp(matchMood + (4 + Math.random() * 10), 10, 90)
 
-      // rzadki kryzys / kontuzja mentalna w trakcie sezonu
-      if (chance(0.06)) workingForm = clamp(workingForm - (8 + Math.random() * 18), 5, 96)
-      if (chance(0.04)) workingForm = clamp(workingForm + (5 + Math.random() * 10), 5, 96)
-
-      formSum += workingForm
-      formSamples++
-      const tempPlayer = { ...player, form: workingForm }
-      starts = chance(appearanceChance(tempPlayer))
+      starts = chance(matchAppearanceChance(player, matchMood))
 
       if (starts) {
         appearances++
-        boost = (player.overall - 50) * 0.1 + (workingForm - 50) * 0.08
+        boost = (player.overall - 50) * 0.1 + (matchMood - 50) * 0.05
         const goalChance =
           (player.position === 'NP' ? 0.22 : player.position === 'POM' ? 0.1 : 0.04) *
-          (workingForm / 75) *
+          (0.75 + matchMood / 200) *
           (player.attrs.shooting / 75)
         if (chance(Math.min(0.45, goalChance))) {
           matchGoals = chance(0.12) ? 2 : 1
@@ -399,14 +369,14 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
         const assistChance =
           (player.position === 'POM' || player.position === 'NP' ? 0.16 : 0.07) *
           (player.attrs.passing / 80) *
-          (workingForm / 75)
+          (0.75 + matchMood / 200)
         if (chance(Math.min(0.38, assistChance))) {
           matchAssists = 1
           assists++
         }
         const rating = clamp(
-          4.8 +
-            workingForm / 60 +
+          5.0 +
+            matchMood / 70 +
             (player.overall - 45) / 42 +
             matchGoals * 0.85 +
             matchAssists * 0.45 +
@@ -415,12 +385,10 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
           9.7,
         )
         ratingSum += rating
-        if (rating >= 7.5) workingForm = clamp(workingForm + Math.random() * 2.5, 5, 96)
-        else if (rating < 5.2) workingForm = clamp(workingForm - (2 + Math.random() * 5), 5, 96)
-        else workingForm = clamp(workingForm + (Math.random() * 5 - 2.5), 5, 96)
+        if (rating >= 7.5) matchMood = clamp(matchMood + Math.random() * 3, 10, 90)
+        else if (rating < 5.2) matchMood = clamp(matchMood - (1 + Math.random() * 4), 10, 90)
       } else {
-        // ławka / pominięcie — zwykle zjada formę
-        workingForm = clamp(workingForm - (1 + Math.random() * 4), 5, 96)
+        matchMood = clamp(matchMood - (Math.random() * 3), 10, 90)
       }
     }
 
@@ -482,7 +450,10 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   const leagueApps = appearances
   const leagueAvgRating = leagueApps ? ratingSum / leagueApps : 5.5
 
-  const cup = simulatePolishCup(season.clubId, { ...player, form: workingForm })
+  const cup = simulatePolishCup(season.clubId, {
+    ...player,
+    form: clamp(matchMood, 25, 80),
+  })
   goals += cup.playerGoals
   appearances += cup.playerApps
   if (cup.playerGoals > 0) {
@@ -494,7 +465,7 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     )
   }
 
-  const rawForm = formSamples ? formSum / formSamples : player.form
+  // Forma sezonu = gole/statystyki + los (nie stała cecha postaci)
   const perfForm = performanceFormScore(
     player.position,
     goals,
@@ -503,23 +474,19 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     fixturesForPlayer,
     leagueAvgRating || 5.5,
   )
-  // Wyniki ważą mocniej niż „samopoczucie” z losowych wahań
-  let avgForm = clamp(rawForm * 0.3 + perfForm * 0.7, 5, 95)
+  const luck = Math.random() * 28 - 14
+  let avgForm = clamp(perfForm + luck, 12, 92)
 
-  // Twarde limity dla napastników ze słabym dorobkiem
   if (player.position === 'NP') {
-    if (goals <= 2) avgForm = Math.min(avgForm, 28)
-    else if (goals <= 4) avgForm = Math.min(avgForm, 38) // max słaba
-    else if (goals <= 6) avgForm = Math.min(avgForm, 52) // max przyzwoita
-    else if (goals < 10) avgForm = Math.min(avgForm, 72) // max dobra
-  }
-  if (player.position === 'POM') {
+    if (goals <= 2) avgForm = Math.min(avgForm, 36 + Math.random() * 8)
+    else if (goals <= 4) avgForm = Math.min(avgForm, 50 + Math.random() * 8)
+    else if (goals <= 6) avgForm = Math.min(avgForm, 62 + Math.random() * 6)
+  } else if (player.position === 'POM') {
     const contrib = goals + assists
-    if (contrib <= 2) avgForm = Math.min(avgForm, 34)
-    else if (contrib <= 4) avgForm = Math.min(avgForm, 50)
-  }
-  if ((player.position === 'OB' || player.position === 'ŚO') && leagueApps < fixturesForPlayer * 0.35) {
-    avgForm = Math.min(avgForm, 40)
+    if (contrib <= 2) avgForm = Math.min(avgForm, 42 + Math.random() * 8)
+    else if (contrib <= 4) avgForm = Math.min(avgForm, 56 + Math.random() * 6)
+  } else if (leagueApps < fixturesForPlayer * 0.3) {
+    avgForm = Math.min(avgForm, 44 + Math.random() * 8)
   }
 
   const formLabel = formLabelFromAvg(avgForm)
@@ -533,16 +500,15 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   }
   if (cup.stage === 'winner' || cup.stage === 'final') ovrTarget += 1
 
-  // Gole/asysty wg pozycji
   if (player.position === 'NP') {
     if (goals >= 12) ovrTarget += 1
     if (goals >= 16) ovrTarget += 1
-    if (goals <= 4) ovrTarget -= 1
-    if (goals <= 2) ovrTarget -= 1
+    if (goals <= 3) ovrTarget -= 1
+    if (goals === 0) ovrTarget -= 1
   } else if (player.position === 'POM') {
     const contrib = goals + assists
     if (contrib >= 10) ovrTarget += 1
-    if (contrib <= 3) ovrTarget -= 1
+    if (contrib <= 2) ovrTarget -= 1
   } else {
     if (leagueAvgRating >= 7.3 && leagueApps >= fixturesForPlayer * 0.65) ovrTarget += 1
     if (leagueAvgRating > 0 && leagueAvgRating < 5.5) ovrTarget -= 1
@@ -556,7 +522,8 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
 
   applyOverallChange(player, ovrTarget)
 
-  player.form = clamp(Math.round(avgForm), 1, 100)
+  // Forma nie jest trwałym atrybutem — reset
+  player.form = 50
   player.overall = calcOverall(player.attrs, player.position)
   player.morale = clamp(
     player.morale +
@@ -678,8 +645,7 @@ export function applyKeyMatchToReport(
   report.keyMatchesDone++
 
   if (success) {
-    player.morale = clamp(player.morale + 3, 1, 100)
-    player.form = clamp(player.form + 2, 1, 100)
+    player.morale = clamp(player.morale + 5, 1, 100)
     if (action === 'shoot' && momentScore >= 70) {
       report.goals += 1
       const entry = report.scorers.find((s) => s.isPlayer)

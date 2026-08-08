@@ -249,9 +249,9 @@ export class App {
         <p class="meta">${league.name} · sezon ${s.year} · szansa na grę ≈ ${chance}%</p>
         <div class="stat-grid">
           <div><span>OVR</span><strong>${p.overall}</strong></div>
-          <div><span>Forma</span><strong>${p.form}</strong></div>
           <div><span>Morale</span><strong>${p.morale}</strong></div>
           <div><span>Rep.</span><strong>${p.reputation}</strong></div>
+          <div><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
           <div><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
           <div><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
           <div><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
@@ -261,7 +261,7 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">Słaba forma i niski OVR = mniej meczów. Po symulacji możesz dostać 1–2 kluczowe mecze (awans, puchar, mistrzostwo).</p>
+        <p class="muted">Szansa na występy zależy od OVR, reputacji i morale. Forma sezonu wychodzi z goli, ocen i losu — nie jest stałą cechą.</p>
         <div class="actions">
           ${
             s.preseasonDone
@@ -422,8 +422,8 @@ export class App {
               <td class="${ovrClass}"><span class="arrow">${ovrArrow}</span> <strong>${ovrChange}</strong> <span class="muted">(${r.overallBefore} → ${r.overallAfter})</span></td>
             </tr>
             <tr>
-              <td>Forma</td>
-              <td class="${r.formLabel === 'fatalna' || r.formLabel === 'słaba' ? 'down' : r.formLabel === 'świetna' ? 'up' : ''}"><strong>${r.formLabel}</strong> <span class="muted">(${r.avgForm})</span></td>
+              <td>Forma sezonu</td>
+              <td class="${r.formLabel === 'fatalna' || r.formLabel === 'słaba' ? 'down' : r.formLabel === 'świetna' ? 'up' : ''}"><strong>${r.formLabel}</strong> <span class="muted">(z goli, ocen i losu)</span></td>
             </tr>
             <tr>
               <td>Występy</td>

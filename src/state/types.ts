@@ -195,42 +195,28 @@ export function performanceFormScore(
   avgRating: number,
 ): number {
   const appRate = fixtures > 0 ? leagueApps / fixtures : 0
-  const ratingBit = (avgRating - 6) * 4
+  const ratingBit = (avgRating - 6) * 5
 
   if (position === 'NP') {
-    // Oczekiwania: 0–3 fatalna/słaba, 4–6 słaba/przyzwoita, 7–10 dobra, 11+ świetna
-    let score: number
-    if (goals <= 2) score = 14 + goals * 5
-    else if (goals <= 4) score = 26 + (goals - 2) * 5 // 4 gole ≈ 36 → słaba
-    else if (goals <= 6) score = 38 + (goals - 4) * 5 // max ~48 przyzwoita
-    else if (goals <= 9) score = 52 + (goals - 6) * 4 // dobra
-    else if (goals <= 14) score = 66 + (goals - 9) * 3 // dobra/świetna
-    else score = 82 + Math.min(12, goals - 14)
-
-    score += assists * 2
-    score += (appRate - 0.55) * 18
+    // 4 gole ≈ baza ~45 (przyzwoita/słaba), nie automatycznie fatalna
+    let score = 28 + goals * 4.5 + assists * 2
+    score += (appRate - 0.5) * 16
     score += ratingBit
-    if (goals < 5 && avgRating < 6.5) score -= 6
-    return clamp(score, 8, 94)
+    return clamp(score, 15, 92)
   }
 
   if (position === 'POM') {
     const contrib = goals + assists
-    let score: number
-    if (contrib <= 2) score = 18 + contrib * 6
-    else if (contrib <= 5) score = 32 + (contrib - 2) * 5
-    else if (contrib <= 9) score = 50 + (contrib - 5) * 4
-    else score = 68 + Math.min(18, (contrib - 9) * 3)
-    score += (appRate - 0.55) * 20
+    let score = 30 + contrib * 4.5
+    score += (appRate - 0.5) * 18
     score += ratingBit
-    return clamp(score, 8, 94)
+    return clamp(score, 15, 92)
   }
 
-  // ŚO / OB — mniej goli, więcej ocen i minut
-  let score = 30 + leagueApps * 1.2 + (avgRating - 5.5) * 10 + assists * 3 + goals * 4
-  score += (appRate - 0.5) * 22
-  if (appRate < 0.3) score -= 15
-  return clamp(score, 8, 94)
+  let score = 34 + leagueApps * 1.1 + (avgRating - 5.5) * 9 + assists * 3 + goals * 3
+  score += (appRate - 0.5) * 20
+  if (appRate < 0.3) score -= 10
+  return clamp(score, 15, 92)
 }
 
 export function cupStageLabel(stage: CupStage): string {
