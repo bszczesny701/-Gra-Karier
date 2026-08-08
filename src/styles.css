@@ -1,0 +1,375 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Source+Sans+3:wght@400;600;700&display=swap');
+
+:root {
+  --bg-0: #071a14;
+  --bg-1: #0c2a1f;
+  --bg-2: #123528;
+  --pitch: #1f6b4a;
+  --pitch-deep: #0b3d2e;
+  --line: rgba(244, 247, 245, 0.12);
+  --text: #f2f6f3;
+  --muted: #9bb5a8;
+  --accent: #c8f560;
+  --accent-ink: #132016;
+  --danger: #ff7a6e;
+  --card: rgba(18, 53, 40, 0.85);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  --radius: 18px;
+  --font-display: 'Bebas Neue', Impact, sans-serif;
+  --font-body: 'Source Sans 3', system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font-body);
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(200, 245, 96, 0.12), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, rgba(31, 107, 74, 0.35), transparent 50%),
+    linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, #06140f);
+}
+
+body {
+  min-height: 100dvh;
+}
+
+#app {
+  min-height: 100dvh;
+}
+
+.app-shell {
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: 0 16px 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 12px;
+  background: linear-gradient(180deg, rgba(7, 26, 20, 0.95), rgba(7, 26, 20, 0.75) 70%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.brand {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  font-size: 1.55rem;
+  color: var(--accent);
+}
+
+.topbar-title {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.hero-panel,
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.hero-panel {
+  margin-top: 24px;
+  background:
+    linear-gradient(145deg, rgba(31, 107, 74, 0.35), transparent 50%),
+    var(--card);
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+  line-height: 1.05;
+}
+
+h1 {
+  font-size: clamp(2.4rem, 8vw, 3.4rem);
+}
+
+h2 {
+  font-size: 1.9rem;
+}
+
+h3 {
+  font-size: 1.35rem;
+}
+
+.lead,
+.narrative {
+  color: var(--text);
+  line-height: 1.45;
+  margin: 0 0 16px;
+}
+
+.muted,
+.meta {
+  color: var(--muted);
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 14px 18px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.btn.danger {
+  color: var(--danger);
+  border-color: rgba(255, 122, 110, 0.35);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  font: inherit;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+}
+
+.field input:focus,
+.field select:focus {
+  outline: 2px solid rgba(200, 245, 96, 0.45);
+  outline-offset: 1px;
+}
+
+.player-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.money {
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.stat-grid.compact {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.stat-grid div {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.stat-grid span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.stat-grid strong {
+  font-size: 1.05rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.table tr.mine {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.log {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.choice {
+  text-align: left;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.choice:hover,
+.choice:focus-visible {
+  border-color: rgba(200, 245, 96, 0.55);
+  background: rgba(31, 107, 74, 0.35);
+  outline: none;
+}
+
+.choice span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.scoreboard {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  margin: 18px 0;
+  padding: 16px;
+  border-radius: 16px;
+  background:
+    linear-gradient(90deg, rgba(31, 107, 74, 0.45), rgba(11, 61, 46, 0.7)),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 12px,
+      rgba(255, 255, 255, 0.03) 12px,
+      rgba(255, 255, 255, 0.03) 13px
+    );
+}
+
+.scoreboard .side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scoreboard .side:last-child {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.scoreboard strong {
+  font-family: var(--font-display);
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.scoreboard .club {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.scoreboard .vs {
+  font-size: 1.4rem;
+  color: var(--muted);
+}
+
+.offer-card {
+  margin: 14px 0;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(200, 245, 96, 0.35);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.offer-card p {
+  margin: 6px 0;
+}
+
+@media (max-width: 420px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
