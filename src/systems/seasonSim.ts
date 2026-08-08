@@ -3,7 +3,6 @@ import type {
   Attributes,
   ClubStanding,
   CupStage,
-  FormLabel,
   MatchAction,
   PendingKeyMatch,
   Player,
@@ -18,10 +17,9 @@ import {
   clamp,
   clampSeasonOvrDelta,
   cupStageLabel,
-  formLabelFromAvg,
-  performanceFormScore,
 } from '../state/types'
 import { calcOverall } from './playerFactory'
+import { computeSeasonDevelopment } from './development'
 import { playerTablePosition, sortedStandings } from './standings'
 
 function syncPlayerOverall(player: Player): number {
@@ -815,114 +813,42 @@ export function finalizeSeasonReport(
     )
   }
 
-  let perfForm = performanceFormScore(
-    player.position,
+  const clubStrength = getEffectiveStrength(season.clubId, strengthMods)
+  const dev = computeSeasonDevelopment({
+    age: player.age,
+    overallBefore,
+    position: player.position,
     goals,
     assists,
     leagueApps,
     fixturesForPlayer,
-    leagueAvgRating || 6.0,
-    player.overall,
-  )
-  if (matchesMissedInjury >= fixturesForPlayer * 0.35) perfForm -= 10
-  else if (matchesMissedInjury >= 3) perfForm -= 5
-  if (injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu')) perfForm -= 8
+    avgRating: leagueAvgRating || 0,
+    matchesMissedInjury,
+    seriousInjury: Boolean(
+      injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu'),
+    ),
+    clubStrength,
+  })
 
+  const avgForm = dev.avgForm
+  const formLabel = dev.formLabel
   const appRate = fixturesForPlayer > 0 ? leagueApps / fixturesForPlayer : 0
   const young = player.age <= 25
-  const veryYoung = player.age <= 21
 
-  // Młody + dużo gry = lepsza forma sezonu (minuty budują pewność)
-  if (young) {
-    if (appRate >= 0.7) perfForm += veryYoung ? 12 : 8
-    else if (appRate >= 0.55) perfForm += veryYoung ? 8 : 5
-    else if (appRate >= 0.4) perfForm += veryYoung ? 4 : 2
-    else if (appRate < 0.2) perfForm -= 5
-    else if (appRate < 0.3) perfForm -= 2
-  }
-  // Start kariery (niski OVR): jeszcze mocniejszy boost z minut
-  if (player.overall <= 52 && young && appRate >= 0.4) {
-    perfForm += player.overall <= 48 ? 8 : 5
-  }
-
-  const luckSpan = player.overall <= 50 ? 18 : player.overall <= 62 ? 14 : 10
-  const luck = Math.random() * luckSpan - luckSpan * 0.32
-  const avgForm = clamp(perfForm + luck, 18, 94)
-  let formLabel: FormLabel = formLabelFromAvg(avgForm, player.overall)
-
-  const rating = leagueApps ? leagueAvgRating : 0
-  if (rating > 0) {
-    if (rating < 6.5 && (formLabel === 'świetna' || formLabel === 'dobra')) formLabel = 'przyzwoita'
-    else if (rating < 7.0 && formLabel === 'świetna') formLabel = 'dobra'
-    else if (rating < 7.3 && formLabel === 'świetna' && avgForm < 82) formLabel = 'dobra'
-  }
-
-  let ovrTarget = 0
-
-  if (formLabel === 'świetna') ovrTarget = young ? 2 : 1
-  else if (formLabel === 'dobra') ovrTarget = young ? 1 : chance(0.45) ? 1 : 0
-  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.3) ? 1 : 0) : chance(0.15) ? 1 : 0
-  else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.6) ? 0 : -1) : -1
-  else if (formLabel === 'fatalna') ovrTarget = -2
-
-  // Minuty: lekki bonus, bez stackowania do sufitu co sezon
-  if (young && formLabel !== 'fatalna' && formLabel !== 'słaba') {
-    if (appRate >= 0.7 && ovrTarget >= 0 && chance(veryYoung ? 0.55 : 0.35)) {
-      ovrTarget += 1
-    } else if (appRate >= 0.5 && ovrTarget === 0 && veryYoung && chance(0.4)) {
-      ovrTarget = 1
-    }
-  }
-
-  if (young && ovrTarget >= 1 && rating >= 7.3 && appRate >= 0.55 && chance(veryYoung ? 0.3 : 0.18)) {
-    ovrTarget += 1
-  }
-
-  // Młody (≤25): lepszy / silniejszy klub = szybszy rozwój (przy minutach)
-  if (young && formLabel !== 'fatalna' && appRate >= 0.35) {
-    const clubStr = getEffectiveStrength(season.clubId, strengthMods)
-    let clubBonus = 0
-    if (clubStr >= 88 && appRate >= 0.35) clubBonus = chance(0.7) ? 1 : 0
-    else if (clubStr >= 80 && appRate >= 0.4) clubBonus = chance(0.55) ? 1 : 0
-    else if (clubStr >= 72 && appRate >= 0.45) clubBonus = chance(0.42) ? 1 : 0
-    else if (clubStr >= 64 && appRate >= 0.5) clubBonus = chance(0.3) ? 1 : 0
-    else if (clubStr >= 55 && appRate >= 0.55) clubBonus = chance(0.18) ? 1 : 0
-
-    if (veryYoung && clubStr >= 70 && appRate >= 0.5 && chance(0.28)) {
-      clubBonus += 1
-    }
-    ovrTarget += clubBonus
-  }
-
-  if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 7.0 && chance(0.4)) ovrTarget += 1
-  if (player.position === 'NP' && goals >= 15 && rating >= 7.0 && chance(0.45)) ovrTarget += 1
-  if (player.position === 'POM' && goals + assists >= 14 && rating >= 7.0 && chance(0.45)) ovrTarget += 1
-  if (appRate < 0.15 && formLabel !== 'świetna') ovrTarget -= 1
-  if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
-
-  // Ocena trzyma sufit wzrostu
-  if (rating > 0) {
-    const ratingCap =
-      rating < 6.5 ? (young ? 1 : 0) : rating < 6.9 ? 1 : rating < 7.4 ? 2 : young ? 3 : 2
-    ovrTarget = Math.min(ovrTarget, ratingCap)
-  }
-
-  if (ovrTarget > 0) {
-    if (player.overall >= 88) ovrTarget = Math.min(ovrTarget, chance(0.25) ? 1 : 0)
-    else if (player.overall >= 82) ovrTarget = Math.min(ovrTarget, 1)
-    else if (player.overall >= 75) ovrTarget = Math.min(ovrTarget, young ? 2 : 1)
-  }
-
-  // Kotwica: zmiana względem OVR z początku sezonu, twardy limit ±4
+  let ovrTarget = clampSeasonOvrDelta(player.age, dev.ovrDelta, overallBefore)
   syncPlayerOverall(player)
-  ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget, overallBefore)
-  const desired = clamp(overallBefore + ovrTarget, 1, 99)
+  const maxSwing = player.age <= 21 && overallBefore <= 55 ? 5 : 4
+  const desired = clamp(
+    overallBefore + ovrTarget,
+    overallBefore - Math.min(maxSwing, 3),
+    overallBefore + maxSwing,
+  )
   applyOverallChange(player, desired - player.overall)
   syncPlayerOverall(player)
-  if (player.overall > overallBefore + 4) {
-    applyOverallChange(player, overallBefore + 4 - player.overall)
-  } else if (player.overall < overallBefore - 4) {
-    applyOverallChange(player, overallBefore - 4 - player.overall)
+  if (player.overall > overallBefore + maxSwing) {
+    applyOverallChange(player, overallBefore + maxSwing - player.overall)
+  } else if (player.overall < overallBefore - Math.min(maxSwing, 3)) {
+    applyOverallChange(player, overallBefore - Math.min(maxSwing, 3) - player.overall)
   }
   syncPlayerOverall(player)
 
