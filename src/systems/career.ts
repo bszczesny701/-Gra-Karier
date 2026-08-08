@@ -304,6 +304,7 @@ function birthdayAndAge(state: GameState, player: Player): boolean {
 }
 
 function applyEffect(player: Player, effect: ChoiceEffect): void {
+  const before = player.overall
   switch (effect.key) {
     case 'pace':
     case 'shooting':
@@ -329,6 +330,28 @@ function applyEffect(player: Player, effect: ChoiceEffect): void {
       break
   }
   player.overall = calcOverall(player.attrs, player.position)
+
+  const attrKey =
+    effect.key === 'staminaDrain'
+      ? 'stamina'
+      : effect.key === 'pace' ||
+          effect.key === 'shooting' ||
+          effect.key === 'passing' ||
+          effect.key === 'defending' ||
+          effect.key === 'stamina'
+        ? effect.key
+        : null
+  // Max ±1 OVR z jednego efektu decyzji
+  if (attrKey && Math.abs(player.overall - before) > 1) {
+    let guard = 0
+    while (Math.abs(player.overall - before) > 1 && guard < 20) {
+      player.attrs[attrKey] = clamp(
+        player.attrs[attrKey] - Math.sign(player.overall - before),
+      )
+      player.overall = calcOverall(player.attrs, player.position)
+      guard++
+    }
+  }
   bumpPeak(player)
 }
 
@@ -380,6 +403,10 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
   )
   state.pendingDecision = null
   state.season.preseasonDone = true
+  // Kotwica OVR sezonu = po decyzji przygotowawczej (wzrost ±4 liczony od tego)
+  if (state.season.liveStats) {
+    state.season.liveStats.overallBefore = player.overall
+  }
   state.screen = 'hub'
 }
 

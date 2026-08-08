@@ -324,27 +324,28 @@ export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
 }
 
-/** Limity zmiany OVR po sezonie wg wieku (i poziomu OVR). */
+/** Limity zmiany OVR po sezonie: max ±4 względem OVR startu sezonu. */
 export function clampSeasonOvrDelta(age: number, raw: number, overall = 55): number {
-  const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
+  const maxDown = -4
   const lowOvr = overall <= 52
-  const maxUp = age <= 21 ? (lowOvr ? 4 : 3) : age <= 25 ? (lowOvr ? 3 : 2) : 2
+  // Typowy sezon: małe ruchy; +4 tylko rzadko u bardzo młodych z niskim OVR
+  const maxUp = age <= 21 ? (lowOvr ? 4 : 3) : age <= 25 ? 3 : 2
   let delta = Math.max(maxDown, Math.min(maxUp, Math.round(raw)))
 
-  if (age <= 21 && delta >= 3 && !lowOvr) {
-    if (Math.random() > 0.28) delta = 2
+  if (age <= 21 && delta >= 3) {
+    if (Math.random() > (lowOvr ? 0.35 : 0.2)) delta = Math.min(delta, 2)
   }
   if (age <= 21 && delta >= 4 && lowOvr) {
-    if (Math.random() > 0.45) delta = 3
+    if (Math.random() > 0.25) delta = 3
   }
   if (age > 25 && delta >= 2) {
-    if (Math.random() > 0.4) delta = 1
+    if (Math.random() > 0.35) delta = 1
   }
   if (age >= 30 && delta > 1) delta = 1
   if (age >= 32 && delta > 0 && Math.random() > 0.35) delta = 0
   if (age >= 35 && delta > 0) delta = 0
 
-  return delta
+  return Math.max(-4, Math.min(4, delta))
 }
 
 export function footLabel(foot: PreferredFoot): string {

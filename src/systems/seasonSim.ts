@@ -542,7 +542,6 @@ function runFixtureBatch(
               state.injuryLabels.push(`Lekki uraz: ${n} mecz(e) przerwy`)
               state.matchMood = clamp(state.matchMood - 3, 20, 80)
             }
-            player.attrs.stamina = clamp(player.attrs.stamina - (1 + rngInt(2)))
           }
         } else {
           state.matchMood = clamp(state.matchMood * 0.9 + 48 * 0.1, 28, 88)
@@ -841,67 +840,57 @@ export function finalizeSeasonReport(
   let ovrTarget = 0
 
   if (formLabel === 'świetna') ovrTarget = young ? 2 : 1
-  else if (formLabel === 'dobra') ovrTarget = young ? 1 : chance(0.55) ? 1 : 0
-  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.4) ? 1 : 0) : chance(0.22) ? 1 : 0
-  else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.55) ? 0 : -1) : -1
+  else if (formLabel === 'dobra') ovrTarget = young ? 1 : chance(0.45) ? 1 : 0
+  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.3) ? 1 : 0) : chance(0.15) ? 1 : 0
+  else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.6) ? 0 : -1) : -1
   else if (formLabel === 'fatalna') ovrTarget = -2
 
-  // Rozwój z minut: im więcej gra młody, tym większy skok OVR
-  if (young && formLabel !== 'fatalna') {
-    if (appRate >= 0.7 && ovrTarget >= 0) {
-      ovrTarget += veryYoung ? 1 : chance(0.75) ? 1 : 0
-      if (veryYoung && formLabel !== 'słaba' && player.overall < 68 && chance(0.4)) ovrTarget += 1
-    } else if (appRate >= 0.5 && ovrTarget >= 0) {
-      if (veryYoung || chance(0.55)) ovrTarget += 1
-    } else if (appRate >= 0.35 && ovrTarget >= 0 && veryYoung && chance(0.35)) {
+  // Minuty: lekki bonus, bez stackowania do sufitu co sezon
+  if (young && formLabel !== 'fatalna' && formLabel !== 'słaba') {
+    if (appRate >= 0.7 && ovrTarget >= 0 && chance(veryYoung ? 0.55 : 0.35)) {
       ovrTarget += 1
-    }
-
-    // Regularny starter (nie słaba forma) nie stoi w miejscu
-    if (appRate >= 0.5 && formLabel !== 'słaba' && ovrTarget < 1) ovrTarget = 1
-    if (veryYoung && appRate >= 0.65 && formLabel !== 'słaba' && ovrTarget < 2 && player.overall < 72) {
-      ovrTarget = 2
-    }
-    // Z 45–52 OVR: dużo gry = pewniejszy skok
-    if (player.overall <= 52 && appRate >= 0.55 && formLabel !== 'słaba') {
-      ovrTarget = Math.max(ovrTarget, veryYoung ? 2 : 1)
-      if (player.overall <= 48 && appRate >= 0.65 && veryYoung) ovrTarget = Math.max(ovrTarget, 3)
+    } else if (appRate >= 0.5 && ovrTarget === 0 && veryYoung && chance(0.4)) {
+      ovrTarget = 1
     }
   }
 
-  if (young && ovrTarget >= 0 && rating >= 7.15 && appRate >= 0.45) {
-    if (formLabel === 'świetna' && chance(veryYoung ? 0.45 : 0.3)) ovrTarget += 1
-    else if (formLabel === 'dobra' && veryYoung && chance(0.25)) ovrTarget += 1
+  if (young && ovrTarget >= 1 && rating >= 7.3 && appRate >= 0.55 && chance(veryYoung ? 0.3 : 0.18)) {
+    ovrTarget += 1
   }
 
-  if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 6.8 && chance(0.55)) ovrTarget += 1
-  if (player.position === 'NP' && goals >= 12 && rating >= 6.9) ovrTarget += 1
-  if (player.position === 'POM' && goals + assists >= 11 && rating >= 6.9) ovrTarget += 1
+  if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 7.0 && chance(0.4)) ovrTarget += 1
+  if (player.position === 'NP' && goals >= 15 && rating >= 7.0 && chance(0.45)) ovrTarget += 1
+  if (player.position === 'POM' && goals + assists >= 14 && rating >= 7.0 && chance(0.45)) ovrTarget += 1
   if (appRate < 0.15 && formLabel !== 'świetna') ovrTarget -= 1
   if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
 
-  // Ocena trzyma sufit, ale dużo minut u młodego trochę go podnosi
+  // Ocena trzyma sufit wzrostu
   if (rating > 0) {
-    let ratingCap =
-      rating < 6.5 ? (young ? 1 : 0) : rating < 6.9 ? 1 : rating < 7.25 ? 2 : young ? 3 : 2
-    if (young && appRate >= 0.55 && rating >= 6.55 && rating < 6.9) ratingCap = Math.max(ratingCap, 2)
-    if (veryYoung && appRate >= 0.65 && rating >= 6.7) ratingCap = Math.max(ratingCap, 2)
-    if (veryYoung && appRate >= 0.7 && rating >= 7.0) ratingCap = Math.max(ratingCap, 3)
+    const ratingCap =
+      rating < 6.5 ? (young ? 1 : 0) : rating < 6.9 ? 1 : rating < 7.4 ? 2 : young ? 3 : 2
     ovrTarget = Math.min(ovrTarget, ratingCap)
   }
 
   if (ovrTarget > 0) {
-    // Wyżej OVR = wolniejszy wzrost (bez twardego sufitu)
-    if (player.overall >= 88) ovrTarget = Math.min(ovrTarget, chance(0.3) ? 1 : 0)
+    if (player.overall >= 88) ovrTarget = Math.min(ovrTarget, chance(0.25) ? 1 : 0)
     else if (player.overall >= 82) ovrTarget = Math.min(ovrTarget, 1)
     else if (player.overall >= 75) ovrTarget = Math.min(ovrTarget, young ? 2 : 1)
   }
 
-  ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget, player.overall)
-  applyOverallChange(player, ovrTarget)
+  // Kotwica: zmiana względem OVR z początku sezonu, twardy limit ±4
+  syncPlayerOverall(player)
+  ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget, overallBefore)
+  const desired = clamp(overallBefore + ovrTarget, 1, 99)
+  applyOverallChange(player, desired - player.overall)
+  syncPlayerOverall(player)
+  if (player.overall > overallBefore + 4) {
+    applyOverallChange(player, overallBefore + 4 - player.overall)
+  } else if (player.overall < overallBefore - 4) {
+    applyOverallChange(player, overallBefore - 4 - player.overall)
+  }
+  syncPlayerOverall(player)
 
   player.form = 50
-  syncPlayerOverall(player)
   player.morale = clamp(
     player.morale +
       (formLabel === 'świetna'

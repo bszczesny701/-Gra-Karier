@@ -256,7 +256,7 @@ function finishPlayerMatchCore(
         live.injuryLabels.push(`Lekki uraz: ${n} mecz(e) przerwy`)
         season.matchMood = clamp(season.matchMood - 3, 20, 80)
       }
-      player.attrs.stamina = clamp(player.attrs.stamina - (1 + rngInt(2)))
+      // Bez zmiany atrybutów w trakcie sezonu — OVR rusza dopiero na koniec (±4)
     }
   } else if (!player.injury) {
     season.matchMood = clamp(season.matchMood * 0.9 + 48 * 0.1, 28, 88)
