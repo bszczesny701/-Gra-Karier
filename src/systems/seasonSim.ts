@@ -158,32 +158,37 @@ function scoreline(att: number, def: number): number {
 
 /**
  * Szansa na występ w danym klubie.
- * Główny czynnik: OVR − strength klubu (równy poziom ≈ ~50–55%).
+ * Główny czynnik: OVR − strength klubu (równy poziom ≈ ~50%).
+ * Dużo słabszy od klubu (np. 52 vs Lech 78) → pojedyncze %.
  */
 export function appearanceChance(player: Player, clubId?: string): number {
   const club = clubId ? getClub(clubId) : null
   const clubStrength = club?.strength ?? player.overall
 
-  // Równy OVR i siła klubu → ok. 52% (konkurencja o miejsce)
   const gap = player.overall - clubStrength
-  let chance = 0.52 + gap * 0.028
+  // Poniżej siły klubu spadek jest ostrzejszy niż wzrost powyżej
+  let chance = 0.5 + (gap >= 0 ? gap * 0.025 : gap * 0.038)
 
-  // Drobne modyfikatory — nie mogą zdominować wyniku
-  chance += (player.reputation - 20) / 400
-  chance += (player.morale - 50) / 500
+  chance += (player.reputation - 20) / 450
+  chance += (player.morale - 50) / 550
   if (player.age >= 36) chance -= 0.12
   else if (player.age >= 33) chance -= 0.07
   else if (player.age >= 30) chance -= 0.03
   else if (player.age <= 19) chance += 0.02
 
-  // W wyższej lidze ten sam gap jest trudniejszy (głębsza ławka)
   if (club) {
     const league = getLeagueForClub(club.id)
-    if (league.tier === 1) chance -= 0.06
-    else if (league.tier === 2) chance -= 0.03
+    if (league.tier === 1) chance -= 0.08
+    else if (league.tier === 2) chance -= 0.04
+    else if (league.tier === 3) chance -= 0.015
   }
 
-  return Math.max(0.12, Math.min(0.88, chance))
+  // Hard floor dla wielkiej różnicy klas (np. III-ligowiec w Lechu)
+  if (gap <= -20) chance = Math.min(chance, 0.05)
+  else if (gap <= -15) chance = Math.min(chance, 0.1)
+  else if (gap <= -10) chance = Math.min(chance, 0.22)
+
+  return Math.max(0.03, Math.min(0.88, chance))
 }
 
 /** Szansa w trakcie sezonu — chwilowy humor meczowy, nie zapisana forma. */
