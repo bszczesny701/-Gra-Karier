@@ -42,6 +42,15 @@ export interface Player {
   form: number
   reputation: number
   money: number
+  /** Aktualna kontuzja — mecze do opuszczenia */
+  injury: PlayerInjury | null
+}
+
+export interface PlayerInjury {
+  matchesLeft: number
+  label: string
+  /** Kontuzja sezonowa — praktycznie koniec sezonu */
+  seasonEnding: boolean
 }
 
 export interface CreateCareerOptions {
@@ -154,6 +163,9 @@ export interface SeasonReport {
   /** Czy klub chce przedłużyć kontrakt */
   contractRenewed: boolean
   contractNote: string
+  /** Opis kontuzji w sezonie (jeśli była) */
+  injuryNote: string | null
+  matchesMissedInjury: number
 }
 
 export interface GameState {
@@ -168,10 +180,12 @@ export interface GameState {
   transferOffers: TransferOffer[]
   seasonSummary: string | null
   log: string[]
+  /** Trwałe modyfikatory siły klubów (np. + po awansie) */
+  clubStrengthMods: Record<string, number>
 }
 
-export const SAVE_KEY = 'gra-karier-save-v8'
-export const SAVE_VERSION = 8
+export const SAVE_KEY = 'gra-karier-save-v9'
+export const SAVE_VERSION = 9
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -311,5 +325,6 @@ export function createEmptyState(): GameState {
     transferOffers: [],
     seasonSummary: null,
     log: [],
+    clubStrengthMods: {},
   }
 }

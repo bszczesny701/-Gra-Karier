@@ -1,6 +1,7 @@
 import {
   CLUBS,
   getClub,
+  getEffectiveStrength,
   getLeague,
   getLeagueForClub,
   leagueByTier,
@@ -51,6 +52,7 @@ export function createPlayer(options: CreateCareerOptions): Player {
     form: 52,
     reputation: reputationFromStart(overall, league.tier),
     money: moneyFromStart(overall, club.wage),
+    injury: null,
   }
 }
 
@@ -95,8 +97,12 @@ export function createSeason(
 }
 
 /** Szansa na grę w danym klubie (start / UI). */
-export function estimatePlayChance(player: Player, clubId: string): number {
-  return Math.round(appearanceChance(player, clubId) * 100)
+export function estimatePlayChance(
+  player: Player,
+  clubId: string,
+  strengthMods: Record<string, number> = {},
+): number {
+  return Math.round(appearanceChance(player, clubId, strengthMods) * 100)
 }
 
 export function generateStartingOffers(player: Player): TransferOffer[] {
@@ -112,11 +118,11 @@ export function generateStartingOffers(player: Player): TransferOffer[] {
       signingBonus: Math.round(wage * 1.5 + player.overall * 12),
       playChance,
       message:
-        playChance >= 75
+        playChance >= 65
           ? 'Trener liczy na Ciebie w pierwszym składzie.'
-          : playChance >= 55
+          : playChance >= 45
             ? 'Szansa na regularne minuty, jeśli pokażesz się na treningu.'
-            : playChance >= 35
+            : playChance >= 30
               ? 'Konkurencja o miejsce — start raczej z rotacji.'
               : 'Trudno o „11” — raczej ławka i wejścia z rezerw.',
     }
@@ -130,6 +136,7 @@ export function draftNewCareer(
 ): void {
   state.player = createPlayer(options)
   state.season = null
+  state.clubStrengthMods = {}
   state.pendingDecision = null
   state.pendingKeyMatch = null
   state.pendingKeyQueue = []
@@ -238,7 +245,7 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
 export function runFullSeason(state: GameState): void {
   const player = state.player!
   const season = state.season!
-  const report = simulateFullSeason(player, season)
+  const report = simulateFullSeason(player, season, state.clubStrengthMods ?? {})
   state.seasonReport = report
   state.season = {
     ...season,
@@ -366,7 +373,7 @@ function buildOffersForPlayer(
       const wage = Math.round(
         club.wage * (0.85 + player.reputation / 220 + ctx.goals / 50) * formPenalty,
       )
-      const playChance = estimatePlayChance(player, clubId)
+      const playChance = estimatePlayChance(player, clubId, {})
       offers.push({
         clubId,
         wage: Math.max(400, wage),
@@ -489,7 +496,6 @@ export function stayAtClub(state: GameState): void {
 
   birthdayAndAge(state, player)
   player.money += getClub(report.clubId).wage * 3
-  pushLog(state, `Zostajesz w ${getClub(report.clubId).name} na kolejny sezon.`)
   beginNextSeason(state, report.clubId, report.leagueId, true)
 }
 
@@ -523,6 +529,7 @@ function beginNextSeason(
   let nextLeagueId = leagueId
   let nextClubId = clubId
   let inject: 'promote' | 'relegate' | 'none' = 'none'
+  if (!state.clubStrengthMods) state.clubStrengthMods = {}
 
   if (staying && clubId === report.clubId) {
     const league = getLeague(report.leagueId)
@@ -532,10 +539,36 @@ function beginNextSeason(
         nextLeagueId = up.id
         nextClubId = report.clubId
         inject = 'promote'
+        // Awans = klub mocniejszy (głębsza ławka, wyższe wymagania)
+        const bump = up.tier === 1 ? 10 : up.tier === 2 ? 8 : 7
+        state.clubStrengthMods[report.clubId] =
+          (state.clubStrengthMods[report.clubId] ?? 0) + bump
+
+        const playPct = estimatePlayChance(
+          state.player!,
+          report.clubId,
+          state.clubStrengthMods,
+        )
+        const eff = getEffectiveStrength(report.clubId, state.clubStrengthMods)
         pushLog(
           state,
-          `${getClub(report.clubId).name} awansuje do ${up.name} — zostajesz w klubie.`,
+          `${getClub(report.clubId).name} awansuje do ${up.name} (siła składu ↑ do ~${eff}).`,
         )
+
+        // Za słaby na nową ligę — klub nie chce Cię brać wyżej
+        if (playPct < 28 || state.player!.overall + 3 < eff - 4) {
+          pushLog(
+            state,
+            `Sztab: przy OVR ${state.player!.overall} i szansie ~${playPct}% nie widzą Cię w ${up.name}. Musisz szukać klubu.`,
+          )
+          state.seasonReport = {
+            ...report,
+            contractRenewed: false,
+            contractNote: 'Po awansie klub nie bierze Cię do wyższej ligi — za niski poziom.',
+          }
+          openTransferChoice(state)
+          return
+        }
       }
     } else if (report.relegation) {
       const down = leagueByTier(league.tier + 1)
@@ -543,13 +576,22 @@ function beginNextSeason(
         nextLeagueId = down.id
         nextClubId = report.clubId
         inject = 'relegate'
+        state.clubStrengthMods[report.clubId] = Math.max(
+          -6,
+          (state.clubStrengthMods[report.clubId] ?? 0) - 5,
+        )
         pushLog(
           state,
           `${getClub(report.clubId).name} spada do ${down.name} — zostajesz w klubie.`,
         )
       }
+    } else {
+      pushLog(state, `Zostajesz w ${getClub(report.clubId).name} na kolejny sezon.`)
     }
   }
+
+  // Wylecz drobne kontuzje między sezonami (sezonowe też reset)
+  if (state.player) state.player.injury = null
 
   state.season = createSeason(nextClubId, nextLeagueId, report.year + 1, inject)
   state.seasonReport = null

@@ -1,4 +1,4 @@
-import { getClub, getLeague } from './data/clubs'
+import { getClub, getEffectiveStrength, getLeague } from './data/clubs'
 import {
   acceptOffer,
   acceptStartingOffer,
@@ -240,12 +240,17 @@ export class App {
     const s = this.state.season!
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
-    const chance = Math.round(appearanceChance(p, s.clubId) * 100)
+    const mods = this.state.clubStrengthMods ?? {}
+    const chance = Math.round(appearanceChance(p, s.clubId, mods) * 100)
+    const clubPower = getEffectiveStrength(s.clubId, mods)
     const midOffers = hasMidSeasonOffers(this.state)
     const log = this.state.log
       .slice(0, 4)
       .map((l) => `<li>${l}</li>`)
       .join('')
+    const injuryLine = p.injury
+      ? `<p class="muted down">Kontuzja: ${p.injury.label}${p.injury.seasonEnding ? '' : ` · jeszcze ${p.injury.matchesLeft} mecz.`}</p>`
+      : ''
 
     return this.shell(
       `
@@ -257,7 +262,8 @@ export class App {
           </div>
           <div class="money">${p.money} zł</div>
         </div>
-        <p class="meta">${league.name} · sezon ${s.year} · szansa na grę w ${club.short} ≈ ${chance}%</p>
+        <p class="meta">${league.name} · sezon ${s.year} · siła klubu ${clubPower} · szansa na grę ≈ ${chance}%</p>
+        ${injuryLine}
         <div class="stat-grid">
           <div><span>OVR</span><strong>${p.overall}</strong></div>
           <div><span>Morale</span><strong>${p.morale}</strong></div>
@@ -272,7 +278,7 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">Szansa na grę zależy od Twojego OVR względem siły klubu — w silniejszej drużynie trudniej o „11”.</p>
+        <p class="muted">II liga i wyżej: max ~50% szansy na „11”. Po awansie klub zyskuje siłę — możesz wypaść ze składu.</p>
         <div class="actions">
           ${
             s.preseasonDone
@@ -366,6 +372,7 @@ export class App {
           <p class="eyebrow">${k.label}</p>
           <h2>${home.name} vs ${away.name}</h2>
           <p>${k.description}</p>
+          <p class="muted">Przeciwnik: ${getClub(k.opponentId).name} (siła ${getEffectiveStrength(k.opponentId, this.state.clubStrengthMods ?? {})}). Im silniejszy — tym trudniejsza akcja.</p>
           <p class="muted">Wybierz kluczową akcję sezonu:</p>
           <div class="actions">
             <button class="btn primary" id="btn-shoot">Strzał na bramkę</button>
@@ -400,10 +407,17 @@ export class App {
     }
     const action = this.selectedAction
     const canvas = this.root.querySelector('#moment-canvas') as HTMLCanvasElement
-    this.cleanupMoment = mountMatchMoment(canvas, action, (score) => {
-      this.selectedAction = null
-      this.go(() => resolveKeyMatch(this.state, { action, score }))
-    })
+    const opp = getClub(this.state.pendingKeyMatch!.opponentId)
+    const difficulty = Math.min(1, Math.max(0, (opp.strength - 38) / 42))
+    this.cleanupMoment = mountMatchMoment(
+      canvas,
+      action,
+      (score) => {
+        this.selectedAction = null
+        this.go(() => resolveKeyMatch(this.state, { action, score }))
+      },
+      { difficulty },
+    )
   }
 
   private seasonReportHtml(): string {
@@ -483,6 +497,14 @@ export class App {
             <tr>
               <td>Los klubu</td>
               <td><strong>${fate}</strong></td>
+            </tr>
+            <tr>
+              <td>Kontuzje</td>
+              <td class="${r.matchesMissedInjury > 0 ? 'down' : ''}">${
+                r.injuryNote
+                  ? `<strong>${r.injuryNote}</strong><br/><span class="muted">Opuszczone mecze: ${r.matchesMissedInjury}</span>`
+                  : '<span class="muted">Brak poważniejszych urazów</span>'
+              }</td>
             </tr>
             <tr>
               <td>Kontrakt</td>

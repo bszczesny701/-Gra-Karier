@@ -151,6 +151,14 @@ export function getClub(id: string): Club {
   return club
 }
 
+/** Siła klubu z bonusami (awans / spadek). */
+export function getEffectiveStrength(
+  clubId: string,
+  mods: Record<string, number> = {},
+): number {
+  return getClub(clubId).strength + (mods[clubId] ?? 0)
+}
+
 export function leagueByTier(tier: number): League | undefined {
   return LEAGUES.find((l) => l.tier === tier)
 }
