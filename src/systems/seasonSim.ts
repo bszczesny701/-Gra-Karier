@@ -649,40 +649,58 @@ export function simulateFullSeason(
   if (injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu')) perfForm -= 8
   const luck = Math.random() * 14 - 5
   const avgForm = clamp(perfForm + luck, 18, 94)
-  const formLabel = formLabelFromAvg(avgForm)
+  let formLabel = formLabelFromAvg(avgForm)
 
-  // OVR z formy — do 25. r.ż. wyraźnie szybszy rozwój (cel: realna droga do ~70)
+  // Średnia ocena meczowa ogranicza etykietę formy — 6.8 ≠ świetny sezon
+  const rating = leagueApps ? leagueAvgRating : 0
+  if (rating > 0) {
+    if (rating < 6.5 && (formLabel === 'świetna' || formLabel === 'dobra')) formLabel = 'przyzwoita'
+    else if (rating < 7.0 && formLabel === 'świetna') formLabel = 'dobra'
+    else if (rating < 7.3 && formLabel === 'świetna' && avgForm < 82) formLabel = 'dobra'
+  }
+
+  // OVR z formy — młodzi rosną szybciej, ale ocena meczowa trzyma sufit
   let ovrTarget = 0
   const young = player.age <= 25
   const veryYoung = player.age <= 21
 
   if (formLabel === 'świetna') ovrTarget = young ? 3 : 2
   else if (formLabel === 'dobra') ovrTarget = young ? 2 : 1
-  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.65) ? 2 : 1) : chance(0.35) ? 1 : 0
+  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.55) ? 2 : 1) : chance(0.35) ? 1 : 0
   else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.4) ? 0 : -1) : -1
   else if (formLabel === 'fatalna') ovrTarget = -2
 
   if (young) {
-    // Bonus za granie — nawet przeciętny sezon niesie wzrost
-    if (leagueApps >= fixturesForPlayer * 0.4 && ovrTarget >= 0) {
-      if (veryYoung) ovrTarget += 1
-      else if (chance(0.55)) ovrTarget += 1
+    if (leagueApps >= fixturesForPlayer * 0.4 && ovrTarget >= 0 && rating >= 6.6) {
+      if (veryYoung && rating >= 6.8) ovrTarget += 1
+      else if (chance(0.4) && rating >= 7.0) ovrTarget += 1
     }
-    // Świetny sezon młodego talentu
-    if (formLabel === 'świetna' && chance(0.5)) ovrTarget += 1
-    if (formLabel === 'dobra' && veryYoung && chance(0.35)) ovrTarget += 1
-    // Minimum: solidny młody nie stoi w miejscu
+    if (formLabel === 'świetna' && rating >= 7.3 && chance(0.45)) ovrTarget += 1
     if (formLabel !== 'słaba' && formLabel !== 'fatalna' && ovrTarget < 1) ovrTarget = 1
-    if (veryYoung && formLabel !== 'fatalna' && ovrTarget < 2 && leagueApps >= fixturesForPlayer * 0.3) {
-      ovrTarget = Math.max(ovrTarget, 2)
+    if (
+      veryYoung &&
+      formLabel !== 'fatalna' &&
+      formLabel !== 'słaba' &&
+      rating >= 6.7 &&
+      leagueApps >= fixturesForPlayer * 0.35 &&
+      ovrTarget < 2
+    ) {
+      ovrTarget = 2
     }
   }
 
-  if (cup.stage === 'winner' || cup.stage === 'final') ovrTarget += 1
-  if (player.position === 'NP' && goals >= 10) ovrTarget += 1
-  if (player.position === 'POM' && goals + assists >= 9) ovrTarget += 1
+  if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 6.5) ovrTarget += 1
+  if (player.position === 'NP' && goals >= 10 && rating >= 6.6) ovrTarget += 1
+  if (player.position === 'POM' && goals + assists >= 9 && rating >= 6.6) ovrTarget += 1
   if (leagueApps < fixturesForPlayer * 0.15 && formLabel !== 'świetna') ovrTarget -= 1
   if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
+
+  // Twardy sufit ze średniej oceny: 6.8 → max +2, nie +4
+  if (rating > 0) {
+    const ratingCap =
+      rating < 6.4 ? (young ? 1 : 0) : rating < 6.9 ? 2 : rating < 7.2 ? 3 : young ? 4 : 3
+    ovrTarget = Math.min(ovrTarget, ratingCap)
+  }
 
   ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget)
 
