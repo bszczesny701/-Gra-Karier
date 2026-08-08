@@ -67,16 +67,41 @@ export function appearanceChance(player: Player): number {
   return Math.max(0.12, Math.min(0.88, 0.18 + formPart + ovrPart + repPart + moralePart))
 }
 
-function matchesInSeason(clubCount: number): number {
-  // uproszczony sezon: mniej niż pełna kolejka dwurundowa
-  if (clubCount >= 16) return 20
-  if (clubCount >= 10) return 16
-  return 14
-}
+/**
+ * Pełny terminarz ligowy — każdy klub gra z każdym.
+ * Małe ligi (≤10): dwurundowo. Większe (Ekstraklasa): jedna runda.
+ */
+function buildSeasonFixtures(
+  clubIds: string[],
+): Array<{ homeId: string; awayId: string }> {
+  const ids = [...clubIds]
+  const doubleRound = ids.length <= 10
+  const teams: Array<string | null> =
+    ids.length % 2 === 0 ? [...ids] : [...ids, null]
+  const n = teams.length
+  const rounds = n - 1
+  const half = n / 2
+  const firstHalf: Array<{ homeId: string; awayId: string }> = []
 
-function pickOpponent(clubIds: string[], ownId: string, matchIndex: number): string {
-  const others = clubIds.filter((id) => id !== ownId)
-  return others[matchIndex % others.length]!
+  for (let round = 0; round < rounds; round++) {
+    for (let i = 0; i < half; i++) {
+      const a = teams[i]
+      const b = teams[n - 1 - i]
+      if (!a || !b) continue
+      if ((round + i) % 2 === 0) firstHalf.push({ homeId: a, awayId: b })
+      else firstHalf.push({ homeId: b, awayId: a })
+    }
+    // rotacja „okrężna”
+    const fixed = teams[0]
+    const movable = teams.slice(1)
+    const last = movable.pop()
+    if (last !== undefined) movable.unshift(last)
+    teams.splice(0, teams.length, fixed!, ...movable)
+  }
+
+  if (!doubleRound) return firstHalf
+  const secondHalf = firstHalf.map((f) => ({ homeId: f.awayId, awayId: f.homeId }))
+  return [...firstHalf, ...secondHalf]
 }
 
 function bumpScorer(map: Map<string, ScorerEntry>, key: string, entry: ScorerEntry, goals: number): void {
@@ -194,7 +219,8 @@ function buildKeyMatches(
     )
   }
 
-  if (place >= clubCount - 1) {
+  const relegationZone = league.tier === 1 ? clubCount - 2 : clubCount - 1
+  if (league.tier < 3 && place >= relegationZone) {
     push(
       'relegation',
       'Walka o utrzymanie',
@@ -221,7 +247,11 @@ function buildKeyMatches(
 export function simulateFullSeason(player: Player, season: SeasonState): SeasonReport {
   const league = getLeague(season.leagueId)
   const clubCount = league.clubIds.length
-  const fixtures = matchesInSeason(clubCount)
+  const allFixtures = buildSeasonFixtures(league.clubIds)
+  const playerFixtures = allFixtures.filter(
+    (f) => f.homeId === season.clubId || f.awayId === season.clubId,
+  )
+  const fixturesForPlayer = playerFixtures.length
   const overallBefore = player.overall
 
   const standings: ClubStanding[] = league.clubIds.map((id) => ({
@@ -236,16 +266,19 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   }))
 
   const scorerMap = new Map<string, ScorerEntry>()
-  // bazowi napastnicy NPC
   for (const clubId of league.clubIds) {
     if (clubId === season.clubId) continue
-    const goals = Math.max(2, Math.round(getClub(clubId).strength / 8 + Math.random() * 8))
-    bumpScorer(scorerMap, `npc-${clubId}`, {
-      name: npcName(clubId + season.year),
-      clubId,
-      goals: 0,
-      isPlayer: false,
-    }, goals)
+    bumpScorer(
+      scorerMap,
+      `npc-${clubId}`,
+      {
+        name: npcName(clubId + season.year),
+        clubId,
+        goals: 0,
+        isPlayer: false,
+      },
+      0,
+    )
   }
 
   let appearances = 0
@@ -253,54 +286,63 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   let assists = 0
   let ratingSum = 0
   let formSum = 0
+  let formSamples = 0
   let workingForm = player.form
 
-  for (let m = 0; m < fixtures; m++) {
-    const opponentId = pickOpponent(league.clubIds, season.clubId, m)
-    const home = m % 2 === 0
-    const homeId = home ? season.clubId : opponentId
-    const awayId = home ? opponentId : season.clubId
+  for (const fixture of allFixtures) {
+    const { homeId, awayId } = fixture
+    const involvesPlayer = homeId === season.clubId || awayId === season.clubId
 
-    // fluktuacja formy
-    workingForm = clamp(workingForm + (Math.random() * 10 - 5), 20, 95)
-    formSum += workingForm
-    const tempPlayer = { ...player, form: workingForm }
-
-    const starts = chance(appearanceChance(tempPlayer))
+    let starts = false
     let boost = 0
     let matchGoals = 0
     let matchAssists = 0
-    let rating = 0
 
-    if (starts) {
-      appearances++
-      boost = (player.overall - 50) * 0.1 + (workingForm - 50) * 0.08
-      const goalChance =
-        (player.position === 'NP' ? 0.22 : player.position === 'POM' ? 0.1 : 0.04) *
-        (workingForm / 65) *
-        (player.attrs.shooting / 75)
-      if (chance(Math.min(0.48, goalChance))) {
-        matchGoals = chance(0.12) ? 2 : 1
-        goals += matchGoals
+    if (involvesPlayer) {
+      workingForm = clamp(workingForm + (Math.random() * 10 - 5), 20, 95)
+      formSum += workingForm
+      formSamples++
+      const tempPlayer = { ...player, form: workingForm }
+      starts = chance(appearanceChance(tempPlayer))
+
+      if (starts) {
+        appearances++
+        boost = (player.overall - 50) * 0.1 + (workingForm - 50) * 0.08
+        const goalChance =
+          (player.position === 'NP' ? 0.22 : player.position === 'POM' ? 0.1 : 0.04) *
+          (workingForm / 65) *
+          (player.attrs.shooting / 75)
+        if (chance(Math.min(0.48, goalChance))) {
+          matchGoals = chance(0.12) ? 2 : 1
+          goals += matchGoals
+        }
+        const assistChance =
+          (player.position === 'POM' || player.position === 'NP' ? 0.16 : 0.07) *
+          (player.attrs.passing / 80) *
+          (workingForm / 70)
+        if (chance(Math.min(0.4, assistChance))) {
+          matchAssists = 1
+          assists++
+        }
+        const rating = clamp(
+          5.2 +
+            workingForm / 55 +
+            (player.overall - 45) / 40 +
+            matchGoals * 0.85 +
+            matchAssists * 0.45 +
+            (Math.random() * 1.2 - 0.4),
+          3,
+          9.7,
+        )
+        ratingSum += rating
+        workingForm = clamp(
+          workingForm + (rating >= 7 ? 2 : rating < 5.5 ? -3 : 0),
+          20,
+          95,
+        )
+      } else {
+        workingForm = clamp(workingForm + 1, 20, 95)
       }
-      const assistChance =
-        (player.position === 'POM' || player.position === 'NP' ? 0.16 : 0.07) *
-        (player.attrs.passing / 80) *
-        (workingForm / 70)
-      if (chance(Math.min(0.4, assistChance))) {
-        matchAssists = 1
-        assists++
-      }
-      rating = clamp(
-        5.2 + workingForm / 55 + (player.overall - 45) / 40 + matchGoals * 0.85 + matchAssists * 0.45 + (Math.random() * 1.2 - 0.4),
-        3,
-        9.7,
-      )
-      ratingSum += rating
-      // lekki dryf formy po meczu
-      workingForm = clamp(workingForm + (rating >= 7 ? 2 : rating < 5.5 ? -3 : 0), 20, 95)
-    } else {
-      workingForm = clamp(workingForm + 1, 20, 95)
     }
 
     const homePow =
@@ -317,7 +359,6 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     let hg = scoreline(homePow, awayPow * 0.9)
     let ag = scoreline(awayPow, homePow * 0.9)
 
-    // upewnij się, że gole zawodnika mieszczą się w wyniku drużyny
     if (starts && matchGoals > 0) {
       if (homeId === season.clubId) hg = Math.max(hg, matchGoals)
       else ag = Math.max(ag, matchGoals)
@@ -326,21 +367,26 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     updateStanding(standings.find((s) => s.clubId === homeId)!, hg, ag)
     updateStanding(standings.find((s) => s.clubId === awayId)!, ag, hg)
 
-    // NPC gole z meczu (reszta)
-    for (const [clubId, g] of [
+    // NPC gole — rozdziel między strzelców klubów
+    for (const [clubId, gFor] of [
       [homeId, hg],
       [awayId, ag],
     ] as const) {
       if (clubId === season.clubId) continue
-      const rest = Math.max(0, g - (chance(0.3) ? 1 : 0))
-      if (rest > 0) {
-        const key = `npc-${clubId}`
+      let remaining = gFor
+      while (remaining > 0) {
         bumpScorer(
           scorerMap,
-          key,
-          { name: npcName(clubId + season.year), clubId, goals: 0, isPlayer: false },
-          chance(0.5) ? 1 : 0,
+          `npc-${clubId}`,
+          {
+            name: npcName(clubId + season.year),
+            clubId,
+            goals: 0,
+            isPlayer: false,
+          },
+          1,
         )
+        remaining--
       }
     }
   }
@@ -354,6 +400,9 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     )
   }
 
+  const leagueApps = appearances
+  const leagueAvgRating = leagueApps ? ratingSum / leagueApps : 5.5
+
   const cup = simulatePolishCup(season.clubId, { ...player, form: workingForm })
   goals += cup.playerGoals
   appearances += cup.playerApps
@@ -366,18 +415,16 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     )
   }
 
-  // rozwój OVR
-  const avgForm = formSum / fixtures
-  const avgRating = appearances ? ratingSum / appearances : 5.5
+  const avgForm = formSamples ? formSum / formSamples : player.form
+
   let ovrGain = 0
-  if (appearances >= fixtures * 0.55 && avgForm >= 60) ovrGain += 1
-  if (appearances >= fixtures * 0.7 && avgRating >= 7) ovrGain += 1
+  if (leagueApps >= fixturesForPlayer * 0.55 && avgForm >= 60) ovrGain += 1
+  if (leagueApps >= fixturesForPlayer * 0.7 && leagueAvgRating >= 7) ovrGain += 1
   if (goals >= 8) ovrGain += 1
   if (cup.stage === 'winner' || cup.stage === 'final') ovrGain += 1
-  if (avgForm < 40 || appearances < fixtures * 0.25) ovrGain -= 1
+  if (avgForm < 40 || leagueApps < fixturesForPlayer * 0.25) ovrGain -= 1
   ovrGain = clamp(ovrGain, -1, 3)
 
-  // apply attr bumps tied to gain
   if (ovrGain > 0) {
     const focus =
       player.position === 'NP'
@@ -396,7 +443,7 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   player.form = clamp(Math.round(avgForm), 1, 100)
   player.overall = calcOverall(player.attrs, player.position)
   player.morale = clamp(
-    player.morale + (avgRating >= 7 ? 5 : avgForm < 40 ? -5 : 2),
+    player.morale + (leagueAvgRating >= 7 ? 5 : avgForm < 40 ? -5 : 2),
     1,
     100,
   )
@@ -404,33 +451,43 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     player.reputation +
       Math.floor(goals / 3) +
       (cup.stage === 'winner' ? 5 : cup.stage === 'final' ? 3 : 0) +
-      (appearances > fixtures * 0.6 ? 2 : 0),
+      (leagueApps > fixturesForPlayer * 0.6 ? 2 : 0),
     0,
     100,
   )
   player.money += getClub(season.clubId).wage * 8
-  player.age += 0 // age at season end screen
 
   const sorted = sortedStandings({ ...season, standings })
-  const place =
-    sorted.findIndex((s) => s.clubId === season.clubId) + 1
+  const place = sorted.findIndex((s) => s.clubId === season.clubId) + 1
   const myRow = standings.find((s) => s.clubId === season.clubId)!
 
-  const scorers = [...scorerMap.values()].sort((a, b) => b.goals - a.goals).slice(0, 12)
+  const scorers = [...scorerMap.values()]
+    .filter((s) => s.goals > 0)
+    .sort((a, b) => b.goals - a.goals)
+    .slice(0, 12)
   const playerScorerRank = scorers.findIndex((s) => s.isPlayer)
   const rank = playerScorerRank >= 0 ? playerScorerRank + 1 : null
 
   const keyMatchesPending = buildKeyMatches(season, place, clubCount, cup.stage)
 
-  const promotion = league.tier > 1 && place === 1
-  const relegation = league.tier < 3 && place >= clubCount - 1
+  // Awans: top 2 z III/I ligi. Spadek: ostatnie 2 w Ekstraklasie / ostatnie 2 w I lidze
+  const promotion = league.tier > 1 && place <= 2
+  const relegation =
+    league.tier === 1
+      ? place >= clubCount - 1
+      : league.tier === 2
+        ? place >= clubCount - 1
+        : false
   const title = league.tier === 1 && place === 1
 
-  let narrative = `${getClub(season.clubId).name} kończy sezon na ${place}. miejscu. `
-  narrative += `Zagrałeś ${appearances}/${fixtures} meczów ligowych (+ puchar). Forma: ${formLabelFromAvg(avgForm)}. `
+  let narrative = `${getClub(season.clubId).name} kończy sezon na ${place}. miejscu (${myRow.points} pkt, ${myRow.played} meczów). `
+  narrative += `Zagrałeś ${leagueApps}/${fixturesForPlayer} meczów ligowych (+ puchar). Forma: ${formLabelFromAvg(avgForm)}. `
   if (ovrGain > 0) narrative += `Overall wzrósł o ${ovrGain} (${overallBefore} → ${player.overall}). `
   else if (ovrGain < 0) narrative += `Overall spadł (${overallBefore} → ${player.overall}). `
   else narrative += `Overall bez dużych zmian (${player.overall}). `
+  if (promotion) narrative += 'Awans! '
+  if (relegation) narrative += 'Spadek. '
+  if (title) narrative += 'Mistrzostwo Polski! '
   narrative += cupStageLabel(cup.stage) + '.'
 
   return {
@@ -441,10 +498,10 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     points: myRow.points,
     played: myRow.played,
     appearances,
-    possibleAppearances: fixtures,
+    possibleAppearances: fixturesForPlayer,
     goals,
     assists,
-    avgRating: appearances ? Math.round((ratingSum / appearances) * 10) / 10 : 0,
+    avgRating: leagueApps ? Math.round(leagueAvgRating * 10) / 10 : 0,
     avgForm: Math.round(avgForm),
     formLabel: formLabelFromAvg(avgForm),
     overallBefore,

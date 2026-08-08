@@ -285,11 +285,15 @@ function beginNextSeason(state: GameState, clubId: string, leagueId: string): vo
       const up = leagueByTier(league.tier - 1)
       if (up) {
         nextLeagueId = up.id
-        // klub awansuje — mapuj na najsłabszy w wyższej lub zostań „tym samym” id jeśli w liście
         nextClubId = up.clubIds.includes(clubId)
           ? clubId
           : [...up.clubIds].sort((a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength)[0]!
-        pushLog(state, `Awans do ${getLeague(nextLeagueId).name}!`)
+        pushLog(
+          state,
+          report.place === 1
+            ? `Mistrzostwo ligi i awans do ${getLeague(nextLeagueId).name}!`
+            : `Awans (miejsce ${report.place}) do ${getLeague(nextLeagueId).name}!`,
+        )
       }
     } else if (report.relegation) {
       const down = leagueByTier(league.tier + 1)
