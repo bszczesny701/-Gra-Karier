@@ -1,13 +1,14 @@
-import { getClub, getLeague, starterClubOptions } from './data/clubs'
+import { getClub, getLeague } from './data/clubs'
 import {
   acceptOffer,
+  acceptStartingOffer,
   applyPreseasonDecision,
+  draftNewCareer,
   openPreseasonDecision,
   openTransferChoice,
   resolveKeyMatch,
   runFullSeason,
   sortedStandings,
-  startNewCareer,
   stayAtClub,
 } from './systems/career'
 import { appearanceChance } from './systems/seasonSim'
@@ -32,7 +33,8 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root
     this.state = hasSave() ? loadState() : createEmptyState()
-    if (!this.state.player || !this.state.season) this.state.screen = 'home'
+    if (!this.state.player) this.state.screen = 'home'
+    else if (!this.state.season && this.state.screen !== 'startOffers') this.state.screen = 'home'
   }
 
   start(): void {
@@ -40,7 +42,7 @@ export class App {
   }
 
   private persist(): void {
-    if (this.state.player && this.state.season) saveState(this.state)
+    if (this.state.player) saveState(this.state)
   }
 
   private go(mutate: () => void): void {
@@ -60,6 +62,10 @@ export class App {
       case 'create':
         this.root.innerHTML = this.createHtml()
         this.bindCreate()
+        break
+      case 'startOffers':
+        this.root.innerHTML = this.startOffersHtml()
+        this.bindStartOffers()
         break
       case 'hub':
         this.root.innerHTML = this.hubHtml()
@@ -119,7 +125,9 @@ export class App {
     this.root.querySelector('#btn-continue')?.addEventListener('click', () => {
       this.state = loadState()
       if (!this.state.player) this.state.screen = 'create'
-      else if (this.state.screen === 'home' || this.state.screen === 'create') this.state.screen = 'hub'
+      else if (this.state.screen === 'home' || this.state.screen === 'create') {
+        this.state.screen = this.state.season ? 'hub' : 'startOffers'
+      }
       this.render()
     })
     this.root.querySelector('#btn-new')?.addEventListener('click', () => {
@@ -132,17 +140,11 @@ export class App {
 
   private createHtml(): string {
     const options = POSITIONS.map((p) => `<option value="${p.id}">${p.label}</option>`).join('')
-    const clubs = starterClubOptions()
-      .map(
-        (c) =>
-          `<option value="${c.clubId}" data-min="${c.minOverall}">${c.label} (min OVR ${c.minOverall})</option>`,
-      )
-      .join('')
     return this.shell(
       `
       <section class="panel">
         <h2>Nowy zawodnik</h2>
-        <p class="muted">Ustaw profil. Wyższy overall = I liga / Ekstraklasa.</p>
+        <p class="muted">Ustaw profil. Potem dostaniesz 4 oferty z III ligi — z szansą na grę.</p>
         <label class="field"><span>Imię i nazwisko</span>
           <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" /></label>
         <label class="field"><span>Pozycja</span><select id="player-pos">${options}</select></label>
@@ -156,10 +158,8 @@ export class App {
           <input id="player-age" type="range" min="16" max="22" value="17" /></label>
         <label class="field"><span>Overall: <strong id="ovr-val">52</strong></span>
           <input id="player-ovr" type="range" min="45" max="68" value="52" /></label>
-        <label class="field"><span>Klub startowy</span><select id="player-club">${clubs}</select></label>
-        <p class="hint" id="club-hint"></p>
         <div class="actions">
-          <button class="btn primary" id="btn-start">Rozpocznij karierę</button>
+          <button class="btn primary" id="btn-start">Szukaj ofert</button>
           <button class="btn ghost" id="btn-back">Wróć</button>
         </div>
       </section>`,
@@ -170,37 +170,15 @@ export class App {
   private bindCreate(): void {
     const ageInput = this.root.querySelector('#player-age') as HTMLInputElement
     const ovrInput = this.root.querySelector('#player-ovr') as HTMLInputElement
-    const clubSelect = this.root.querySelector('#player-club') as HTMLSelectElement
     const ageVal = this.root.querySelector('#age-val')!
     const ovrVal = this.root.querySelector('#ovr-val')!
-    const clubHint = this.root.querySelector('#club-hint')!
 
-    const sync = () => {
-      const ovr = Number(ovrInput.value)
-      ovrVal.textContent = String(ovr)
-      let firstValid: string | null = null
-      for (const opt of Array.from(clubSelect.options)) {
-        const min = Number(opt.dataset.min || 45)
-        opt.disabled = ovr < min
-        if (ovr >= min && !firstValid) firstValid = opt.value
-      }
-      if (clubSelect.selectedOptions[0]?.disabled && firstValid) clubSelect.value = firstValid
-      const min = Number(clubSelect.selectedOptions[0]?.dataset.min || 45)
-      clubHint.textContent =
-        ovr < min
-          ? 'Podnieś overall, żeby wybrać ten klub.'
-          : min >= 64
-            ? 'Start w Ekstraklasie.'
-            : min >= 56
-              ? 'Start w I lidze.'
-              : 'Start w III lidze.'
-    }
     ageInput.addEventListener('input', () => {
       ageVal.textContent = ageInput.value
     })
-    ovrInput.addEventListener('input', sync)
-    clubSelect.addEventListener('change', sync)
-    sync()
+    ovrInput.addEventListener('input', () => {
+      ovrVal.textContent = ovrInput.value
+    })
 
     this.root.querySelector('#btn-back')?.addEventListener('click', () => {
       this.go(() => {
@@ -208,20 +186,49 @@ export class App {
       })
     })
     this.root.querySelector('#btn-start')?.addEventListener('click', () => {
-      const overall = Number(ovrInput.value)
-      const min = Number(clubSelect.selectedOptions[0]?.dataset.min || 45)
-      if (overall < min) return
       this.go(() =>
-        startNewCareer(this.state, {
+        draftNewCareer(this.state, {
           name: (this.root.querySelector('#player-name') as HTMLInputElement).value,
           position: (this.root.querySelector('#player-pos') as HTMLSelectElement).value as Position,
           preferredFoot: (this.root.querySelector('#player-foot') as HTMLSelectElement)
             .value as PreferredFoot,
           age: Number(ageInput.value),
-          overall,
-          clubId: clubSelect.value,
+          overall: Number(ovrInput.value),
         }),
       )
+    })
+  }
+
+  private startOffersHtml(): string {
+    const p = this.state.player!
+    const cards = this.state.transferOffers
+      .map((o) => {
+        const c = getClub(o.clubId)
+        const chance = o.playChance ?? 50
+        return `
+          <button class="choice" data-offer="${o.clubId}">
+            <strong>${c.name}</strong>
+            <span>III liga · pensja ~${o.wage} zł · premia ${o.signingBonus} zł</span>
+            <span><strong>Szansa na grę ≈ ${chance}%</strong> — ${o.message}</span>
+          </button>`
+      })
+      .join('')
+    return this.shell(
+      `
+      <section class="panel">
+        <h2>Oferty z III ligi</h2>
+        <p class="muted">${p.name} · OVR ${p.overall} · ${p.age} lat. Wybierz klub na start kariery.</p>
+        <div class="choices">${cards}</div>
+      </section>`,
+      'Start',
+    )
+  }
+
+  private bindStartOffers(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-offer]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => acceptStartingOffer(this.state, btn.dataset.offer!))
+      })
     })
   }
 
@@ -261,7 +268,7 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">Szansa na występy zależy od OVR, reputacji i morale. Forma sezonu wychodzi z goli, ocen i losu — nie jest stałą cechą.</p>
+        <p class="muted">Szansa na występy zależy od OVR, reputacji, morale i wieku. Od ~30. roku życia tempo i kondycja naturalnie spadają.</p>
         <div class="actions">
           ${
             s.preseasonDone

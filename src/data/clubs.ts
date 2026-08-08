@@ -139,22 +139,20 @@ export function getLeagueForClub(clubId: string): League {
   return getLeague(STARTER_LEAGUE_ID)
 }
 
-/** Kluby dostępne na starcie kariery. */
 export function starterClubOptions(): Array<{ clubId: string; label: string; minOverall: number }> {
-  const liga3 = getLeague('liga-3').clubIds.map((clubId) => ({
+  return getLeague('liga-3').clubIds.map((clubId) => ({
     clubId,
     label: `${getClub(clubId).name} · III liga`,
     minOverall: 45,
   }))
-  const liga2 = getLeague('liga-2').clubIds.slice(0, 5).map((clubId) => ({
-    clubId,
-    label: `${getClub(clubId).name} · I liga`,
-    minOverall: 56,
-  }))
-  const ekstra = ['termalica', 'arka', 'wisla-plock', 'gks-katowice'].map((clubId) => ({
-    clubId,
-    label: `${getClub(clubId).name} · Ekstraklasa`,
-    minOverall: 64,
-  }))
-  return [...liga3, ...liga2, ...ekstra]
+}
+
+/** Losowe 4 oferty z III ligi na start kariery. */
+export function pickStartingClubIds(count = 4): string[] {
+  const ids = [...getLeague('liga-3').clubIds]
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[ids[i], ids[j]] = [ids[j]!, ids[i]!]
+  }
+  return ids.slice(0, Math.min(count, ids.length))
 }

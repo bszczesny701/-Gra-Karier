@@ -15,6 +15,7 @@ export type CupStage =
 export type Screen =
   | 'home'
   | 'create'
+  | 'startOffers'
   | 'hub'
   | 'decision'
   | 'keyMatch'
@@ -49,7 +50,8 @@ export interface CreateCareerOptions {
   preferredFoot: PreferredFoot
   age: number
   overall: number
-  clubId: string
+  /** Uzupełniane po wyborze oferty startowej */
+  clubId?: string
 }
 
 export interface ClubStanding {
@@ -101,6 +103,8 @@ export interface TransferOffer {
   signingBonus: number
   message: string
   leagueId: string
+  /** Szansa na regularną grę (0–100), głównie oferty startowe */
+  playChance?: number
 }
 
 export interface PendingDecision {
@@ -161,11 +165,35 @@ export interface GameState {
   log: string[]
 }
 
-export const SAVE_KEY = 'gra-karier-save-v6'
-export const SAVE_VERSION = 6
+export const SAVE_KEY = 'gra-karier-save-v7'
+export const SAVE_VERSION = 7
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
+}
+
+/** Limity zmiany OVR po sezonie wg wieku. */
+export function clampSeasonOvrDelta(age: number, raw: number): number {
+  const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
+  const maxUp = age <= 25 ? 4 : 3
+  let delta = Math.max(maxDown, Math.min(maxUp, Math.round(raw)))
+
+  // +3 / +4 rzadziej u młodych
+  if (age <= 25 && delta >= 4) {
+    if (Math.random() > 0.28) delta = 3
+  }
+  if (age <= 25 && delta >= 3) {
+    if (Math.random() > 0.5) delta = 2
+  }
+  // Po 25. +3 też rzadsze
+  if (age > 25 && delta >= 3) {
+    if (Math.random() > 0.4) delta = 2
+  }
+  // Po 32. trudniej rosnąć
+  if (age >= 32 && delta > 1) delta = 1
+  if (age >= 35 && delta > 0) delta = 0
+
+  return delta
 }
 
 export function footLabel(foot: PreferredFoot): string {

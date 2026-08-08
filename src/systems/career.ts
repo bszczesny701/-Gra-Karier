@@ -1,4 +1,12 @@
-import { CLUBS, getClub, getLeague, getLeagueForClub, leagueByTier } from '../data/clubs'
+import {
+  CLUBS,
+  getClub,
+  getLeague,
+  getLeagueForClub,
+  leagueByTier,
+  pickStartingClubIds,
+  STARTER_CLUB_ID,
+} from '../data/clubs'
 import { CAREER_EVENTS, pickEvent, type ChoiceEffect } from '../data/events'
 import {
   clamp,
@@ -12,10 +20,12 @@ import {
 import { pushLog } from '../state/gameState'
 import {
   applyKeyMatchToReport,
+  appearanceChance,
   simulateFullSeason,
 } from './seasonSim'
 import { playerTablePosition, sortedStandings } from './standings'
 import {
+  applyAgingDecline,
   attrsFromOverall,
   calcOverall,
   moneyFromStart,
@@ -27,8 +37,9 @@ export { playerTablePosition, sortedStandings }
 export function createPlayer(options: CreateCareerOptions): Player {
   const overall = clamp(options.overall, 45, 70)
   const attrs = attrsFromOverall(options.position, overall)
-  const league = getLeagueForClub(options.clubId)
-  const club = getClub(options.clubId)
+  const clubId = options.clubId ?? STARTER_CLUB_ID
+  const league = getLeagueForClub(clubId)
+  const club = getClub(clubId)
   return {
     name: options.name.trim() || 'Zawodnik',
     age: clamp(options.age, 16, 22),
@@ -82,23 +93,88 @@ export function createSeason(
   }
 }
 
-export function startNewCareer(state: GameState, options: CreateCareerOptions): void {
-  const clubId = options.clubId
-  const league = getLeagueForClub(clubId)
-  state.player = createPlayer({ ...options, clubId })
-  state.season = createSeason(clubId, league.id, 2026)
+/** Szansa na grę w danym klubie (start / UI). */
+export function estimatePlayChance(player: Player, clubId: string): number {
+  const club = getClub(clubId)
+  const gap = player.overall - club.strength
+  const base = appearanceChance(player)
+  const clubBit = gap / 70
+  return Math.max(28, Math.min(92, Math.round((base + clubBit) * 100)))
+}
+
+export function generateStartingOffers(player: Player): TransferOffer[] {
+  const league = getLeague('liga-3')
+  return pickStartingClubIds(4).map((clubId) => {
+    const club = getClub(clubId)
+    const playChance = estimatePlayChance(player, clubId)
+    const wage = Math.round(club.wage * (0.85 + player.overall / 200))
+    return {
+      clubId,
+      leagueId: league.id,
+      wage: Math.max(500, wage),
+      signingBonus: Math.round(wage * 1.5 + player.overall * 12),
+      playChance,
+      message:
+        playChance >= 70
+          ? 'Trener liczy na Ciebie w pierwszym składzie.'
+          : playChance >= 50
+            ? 'Szansa na regularne minuty, jeśli pokażesz się na treningu.'
+            : 'Konkurencja o miejsce — start raczej z ławki.',
+    }
+  })
+}
+
+/** Tworzy zawodnika i pokazuje 4 oferty z III ligi. */
+export function draftNewCareer(
+  state: GameState,
+  options: Omit<CreateCareerOptions, 'clubId'>,
+): void {
+  state.player = createPlayer(options)
+  state.season = null
   state.pendingDecision = null
   state.pendingKeyMatch = null
   state.pendingKeyQueue = []
   state.seasonReport = null
-  state.transferOffers = []
+  state.transferOffers = generateStartingOffers(state.player)
   state.seasonSummary = null
   state.log = []
+  state.screen = 'startOffers'
+}
+
+export function acceptStartingOffer(state: GameState, clubId: string): void {
+  const player = state.player
+  const offer = state.transferOffers.find((o) => o.clubId === clubId)
+  if (!player || !offer) return
+
+  const club = getClub(clubId)
+  const league = getLeague(offer.leagueId)
+  player.money = moneyFromStart(player.overall, club.wage) + offer.signingBonus
+  player.reputation = reputationFromStart(player.overall, league.tier)
+  player.morale = clamp(player.morale + 4, 1, 100)
+
+  state.season = createSeason(clubId, league.id, 2026)
+  state.transferOffers = []
   pushLog(
     state,
-    `Start w ${getClub(clubId).name} (OVR ${state.player.overall}). Sezon symulujesz w całości.`,
+    `Start w ${club.name} (III liga). Szansa na grę ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
   )
   state.screen = 'hub'
+}
+
+/** @deprecated retained for tests — prefer draftNewCareer + acceptStartingOffer */
+export function startNewCareer(state: GameState, options: CreateCareerOptions): void {
+  draftNewCareer(state, options)
+  const preferred = options.clubId
+  const pick =
+    (preferred && state.transferOffers.find((o) => o.clubId === preferred)?.clubId) ||
+    state.transferOffers[0]?.clubId
+  if (pick) acceptStartingOffer(state, pick)
+}
+
+function birthdayAndAge(state: GameState, player: Player): void {
+  player.age += 1
+  const note = applyAgingDecline(player)
+  if (note) pushLog(state, note)
 }
 
 function applyEffect(player: Player, effect: ChoiceEffect): void {
@@ -296,12 +372,11 @@ export function stayAtClub(state: GameState): void {
       state,
       `${getClub(report.clubId).name} nie przedłuża kontraktu. Musisz szukać nowego klubu.`,
     )
-    player.age += 1
     openTransferChoice(state)
     return
   }
 
-  player.age += 1
+  birthdayAndAge(state, player)
   player.money += getClub(report.clubId).wage * 3
   pushLog(state, `Zostajesz w ${getClub(report.clubId).name} na kolejny sezon.`)
   beginNextSeason(state, report.clubId, report.leagueId, true)
@@ -312,7 +387,7 @@ export function acceptOffer(state: GameState, clubId: string): void {
   const player = state.player!
   if (!offer) return
 
-  player.age += 1
+  birthdayAndAge(state, player)
   player.money += offer.signingBonus
   player.morale = clamp(player.morale + 6, 1, 100)
   player.reputation = clamp(player.reputation + 2, 0, 100)

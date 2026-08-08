@@ -10,7 +10,7 @@ import type {
   SeasonReport,
   SeasonState,
 } from '../state/types'
-import { clamp, cupStageLabel, formLabelFromAvg, performanceFormScore } from '../state/types'
+import { clamp, clampSeasonOvrDelta, cupStageLabel, formLabelFromAvg, performanceFormScore } from '../state/types'
 import { calcOverall } from './playerFactory'
 import { playerTablePosition, sortedStandings } from './standings'
 
@@ -156,12 +156,14 @@ function scoreline(att: number, def: number): number {
   return Math.min(g, 4)
 }
 
-/** Szansa na występ — z OVR / reputacji / morale (forma nie jest stałą statystyką). */
+/** Szansa na występ — z OVR / reputacji / morale / wieku (forma nie jest stałą statystyką). */
 export function appearanceChance(player: Player): number {
   const ovrPart = player.overall / 140
   const repPart = player.reputation / 220
   const moralePart = player.morale / 280
-  return Math.max(0.18, Math.min(0.9, 0.22 + ovrPart + repPart + moralePart))
+  const agePart =
+    player.age >= 36 ? -0.14 : player.age >= 33 ? -0.08 : player.age >= 30 ? -0.04 : 0
+  return Math.max(0.12, Math.min(0.9, 0.22 + ovrPart + repPart + moralePart + agePart))
 }
 
 /** Szansa w trakcie sezonu — chwilowy humor meczowy, nie zapisana forma. */
@@ -545,7 +547,11 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   if (formLabel === 'świetna') ovrTarget += 1
   if (formLabel === 'fatalna') ovrTarget -= 1
   if (leagueApps < fixturesForPlayer * 0.15) ovrTarget -= 1
-  ovrTarget = clamp(ovrTarget, -2, 3)
+
+  // Młodzi: do +4 (rzadko), max −2; później mniejszy potencjał wzrostu
+  if (player.age <= 25 && formLabel === 'świetna' && leagueAvgRating >= 7.0) ovrTarget += 1
+  if (player.age <= 22 && goals >= 12 && player.position === 'NP') ovrTarget += 1
+  ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget)
 
   applyOverallChange(player, ovrTarget)
 
