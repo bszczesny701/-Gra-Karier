@@ -51,57 +51,58 @@ function c(
 }
 
 export const CLUBS: Record<string, Club> = {
-  // III liga — ~1–1.5★
+  // Skala europejska: 5★ = Real/City, top PL ≈ 2.5★ (nie 4★)
+  // III liga — 1★
   'hutnik-krakow': c('hutnik-krakow', 'Hutnik Kraków', 'HUT', 40, 700, 1),
   'polonia-bytom': c('polonia-bytom', 'Polonia Bytom', 'PBT', 42, 750, 1),
   'resovia': c('resovia', 'Resovia Rzeszów', 'RES', 41, 720, 1),
   'chojniczanka': c('chojniczanka', 'Chojniczanka', 'CHO', 39, 680, 1),
-  'stal-stalowa': c('stal-stalowa', 'Stal Stalowa Wola', 'SSW', 43, 780, 1.5),
-  'podbeskidzie': c('podbeskidzie', 'Podbeskidzie', 'POD', 44, 800, 1.5),
-  'gks-tichy': c('gks-tichy', 'GKS Tychy', 'TYC', 45, 820, 1.5),
-  'wieczysta': c('wieczysta', 'Wieczysta Kraków', 'WIE', 46, 850, 1.5),
+  'stal-stalowa': c('stal-stalowa', 'Stal Stalowa Wola', 'SSW', 43, 780, 1),
+  'podbeskidzie': c('podbeskidzie', 'Podbeskidzie', 'POD', 44, 800, 1),
+  'gks-tichy': c('gks-tichy', 'GKS Tychy', 'TYC', 45, 820, 1),
+  'wieczysta': c('wieczysta', 'Wieczysta Kraków', 'WIE', 46, 850, 1),
 
-  // II liga — ~1.5–2★
-  'znicz': c('znicz', 'Znicz Pruszków', 'ZNI', 48, 1100, 1.5),
-  'kalisz': c('kalisz', 'KKS Kalisz', 'KAL', 47, 1050, 1.5),
-  'belchatow': c('belchatow', 'GKS Bełchatów', 'BEL', 49, 1150, 2),
-  'elblag': c('elblag', 'Olimpia Elbląg', 'ELB', 45, 950, 1.5),
-  'wisla-pulawy': c('wisla-pulawy', 'Wisła Puławy', 'WPU', 46, 1000, 1.5),
-  'polkowice': c('polkowice', 'Górnik Polkowice', 'GPO', 44, 900, 1.5),
-  'stomil': c('stomil', 'Stomil Olsztyn', 'STO', 47, 1020, 1.5),
-  'ruch': c('ruch', 'Ruch Chorzów', 'RCH', 51, 1300, 2),
+  // II liga — 1–1.5★
+  'znicz': c('znicz', 'Znicz Pruszków', 'ZNI', 48, 1100, 1),
+  'kalisz': c('kalisz', 'KKS Kalisz', 'KAL', 47, 1050, 1),
+  'belchatow': c('belchatow', 'GKS Bełchatów', 'BEL', 49, 1150, 1.5),
+  'elblag': c('elblag', 'Olimpia Elbląg', 'ELB', 45, 950, 1),
+  'wisla-pulawy': c('wisla-pulawy', 'Wisła Puławy', 'WPU', 46, 1000, 1),
+  'polkowice': c('polkowice', 'Górnik Polkowice', 'GPO', 44, 900, 1),
+  'stomil': c('stomil', 'Stomil Olsztyn', 'STO', 47, 1020, 1),
+  'ruch': c('ruch', 'Ruch Chorzów', 'RCH', 51, 1300, 1.5),
 
-  // I liga — ~2–3★
-  'wisla-krakow': c('wisla-krakow', 'Wisła Kraków', 'WIS', 58, 2200, 2.5),
-  'slask-wroclaw': c('slask-wroclaw', 'Śląsk Wrocław', 'SLW', 56, 2000, 2.5),
-  'lks-lodz': c('lks-lodz', 'ŁKS Łódź', 'LKS', 54, 1800, 2),
-  'polonia-warszawa': c('polonia-warszawa', 'Polonia Warszawa', 'PWA', 53, 1700, 2),
-  'miedz-legnica': c('miedz-legnica', 'Miedź Legnica', 'MIE', 52, 1600, 2),
-  'odra-opole': c('odra-opole', 'Odra Opole', 'ODR', 50, 1400, 2),
-  'gornik-leczna': c('gornik-leczna', 'Górnik Łęczna', 'GLE', 49, 1350, 2),
-  'stal-rzeszow': c('stal-rzeszow', 'Stal Rzeszów', 'STR', 51, 1500, 2),
+  // I liga — 1.5–2★
+  'wisla-krakow': c('wisla-krakow', 'Wisła Kraków', 'WIS', 58, 2200, 2),
+  'slask-wroclaw': c('slask-wroclaw', 'Śląsk Wrocław', 'SLW', 56, 2000, 2),
+  'lks-lodz': c('lks-lodz', 'ŁKS Łódź', 'LKS', 54, 1800, 1.5),
+  'polonia-warszawa': c('polonia-warszawa', 'Polonia Warszawa', 'PWA', 53, 1700, 1.5),
+  'miedz-legnica': c('miedz-legnica', 'Miedź Legnica', 'MIE', 52, 1600, 1.5),
+  'odra-opole': c('odra-opole', 'Odra Opole', 'ODR', 50, 1400, 1.5),
+  'gornik-leczna': c('gornik-leczna', 'Górnik Łęczna', 'GLE', 49, 1350, 1.5),
+  'stal-rzeszow': c('stal-rzeszow', 'Stal Rzeszów', 'STR', 51, 1500, 1.5),
 
-  // Ekstraklasa — ~3–4★
-  'lech-poznan': c('lech-poznan', 'Lech Poznań', 'LPO', 78, 5200, 4),
-  'rakow': c('rakow', 'Raków Częstochowa', 'RAK', 77, 5000, 4),
-  'legia': c('legia', 'Legia Warszawa', 'LEG', 76, 5100, 4),
-  'jagiellonia': c('jagiellonia', 'Jagiellonia Białystok', 'JAG', 74, 4500, 3.5),
-  'widzew': c('widzew', 'Widzew Łódź', 'WID', 73, 4300, 3.5),
-  'pogon': c('pogon', 'Pogoń Szczecin', 'POG', 71, 4000, 3.5),
-  'gornik-zabrze': c('gornik-zabrze', 'Górnik Zabrze', 'GOR', 72, 4100, 3.5),
-  'cracovia': c('cracovia', 'Cracovia', 'CRA', 70, 3800, 3.5),
-  'lechia': c('lechia', 'Lechia Gdańsk', 'LGD', 68, 3600, 3),
-  'piast': c('piast', 'Piast Gliwice', 'PIA', 66, 3200, 3),
-  'korona': c('korona', 'Korona Kielce', 'KOR', 65, 3000, 3),
-  'zaglebie': c('zaglebie', 'Zagłębie Lubin', 'ZAG', 67, 3400, 3),
-  'radomiak': c('radomiak', 'Radomiak Radom', 'RAD', 64, 2900, 3),
-  'motor': c('motor', 'Motor Lublin', 'MOT', 63, 2800, 3),
-  'gks-katowice': c('gks-katowice', 'GKS Katowice', 'KAT', 62, 2700, 3),
-  'wisla-plock': c('wisla-plock', 'Wisła Płock', 'WPL', 61, 2600, 2.5),
-  'arka': c('arka', 'Arka Gdynia', 'ARK', 60, 2500, 2.5),
-  'termalica': c('termalica', 'Termalica Nieciecza', 'TNE', 58, 2300, 2.5),
+  // Ekstraklasa — max ~2.5★ (daleko od Realu 5★)
+  'lech-poznan': c('lech-poznan', 'Lech Poznań', 'LPO', 78, 5200, 2.5),
+  'rakow': c('rakow', 'Raków Częstochowa', 'RAK', 77, 5000, 2.5),
+  'legia': c('legia', 'Legia Warszawa', 'LEG', 76, 5100, 2.5),
+  'jagiellonia': c('jagiellonia', 'Jagiellonia Białystok', 'JAG', 74, 4500, 2.5),
+  'widzew': c('widzew', 'Widzew Łódź', 'WID', 73, 4300, 2),
+  'pogon': c('pogon', 'Pogoń Szczecin', 'POG', 71, 4000, 2),
+  'gornik-zabrze': c('gornik-zabrze', 'Górnik Zabrze', 'GOR', 72, 4100, 2),
+  'cracovia': c('cracovia', 'Cracovia', 'CRA', 70, 3800, 2),
+  'lechia': c('lechia', 'Lechia Gdańsk', 'LGD', 68, 3600, 2),
+  'piast': c('piast', 'Piast Gliwice', 'PIA', 66, 3200, 2),
+  'korona': c('korona', 'Korona Kielce', 'KOR', 65, 3000, 2),
+  'zaglebie': c('zaglebie', 'Zagłębie Lubin', 'ZAG', 67, 3400, 2),
+  'radomiak': c('radomiak', 'Radomiak Radom', 'RAD', 64, 2900, 2),
+  'motor': c('motor', 'Motor Lublin', 'MOT', 63, 2800, 1.5),
+  'gks-katowice': c('gks-katowice', 'GKS Katowice', 'KAT', 62, 2700, 1.5),
+  'wisla-plock': c('wisla-plock', 'Wisła Płock', 'WPL', 61, 2600, 1.5),
+  'arka': c('arka', 'Arka Gdynia', 'ARK', 60, 2500, 1.5),
+  'termalica': c('termalica', 'Termalica Nieciecza', 'TNE', 58, 2300, 1.5),
 
-  // Premier League
+  // Premier League — 3.5–5★
   'man-city': c('man-city', 'Manchester City', 'MCI', 93, 22000, 5, 'ENG'),
   'liverpool': c('liverpool', 'Liverpool', 'LIV', 91, 20000, 5, 'ENG'),
   'arsenal': c('arsenal', 'Arsenal', 'ARS', 89, 18000, 4.5, 'ENG'),
@@ -111,7 +112,7 @@ export const CLUBS: Record<string, Club> = {
   'newcastle': c('newcastle', 'Newcastle', 'NEW', 80, 12000, 3.5, 'ENG'),
   'brighton': c('brighton', 'Brighton', 'BHA', 77, 10000, 3.5, 'ENG'),
 
-  // La Liga
+  // La Liga — 3–5★
   'real-madrid': c('real-madrid', 'Real Madrid', 'RMA', 94, 23000, 5, 'ESP'),
   'barcelona': c('barcelona', 'Barcelona', 'BAR', 92, 21000, 5, 'ESP'),
   'atletico': c('atletico', 'Atlético Madrid', 'ATM', 88, 16000, 4.5, 'ESP'),
@@ -121,7 +122,7 @@ export const CLUBS: Record<string, Club> = {
   'athletic': c('athletic', 'Athletic Bilbao', 'ATH', 76, 8500, 3.5, 'ESP'),
   'valencia': c('valencia', 'Valencia', 'VAL', 73, 7500, 3, 'ESP'),
 
-  // Serie A
+  // Serie A — 3–5★
   'inter': c('inter', 'Inter Mediolan', 'INT', 91, 19000, 5, 'ITA'),
   'milan': c('milan', 'AC Milan', 'MIL', 88, 17000, 4.5, 'ITA'),
   'juventus': c('juventus', 'Juventus', 'JUV', 87, 16500, 4.5, 'ITA'),
