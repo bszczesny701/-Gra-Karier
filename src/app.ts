@@ -423,7 +423,7 @@ export class App {
             </tr>
             <tr>
               <td>Forma sezonu</td>
-              <td class="${r.formLabel === 'fatalna' || r.formLabel === 'słaba' ? 'down' : r.formLabel === 'świetna' ? 'up' : ''}"><strong>${r.formLabel}</strong> <span class="muted">(z goli, ocen i losu)</span></td>
+              <td class="${r.formLabel === 'fatalna' || r.formLabel === 'słaba' ? 'down' : r.formLabel === 'świetna' || r.formLabel === 'dobra' ? 'up' : ''}"><strong>${r.formLabel}</strong> <span class="muted">(względem oczekiwań + los)</span></td>
             </tr>
             <tr>
               <td>Występy</td>

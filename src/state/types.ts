@@ -175,16 +175,16 @@ export function footLabel(foot: PreferredFoot): string {
 }
 
 export function formLabelFromAvg(avg: number): FormLabel {
-  if (avg >= 78) return 'świetna'
-  if (avg >= 62) return 'dobra'
-  if (avg >= 48) return 'przyzwoita'
-  if (avg >= 32) return 'słaba'
+  if (avg >= 76) return 'świetna'
+  if (avg >= 63) return 'dobra'
+  if (avg >= 47) return 'przyzwoita'
+  if (avg >= 34) return 'słaba'
   return 'fatalna'
 }
 
 /**
- * Forma „zasłużona” wynikami — napastnik z 4 golami nie dostanie świetnej formy.
- * Skala 0–100.
+ * Forma sezonu względem oczekiwań pozycji.
+ * Spełnienie normy ≈ 52 (przyzwoita). Fatalna tylko przy wyraźnie pustym sezonie.
  */
 export function performanceFormScore(
   position: Position,
@@ -193,30 +193,55 @@ export function performanceFormScore(
   leagueApps: number,
   fixtures: number,
   avgRating: number,
+  overall = 55,
 ): number {
-  const appRate = fixtures > 0 ? leagueApps / fixtures : 0
-  const ratingBit = (avgRating - 6) * 5
+  const apps = Math.max(leagueApps, 0)
+  const appRate = fixtures > 0 ? apps / fixtures : 0
+  const ovrBit = (overall - 50) * 0.004
 
+  let expectedGoals: number
+  let expectedAssists: number
   if (position === 'NP') {
-    // 4 gole ≈ baza ~45 (przyzwoita/słaba), nie automatycznie fatalna
-    let score = 28 + goals * 4.5 + assists * 2
-    score += (appRate - 0.5) * 16
-    score += ratingBit
-    return clamp(score, 15, 92)
+    expectedGoals = Math.max(1.2, apps * (0.2 + ovrBit))
+    expectedAssists = Math.max(0.4, apps * 0.07)
+  } else if (position === 'POM') {
+    expectedGoals = Math.max(0.6, apps * (0.08 + ovrBit * 0.5))
+    expectedAssists = Math.max(0.8, apps * (0.12 + ovrBit * 0.5))
+  } else {
+    expectedGoals = Math.max(0.2, apps * 0.03)
+    expectedAssists = Math.max(0.3, apps * 0.05)
   }
 
-  if (position === 'POM') {
+  const produced = goals + assists * 0.75
+  const expected = expectedGoals + expectedAssists * 0.75
+  const outRatio = produced / Math.max(0.8, expected)
+
+  // Baza = przyzwoita; wynik względem normy
+  let score = 52
+  score += clamp((outRatio - 1) * 18, -16, 24)
+  score += clamp((avgRating - 6.15) * 7, -12, 14)
+
+  if (apps === 0) score -= 10
+  else if (appRate >= 0.65) score += 5
+  else if (appRate >= 0.45) score += 2
+  else if (appRate < 0.22) score -= 3
+
+  // Podłogi / sufity miękkie (nagradzają dorobek, nie tylko karzą)
+  if (position === 'NP') {
+    if (goals >= 12) score = Math.max(score, 68)
+    else if (goals >= 8) score = Math.max(score, 58)
+    else if (goals >= 5) score = Math.max(score, 50)
+    if (goals === 0 && apps >= 10) score = Math.min(score, 38)
+  } else if (position === 'POM') {
     const contrib = goals + assists
-    let score = 30 + contrib * 4.5
-    score += (appRate - 0.5) * 18
-    score += ratingBit
-    return clamp(score, 15, 92)
+    if (contrib >= 12) score = Math.max(score, 68)
+    else if (contrib >= 7) score = Math.max(score, 56)
+    if (contrib === 0 && apps >= 12) score = Math.min(score, 40)
+  } else if (avgRating >= 7.0 && appRate >= 0.55) {
+    score = Math.max(score, 60)
   }
 
-  let score = 34 + leagueApps * 1.1 + (avgRating - 5.5) * 9 + assists * 3 + goals * 3
-  score += (appRate - 0.5) * 20
-  if (appRate < 0.3) score -= 10
-  return clamp(score, 15, 92)
+  return clamp(score, 20, 94)
 }
 
 export function cupStageLabel(stage: CupStage): string {
