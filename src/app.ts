@@ -26,8 +26,8 @@ import { createEmptyState, footLabel } from './state/types'
 
 const POSITIONS: { id: Position; label: string }[] = [
   { id: 'NP', label: 'Napastnik' },
-  { id: 'POM', label: 'Pomocnik' },
-  { id: 'ŚO', label: 'Środkowy pomocnik' },
+  { id: 'POM', label: 'Ofensywny pomocnik' },
+  { id: 'ŚO', label: 'Defensywny pomocnik' },
   { id: 'OB', label: 'Obrońca' },
 ]
 
@@ -161,7 +161,7 @@ export class App {
       `
       <section class="panel">
         <h2>Nowy zawodnik</h2>
-        <p class="muted">Ustaw profil. Potem 4 oferty z III ligi. Pozycje: napastnik, pomocnik, środkowy pomocnik, obrońca.</p>
+        <p class="muted">Ustaw profil. Potem 4 oferty z III ligi. Pozycje: napastnik, ofensywny / defensywny pomocnik, obrońca.</p>
         <label class="field"><span>Imię i nazwisko</span>
           <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" /></label>
         <label class="field"><span>Pozycja</span><select id="player-pos">${options}</select></label>
