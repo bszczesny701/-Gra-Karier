@@ -888,6 +888,20 @@ function finalizeSeasonReport(
   if (matchesMissedInjury >= fixturesForPlayer * 0.35) perfForm -= 10
   else if (matchesMissedInjury >= 3) perfForm -= 5
   if (injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu')) perfForm -= 8
+
+  const appRate = fixturesForPlayer > 0 ? leagueApps / fixturesForPlayer : 0
+  const young = player.age <= 25
+  const veryYoung = player.age <= 21
+
+  // Młody + dużo gry = lepsza forma sezonu (minuty budują pewność)
+  if (young) {
+    if (appRate >= 0.7) perfForm += veryYoung ? 12 : 8
+    else if (appRate >= 0.55) perfForm += veryYoung ? 8 : 5
+    else if (appRate >= 0.4) perfForm += veryYoung ? 4 : 2
+    else if (appRate < 0.2) perfForm -= 5
+    else if (appRate < 0.3) perfForm -= 2
+  }
+
   const luckSpan = player.overall <= 50 ? 18 : player.overall <= 62 ? 14 : 10
   const luck = Math.random() * luckSpan - luckSpan * 0.32
   const avgForm = clamp(perfForm + luck, 18, 94)
@@ -901,8 +915,6 @@ function finalizeSeasonReport(
   }
 
   let ovrTarget = 0
-  const young = player.age <= 25
-  const veryYoung = player.age <= 21
 
   if (formLabel === 'świetna') ovrTarget = young ? 2 : 1
   else if (formLabel === 'dobra') ovrTarget = young ? 1 : chance(0.55) ? 1 : 0
@@ -910,20 +922,42 @@ function finalizeSeasonReport(
   else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.55) ? 0 : -1) : -1
   else if (formLabel === 'fatalna') ovrTarget = -2
 
-  if (young && ovrTarget >= 0 && rating >= 7.15 && leagueApps >= fixturesForPlayer * 0.45) {
-    if (formLabel === 'świetna' && chance(veryYoung ? 0.4 : 0.28)) ovrTarget += 1
-    else if (formLabel === 'dobra' && veryYoung && chance(0.2)) ovrTarget += 1
+  // Rozwój z minut: im więcej gra młody, tym większy skok OVR
+  if (young && formLabel !== 'fatalna') {
+    if (appRate >= 0.7 && ovrTarget >= 0) {
+      ovrTarget += veryYoung ? 1 : chance(0.75) ? 1 : 0
+      if (veryYoung && formLabel !== 'słaba' && player.overall < 68 && chance(0.4)) ovrTarget += 1
+    } else if (appRate >= 0.5 && ovrTarget >= 0) {
+      if (veryYoung || chance(0.55)) ovrTarget += 1
+    } else if (appRate >= 0.35 && ovrTarget >= 0 && veryYoung && chance(0.35)) {
+      ovrTarget += 1
+    }
+
+    // Regularny starter (nie słaba forma) nie stoi w miejscu
+    if (appRate >= 0.5 && formLabel !== 'słaba' && ovrTarget < 1) ovrTarget = 1
+    if (veryYoung && appRate >= 0.65 && formLabel !== 'słaba' && ovrTarget < 2 && player.overall < 72) {
+      ovrTarget = 2
+    }
+  }
+
+  if (young && ovrTarget >= 0 && rating >= 7.15 && appRate >= 0.45) {
+    if (formLabel === 'świetna' && chance(veryYoung ? 0.45 : 0.3)) ovrTarget += 1
+    else if (formLabel === 'dobra' && veryYoung && chance(0.25)) ovrTarget += 1
   }
 
   if ((cup.stage === 'winner' || cup.stage === 'final') && rating >= 6.8 && chance(0.55)) ovrTarget += 1
   if (player.position === 'NP' && goals >= 12 && rating >= 6.9) ovrTarget += 1
   if (player.position === 'POM' && goals + assists >= 11 && rating >= 6.9) ovrTarget += 1
-  if (leagueApps < fixturesForPlayer * 0.15 && formLabel !== 'świetna') ovrTarget -= 1
+  if (appRate < 0.15 && formLabel !== 'świetna') ovrTarget -= 1
   if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
 
+  // Ocena trzyma sufit, ale dużo minut u młodego trochę go podnosi
   if (rating > 0) {
-    const ratingCap =
+    let ratingCap =
       rating < 6.5 ? (young ? 1 : 0) : rating < 6.9 ? 1 : rating < 7.25 ? 2 : young ? 3 : 2
+    if (young && appRate >= 0.55 && rating >= 6.55 && rating < 6.9) ratingCap = Math.max(ratingCap, 2)
+    if (veryYoung && appRate >= 0.65 && rating >= 6.7) ratingCap = Math.max(ratingCap, 2)
+    if (veryYoung && appRate >= 0.7 && rating >= 7.0) ratingCap = Math.max(ratingCap, 3)
     ovrTarget = Math.min(ovrTarget, ratingCap)
   }
 
@@ -1028,6 +1062,11 @@ function finalizeSeasonReport(
 
   let narrative = `${getClub(season.clubId).name} kończy sezon na ${place}. miejscu (${myRow.points} pkt, ${myRow.played} meczów). `
   narrative += `Zagrałeś ${leagueApps}/${fixturesForPlayer} meczów ligowych (+ puchar). Forma: ${formLabel}. `
+  if (young && appRate >= 0.55 && finalDelta > 0) {
+    narrative += `Dużo minut u młodego zawodnika — rozwój ↑. `
+  } else if (young && appRate < 0.25 && finalDelta <= 0) {
+    narrative += `Mało gry — trudno o rozwój. `
+  }
   if (finalDelta > 0) narrative += `Overall ↑ +${finalDelta} (${overallBefore} → ${finalOverall}). `
   else if (finalDelta < 0) narrative += `Overall ↓ ${finalDelta} (${overallBefore} → ${finalOverall}). `
   else narrative += `Overall bez zmian (${finalOverall}). `
