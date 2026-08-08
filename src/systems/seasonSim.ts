@@ -158,35 +158,42 @@ function scoreline(att: number, def: number): number {
 
 /**
  * Szansa na występ w danym klubie.
- * Główny czynnik: OVR − strength klubu (równy poziom ≈ ~50%).
- * Dużo słabszy od klubu (np. 52 vs Lech 78) → pojedyncze %.
+ * OVR blisko strength (np. 72 vs Lech 78) ≈ 50%.
+ * Duża luka klas (np. 52 vs 78) → max ~5%.
  */
 export function appearanceChance(player: Player, clubId?: string): number {
   const club = clubId ? getClub(clubId) : null
   const clubStrength = club?.strength ?? player.overall
-
   const gap = player.overall - clubStrength
-  // Poniżej siły klubu spadek jest ostrzejszy niż wzrost powyżej
-  let chance = 0.5 + (gap >= 0 ? gap * 0.025 : gap * 0.038)
 
-  chance += (player.reputation - 20) / 450
-  chance += (player.morale - 50) / 550
-  if (player.age >= 36) chance -= 0.12
-  else if (player.age >= 33) chance -= 0.07
+  let chance: number
+  if (gap >= 0) {
+    chance = 0.55 + gap * 0.024
+  } else if (gap >= -8) {
+    // Lekki deficyt (72 vs 78) → wciąż ~50%
+    chance = 0.55 + gap * 0.0075
+  } else {
+    // Poniżej −8 punkty: ostry spadek
+    const atMinus8 = 0.55 - 8 * 0.0075
+    chance = atMinus8 + (gap + 8) * 0.045
+  }
+
+  chance += (player.reputation - 20) / 500
+  chance += (player.morale - 50) / 600
+  if (player.age >= 36) chance -= 0.1
+  else if (player.age >= 33) chance -= 0.06
   else if (player.age >= 30) chance -= 0.03
-  else if (player.age <= 19) chance += 0.02
+  else if (player.age <= 19) chance += 0.015
 
   if (club) {
     const league = getLeagueForClub(club.id)
-    if (league.tier === 1) chance -= 0.08
-    else if (league.tier === 2) chance -= 0.04
-    else if (league.tier === 3) chance -= 0.015
+    if (league.tier === 1) chance -= 0.01
+    else if (league.tier === 2) chance -= 0.02
+    else if (league.tier === 3) chance -= 0.01
   }
 
-  // Hard floor dla wielkiej różnicy klas (np. III-ligowiec w Lechu)
   if (gap <= -20) chance = Math.min(chance, 0.05)
-  else if (gap <= -15) chance = Math.min(chance, 0.1)
-  else if (gap <= -10) chance = Math.min(chance, 0.22)
+  else if (gap <= -15) chance = Math.min(chance, 0.12)
 
   return Math.max(0.03, Math.min(0.88, chance))
 }
