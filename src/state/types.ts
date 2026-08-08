@@ -1,7 +1,16 @@
 export type Position = 'NP' | 'POM' | 'ŚO' | 'OB'
 export type PreferredFoot = 'left' | 'right' | 'both'
-export type KeyMatchReason = 'derby' | 'title' | 'relegation' | 'cup' | 'finale'
+export type KeyMatchReason = 'promotion' | 'title' | 'relegation' | 'cup' | 'finale'
 export type MatchAction = 'shoot' | 'pass'
+export type FormLabel = 'świetna' | 'dobra' | 'przyzwoita' | 'słaba' | 'fatalna'
+export type CupStage =
+  | 'out'
+  | 'r32'
+  | 'r16'
+  | 'qf'
+  | 'sf'
+  | 'final'
+  | 'winner'
 
 export type Screen =
   | 'home'
@@ -9,8 +18,8 @@ export type Screen =
   | 'hub'
   | 'decision'
   | 'keyMatch'
-  | 'match'
-  | 'transfer'
+  | 'seasonReport'
+  | 'transferChoice'
   | 'seasonEnd'
 
 export interface Attributes {
@@ -54,36 +63,20 @@ export interface ClubStanding {
   points: number
 }
 
+export interface ScorerEntry {
+  name: string
+  clubId: string
+  goals: number
+  isPlayer: boolean
+}
+
 export interface SeasonState {
   year: number
-  week: number
-  maxWeeks: number
   leagueId: string
   clubId: string
   standings: ClubStanding[]
-  playerAppearances: number
-  playerGoals: number
-  playerAssists: number
-  avgRating: number
-  ratingSum: number
-  formSum: number
-  formSamples: number
-}
-
-export interface MatchResult {
-  homeId: string
-  awayId: string
-  homeGoals: number
-  awayGoals: number
-  playerStarted: boolean
-  playerRating: number
-  playerGoals: number
-  playerAssists: number
-  narrative: string
-  interactive: boolean
-  keyReason: KeyMatchReason | null
-  keyLabel: string | null
-  autoBasedOnForm: boolean
+  /** Czy decyzja przed sezonem już podjęta */
+  preseasonDone: boolean
 }
 
 export interface PendingKeyMatch {
@@ -93,6 +86,8 @@ export interface PendingKeyMatch {
   reason: KeyMatchReason
   label: string
   description: string
+  /** Jak wpływa na raport po sukcesie/porażce akcji */
+  stake: 'leaguePoints' | 'cupProgress'
 }
 
 export interface MatchMomentResult {
@@ -105,6 +100,7 @@ export interface TransferOffer {
   wage: number
   signingBonus: number
   message: string
+  leagueId: string
 }
 
 export interface PendingDecision {
@@ -118,23 +114,52 @@ export interface PendingDecision {
   }>
 }
 
+export interface SeasonReport {
+  year: number
+  leagueId: string
+  clubId: string
+  place: number
+  points: number
+  played: number
+  appearances: number
+  possibleAppearances: number
+  goals: number
+  assists: number
+  avgRating: number
+  avgForm: number
+  formLabel: FormLabel
+  overallBefore: number
+  overallAfter: number
+  overallDelta: number
+  cupStage: CupStage
+  cupLabel: string
+  scorers: ScorerEntry[]
+  playerScorerRank: number | null
+  standings: ClubStanding[]
+  narrative: string
+  keyMatchesPending: PendingKeyMatch[]
+  keyMatchesDone: number
+  promotion: boolean
+  relegation: boolean
+  title: boolean
+}
+
 export interface GameState {
   version: number
   screen: Screen
   player: Player | null
   season: SeasonState | null
-  lastMatch: MatchResult | null
   pendingDecision: PendingDecision | null
   pendingKeyMatch: PendingKeyMatch | null
-  pendingTransfer: TransferOffer | null
+  pendingKeyQueue: PendingKeyMatch[]
+  seasonReport: SeasonReport | null
+  transferOffers: TransferOffer[]
   seasonSummary: string | null
   log: string[]
 }
 
-export const SAVE_KEY = 'gra-karier-save-v4'
-export const SAVE_VERSION = 4
-
-export const WEEKS_PER_SEASON = 12
+export const SAVE_KEY = 'gra-karier-save-v5'
+export const SAVE_VERSION = 5
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -146,16 +171,46 @@ export function footLabel(foot: PreferredFoot): string {
   return 'Obunożny'
 }
 
+export function formLabelFromAvg(avg: number): FormLabel {
+  if (avg >= 80) return 'świetna'
+  if (avg >= 65) return 'dobra'
+  if (avg >= 50) return 'przyzwoita'
+  if (avg >= 35) return 'słaba'
+  return 'fatalna'
+}
+
+export function cupStageLabel(stage: CupStage): string {
+  switch (stage) {
+    case 'winner':
+      return 'Zdobywca Pucharu Polski'
+    case 'final':
+      return 'Finał Pucharu Polski'
+    case 'sf':
+      return 'Półfinał PP'
+    case 'qf':
+      return 'Ćwierćfinał PP'
+    case 'r16':
+      return '1/8 PP'
+    case 'r32':
+      return '1/16 PP'
+    case 'out':
+      return 'Odpadnięcie z PP'
+    default:
+      return 'Puchar Polski'
+  }
+}
+
 export function createEmptyState(): GameState {
   return {
     version: SAVE_VERSION,
     screen: 'home',
     player: null,
     season: null,
-    lastMatch: null,
     pendingDecision: null,
     pendingKeyMatch: null,
-    pendingTransfer: null,
+    pendingKeyQueue: [],
+    seasonReport: null,
+    transferOffers: [],
     seasonSummary: null,
     log: [],
   }

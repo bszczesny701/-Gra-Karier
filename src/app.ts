@@ -1,16 +1,16 @@
 import { getClub, getLeague, starterClubOptions } from './data/clubs'
 import {
-  acceptTransfer,
-  applyDecision,
-  continueAfterMatch,
-  openWeekDecision,
-  playerTablePosition,
-  rejectTransfer,
+  acceptOffer,
+  applyPreseasonDecision,
+  openPreseasonDecision,
+  openTransferChoice,
   resolveKeyMatch,
+  runFullSeason,
   sortedStandings,
   startNewCareer,
-  startNextSeason,
+  stayAtClub,
 } from './systems/career'
+import { appearanceChance } from './systems/seasonSim'
 import { mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type { GameState, MatchAction, Position, PreferredFoot } from './state/types'
@@ -32,9 +32,7 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root
     this.state = hasSave() ? loadState() : createEmptyState()
-    if (!this.state.player || !this.state.season) {
-      this.state.screen = 'home'
-    }
+    if (!this.state.player || !this.state.season) this.state.screen = 'home'
   }
 
   start(): void {
@@ -75,17 +73,17 @@ export class App {
         this.root.innerHTML = this.keyMatchHtml()
         this.bindKeyMatch()
         break
-      case 'match':
-        this.root.innerHTML = this.matchHtml()
-        this.bindMatch()
+      case 'seasonReport':
+        this.root.innerHTML = this.seasonReportHtml()
+        this.bindSeasonReport()
         break
-      case 'transfer':
-        this.root.innerHTML = this.transferHtml()
-        this.bindTransfer()
+      case 'transferChoice':
+        this.root.innerHTML = this.transferChoiceHtml()
+        this.bindTransferChoice()
         break
       case 'seasonEnd':
-        this.root.innerHTML = this.seasonEndHtml()
-        this.bindSeasonEnd()
+        this.state.screen = 'hub'
+        this.render()
         break
     }
   }
@@ -107,8 +105,8 @@ export class App {
     return this.shell(`
       <section class="hero-panel">
         <p class="eyebrow">Symulator piłkarza</p>
-        <h1>Twoja kariera zaczyna się tu</h1>
-        <p class="lead">Zwykłe kolejki lecą auto. Derby, puchar i walka o tytuł — rozgrywasz kluczową akcję.</p>
+        <h1>Sezon w jeden ruch</h1>
+        <p class="lead">Symulujesz cały sezon, oglądasz statystyki, Puchar Polski i króla strzelców. Kluczowe mecze rozgrywasz Ty.</p>
         <div class="actions">
           ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
           <button class="btn ${canContinue ? 'ghost' : 'primary'}" id="btn-new">Nowa gra</button>
@@ -133,21 +131,18 @@ export class App {
   }
 
   private createHtml(): string {
-    const options = POSITIONS.map(
-      (p) => `<option value="${p.id}">${p.label}</option>`,
-    ).join('')
+    const options = POSITIONS.map((p) => `<option value="${p.id}">${p.label}</option>`).join('')
     const clubs = starterClubOptions()
       .map(
         (c) =>
           `<option value="${c.clubId}" data-min="${c.minOverall}">${c.label} (min OVR ${c.minOverall})</option>`,
       )
       .join('')
-
     return this.shell(
       `
       <section class="panel">
         <h2>Nowy zawodnik</h2>
-        <p class="muted">Ustaw profil startowy. Wyższy overall otwiera I ligę i Ekstraklasę.</p>
+        <p class="muted">Ustaw profil. Wyższy overall = I liga / Ekstraklasa.</p>
         <label class="field"><span>Imię i nazwisko</span>
           <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" /></label>
         <label class="field"><span>Pozycja</span><select id="player-pos">${options}</select></label>
@@ -159,7 +154,7 @@ export class App {
           </select></label>
         <label class="field"><span>Wiek: <strong id="age-val">17</strong></span>
           <input id="player-age" type="range" min="16" max="22" value="17" /></label>
-        <label class="field"><span>Overall startowy: <strong id="ovr-val">52</strong></span>
+        <label class="field"><span>Overall: <strong id="ovr-val">52</strong></span>
           <input id="player-ovr" type="range" min="45" max="68" value="52" /></label>
         <label class="field"><span>Klub startowy</span><select id="player-club">${clubs}</select></label>
         <p class="hint" id="club-hint"></p>
@@ -167,8 +162,7 @@ export class App {
           <button class="btn primary" id="btn-start">Rozpocznij karierę</button>
           <button class="btn ghost" id="btn-back">Wróć</button>
         </div>
-      </section>
-    `,
+      </section>`,
       'Tworzenie',
     )
   }
@@ -181,15 +175,14 @@ export class App {
     const ovrVal = this.root.querySelector('#ovr-val')!
     const clubHint = this.root.querySelector('#club-hint')!
 
-    const syncClubAvailability = () => {
+    const sync = () => {
       const ovr = Number(ovrInput.value)
       ovrVal.textContent = String(ovr)
       let firstValid: string | null = null
       for (const opt of Array.from(clubSelect.options)) {
         const min = Number(opt.dataset.min || 45)
-        const ok = ovr >= min
-        opt.disabled = !ok
-        if (ok && !firstValid) firstValid = opt.value
+        opt.disabled = ovr < min
+        if (ovr >= min && !firstValid) firstValid = opt.value
       }
       if (clubSelect.selectedOptions[0]?.disabled && firstValid) clubSelect.value = firstValid
       const min = Number(clubSelect.selectedOptions[0]?.dataset.min || 45)
@@ -197,18 +190,17 @@ export class App {
         ovr < min
           ? 'Podnieś overall, żeby wybrać ten klub.'
           : min >= 64
-            ? 'Start w Ekstraklasie — najwyższy poziom w Polsce.'
+            ? 'Start w Ekstraklasie.'
             : min >= 56
-              ? 'Start w I lidze — krok od Ekstraklasy.'
-              : 'Klasyczny start w III lidze.'
+              ? 'Start w I lidze.'
+              : 'Start w III lidze.'
     }
-
     ageInput.addEventListener('input', () => {
       ageVal.textContent = ageInput.value
     })
-    ovrInput.addEventListener('input', syncClubAvailability)
-    clubSelect.addEventListener('change', syncClubAvailability)
-    syncClubAvailability()
+    ovrInput.addEventListener('input', sync)
+    clubSelect.addEventListener('change', sync)
+    sync()
 
     this.root.querySelector('#btn-back')?.addEventListener('click', () => {
       this.go(() => {
@@ -216,21 +208,19 @@ export class App {
       })
     })
     this.root.querySelector('#btn-start')?.addEventListener('click', () => {
-      const name = (this.root.querySelector('#player-name') as HTMLInputElement).value
-      const position = (this.root.querySelector('#player-pos') as HTMLSelectElement)
-        .value as Position
-      const preferredFoot = (this.root.querySelector('#player-foot') as HTMLSelectElement)
-        .value as PreferredFoot
-      const age = Number(ageInput.value)
       const overall = Number(ovrInput.value)
-      const clubId = clubSelect.value
       const min = Number(clubSelect.selectedOptions[0]?.dataset.min || 45)
-      if (overall < min) {
-        clubHint.textContent = 'Ten klub wymaga wyższego overall.'
-        return
-      }
+      if (overall < min) return
       this.go(() =>
-        startNewCareer(this.state, { name, position, preferredFoot, age, overall, clubId }),
+        startNewCareer(this.state, {
+          name: (this.root.querySelector('#player-name') as HTMLInputElement).value,
+          position: (this.root.querySelector('#player-pos') as HTMLSelectElement).value as Position,
+          preferredFoot: (this.root.querySelector('#player-foot') as HTMLSelectElement)
+            .value as PreferredFoot,
+          age: Number(ageInput.value),
+          overall,
+          clubId: clubSelect.value,
+        }),
       )
     })
   }
@@ -240,18 +230,9 @@ export class App {
     const s = this.state.season!
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
-    const place = playerTablePosition(s)
-    const avgForm = s.formSamples ? Math.round(s.formSum / s.formSamples) : p.form
-    const table = sortedStandings(s)
-      .map((row, i) => {
-        const c = getClub(row.clubId)
-        const mine = row.clubId === s.clubId ? ' mine' : ''
-        return `<tr class="${mine}"><td>${i + 1}</td><td>${c.short}</td><td>${row.played}</td><td>${row.points}</td></tr>`
-      })
-      .join('')
-
+    const chance = Math.round(appearanceChance(p) * 100)
     const log = this.state.log
-      .slice(0, 5)
+      .slice(0, 4)
       .map((l) => `<li>${l}</li>`)
       .join('')
 
@@ -265,43 +246,36 @@ export class App {
           </div>
           <div class="money">${p.money} zł</div>
         </div>
-        <p class="meta">${league.name} · kolejka ${s.week}/${s.maxWeeks} · miejsce ${place} · śr. forma ${avgForm}</p>
+        <p class="meta">${league.name} · sezon ${s.year} · szansa na grę ≈ ${chance}%</p>
         <div class="stat-grid">
           <div><span>OVR</span><strong>${p.overall}</strong></div>
+          <div><span>Forma</span><strong>${p.form}</strong></div>
+          <div><span>Morale</span><strong>${p.morale}</strong></div>
+          <div><span>Rep.</span><strong>${p.reputation}</strong></div>
           <div><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
           <div><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
           <div><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
           <div><span>Obrona</span><strong>${p.attrs.defending}</strong></div>
-          <div><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
-          <div><span>Forma</span><strong>${p.form}</strong></div>
-          <div><span>Morale</span><strong>${p.morale}</strong></div>
         </div>
       </section>
 
       <section class="panel">
-        <h3>Tydzień ${s.week}</h3>
-        <p class="muted">Decyzja, potem mecz. Interaktywnie tylko derby, puchar i walka o stawkę.</p>
+        <h3>Sezon ${s.year}</h3>
+        <p class="muted">Słaba forma i niski OVR = mniej meczów. Po symulacji możesz dostać 1–2 kluczowe mecze (awans, puchar, mistrzostwo).</p>
         <div class="actions">
-          <button class="btn primary" id="btn-week">Przejdź do decyzji</button>
+          ${
+            s.preseasonDone
+              ? ''
+              : `<button class="btn ghost" id="btn-pre">Decyzja przed sezonem</button>`
+          }
+          <button class="btn primary" id="btn-season">Dalej — rozegraj sezon</button>
         </div>
       </section>
 
       <section class="panel">
-        <h3>Tabela</h3>
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>#</th><th>Klub</th><th>M</th><th>Pkt</th></tr></thead>
-            <tbody>${table}</tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h3>Ostatnie wydarzenia</h3>
+        <h3>Dziennik</h3>
         <ul class="log">${log || '<li class="muted">Brak wpisów</li>'}</ul>
-        <div class="actions">
-          <button class="btn ghost danger" id="btn-reset">Nowa gra</button>
-        </div>
+        <div class="actions"><button class="btn ghost danger" id="btn-reset">Nowa gra</button></div>
       </section>
     `,
       club.short,
@@ -309,15 +283,40 @@ export class App {
   }
 
   private bindHub(): void {
-    this.root.querySelector('#btn-week')?.addEventListener('click', () => {
-      this.go(() => openWeekDecision(this.state))
+    this.root.querySelector('#btn-pre')?.addEventListener('click', () => {
+      this.go(() => openPreseasonDecision(this.state))
+    })
+    this.root.querySelector('#btn-season')?.addEventListener('click', () => {
+      this.go(() => runFullSeason(this.state))
     })
     this.root.querySelector('#btn-reset')?.addEventListener('click', () => {
-      if (!confirm('Na pewno zacząć od nowa? Zapis zostanie usunięty.')) return
+      if (!confirm('Na pewno zacząć od nowa?')) return
       clearSave()
       this.state = createEmptyState()
       this.state.screen = 'home'
       this.render()
+    })
+  }
+
+  private decisionHtml(): string {
+    const d = this.state.pendingDecision!
+    const choices = d.choices
+      .map(
+        (c) =>
+          `<button class="choice" data-choice="${c.id}"><strong>${c.label}</strong><span>${c.hint}</span></button>`,
+      )
+      .join('')
+    return this.shell(
+      `<section class="panel"><h2>${d.title}</h2><p>${d.description}</p><div class="choices">${choices}</div></section>`,
+      'Przed sezonem',
+    )
+  }
+
+  private bindDecision(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => applyPreseasonDecision(this.state, btn.dataset.choice!))
+      })
     })
   }
 
@@ -332,26 +331,22 @@ export class App {
           <p class="eyebrow">${k.label}</p>
           <h2>${home.name} vs ${away.name}</h2>
           <p>${k.description}</p>
-          <p class="muted">Wybierz kluczową akcję:</p>
+          <p class="muted">Wybierz kluczową akcję sezonu:</p>
           <div class="actions">
             <button class="btn primary" id="btn-shoot">Strzał na bramkę</button>
             <button class="btn ghost" id="btn-pass">Podanie do kolegi</button>
           </div>
-        </section>
-      `,
+        </section>`,
         'Kluczowy mecz',
       )
     }
-
     return this.shell(
       `
       <section class="panel">
-        <p class="eyebrow">${k.label} · ${this.selectedAction === 'shoot' ? 'Strzał' : 'Podanie'}</p>
-        <h2>Twoja akcja</h2>
-        <p class="muted">Naciągnij piłkę i puść w stronę celu.</p>
+        <p class="eyebrow">${k.label}</p>
+        <h2>${this.selectedAction === 'shoot' ? 'Strzał' : 'Podanie'}</h2>
         <div class="ball-wrap"><canvas id="moment-canvas"></canvas></div>
-      </section>
-    `,
+      </section>`,
       'Akcja',
     )
   }
@@ -368,125 +363,83 @@ export class App {
       })
       return
     }
-
     const action = this.selectedAction
     const canvas = this.root.querySelector('#moment-canvas') as HTMLCanvasElement
     this.cleanupMoment = mountMatchMoment(canvas, action, (score) => {
-      const chosen = action
       this.selectedAction = null
-      this.go(() => resolveKeyMatch(this.state, { action: chosen, score }))
+      this.go(() => resolveKeyMatch(this.state, { action, score }))
     })
   }
 
-  private decisionHtml(): string {
-    const d = this.state.pendingDecision!
-    const choices = d.choices
+  private seasonReportHtml(): string {
+    const r = this.state.seasonReport!
+    const club = getClub(r.clubId)
+    const league = getLeague(r.leagueId)
+    const table = sortedStandings({ standings: r.standings })
+      .map((row, i) => {
+        const c = getClub(row.clubId)
+        const mine = row.clubId === r.clubId ? ' mine' : ''
+        return `<tr class="${mine}"><td>${i + 1}</td><td>${c.short}</td><td>${row.played}</td><td>${row.points}</td></tr>`
+      })
+      .join('')
+    const scorers = r.scorers
       .map(
-        (c) => `
-        <button class="choice" data-choice="${c.id}">
-          <strong>${c.label}</strong>
-          <span>${c.hint}</span>
-        </button>`,
+        (s, i) =>
+          `<tr class="${s.isPlayer ? 'mine' : ''}"><td>${i + 1}</td><td>${s.name}</td><td>${getClub(s.clubId).short}</td><td>${s.goals}</td></tr>`,
       )
       .join('')
-    return this.shell(
-      `<section class="panel"><h2>${d.title}</h2><p>${d.description}</p><div class="choices">${choices}</div></section>`,
-      'Decyzja',
-    )
-  }
-
-  private bindDecision(): void {
-    this.root.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.go(() => applyDecision(this.state, btn.dataset.choice!))
-      })
-    })
-  }
-
-  private matchHtml(): string {
-    const m = this.state.lastMatch!
-    const home = getClub(m.homeId)
-    const away = getClub(m.awayId)
-    const s = this.state.season!
-    const badge = m.interactive
-      ? `<p class="eyebrow">${m.keyLabel ?? 'Kluczowy mecz'}</p>`
-      : `<p class="eyebrow">Mecz automatyczny</p>`
+    const ovrTxt =
+      r.overallDelta > 0
+        ? `+${r.overallDelta} (${r.overallBefore} → ${r.overallAfter})`
+        : r.overallDelta < 0
+          ? `${r.overallDelta} (${r.overallBefore} → ${r.overallAfter})`
+          : `bez zmian (${r.overallAfter})`
 
     return this.shell(
       `
-      <section class="panel match-panel">
-        ${badge}
-        <p class="meta">Kolejka ${s.week}</p>
-        <div class="scoreboard">
-          <div class="side"><span class="club">${home.name}</span><strong>${m.homeGoals}</strong></div>
-          <div class="vs">:</div>
-          <div class="side"><strong>${m.awayGoals}</strong><span class="club">${away.name}</span></div>
-        </div>
-        <p class="narrative">${m.narrative}</p>
+      <section class="panel">
+        <p class="eyebrow">${league.name} · ${r.year}</p>
+        <h2>Podsumowanie sezonu</h2>
+        <p>${r.narrative}</p>
         <div class="stat-grid compact">
-          <div><span>Występ</span><strong>${m.playerStarted ? 'Tak' : 'Ławka'}</strong></div>
-          <div><span>Ocena</span><strong>${m.playerStarted ? m.playerRating.toFixed(1) : '—'}</strong></div>
-          <div><span>Gole</span><strong>${m.playerGoals}</strong></div>
-          <div><span>Asysty</span><strong>${m.playerAssists}</strong></div>
-          <div><span>Forma</span><strong>${this.state.player!.form}</strong></div>
-          <div><span>OVR</span><strong>${this.state.player!.overall}</strong></div>
+          <div><span>Miejsce</span><strong>${r.place}</strong></div>
+          <div><span>Punkty</span><strong>${r.points}</strong></div>
+          <div><span>Występy</span><strong>${r.appearances}/${r.possibleAppearances}</strong></div>
+          <div><span>Gole</span><strong>${r.goals}</strong></div>
+          <div><span>Asysty</span><strong>${r.assists}</strong></div>
+          <div><span>Śr. ocena</span><strong>${r.avgRating || '—'}</strong></div>
+          <div><span>Forma</span><strong>${r.formLabel}</strong></div>
+          <div><span>OVR</span><strong>${ovrTxt}</strong></div>
         </div>
-        <div class="actions"><button class="btn primary" id="btn-after-match">Dalej</button></div>
+        <p class="meta">${r.cupLabel}${r.playerScorerRank ? ` · Król strzelców: Twoje miejsce #${r.playerScorerRank}` : ''}</p>
       </section>
-    `,
-      'Mecz',
-    )
-  }
 
-  private bindMatch(): void {
-    this.root.querySelector('#btn-after-match')?.addEventListener('click', () => {
-      this.go(() => continueAfterMatch(this.state))
-    })
-  }
-
-  private transferHtml(): string {
-    const offer = this.state.pendingTransfer!
-    const club = getClub(offer.clubId)
-    return this.shell(
-      `
       <section class="panel">
-        <h2>Oferta transferowa</h2>
-        <p>${offer.message}</p>
-        <div class="offer-card">
-          <h3>${club.name}</h3>
-          <p>Pensja tygodniowa ok. <strong>${offer.wage} zł</strong></p>
-          <p>Premia za podpis: <strong>${offer.signingBonus} zł</strong></p>
-        </div>
-        <div class="actions">
-          <button class="btn primary" id="btn-accept">Akceptuj</button>
-          <button class="btn ghost" id="btn-reject">Odrzuć</button>
+        <h3>Król strzelców — ${league.name}</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>#</th><th>Zawodnik</th><th>Klub</th><th>G</th></tr></thead>
+            <tbody>${scorers}</tbody>
+          </table>
         </div>
       </section>
-    `,
-      'Transfer',
-    )
-  }
 
-  private bindTransfer(): void {
-    this.root.querySelector('#btn-accept')?.addEventListener('click', () => {
-      this.go(() => acceptTransfer(this.state))
-    })
-    this.root.querySelector('#btn-reject')?.addEventListener('click', () => {
-      this.go(() => rejectTransfer(this.state))
-    })
-  }
-
-  private seasonEndHtml(): string {
-    const s = this.state.season!
-    const club = getClub(s.clubId)
-    return this.shell(
-      `
       <section class="panel">
-        <h2>Koniec sezonu</h2>
-        <p>${this.state.seasonSummary ?? ''}</p>
-        <p class="muted">Następny sezon: ${club.name} (${getLeague(s.leagueId).name}).</p>
+        <h3>Tabela — ${club.name}</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>#</th><th>Klub</th><th>M</th><th>Pkt</th></tr></thead>
+            <tbody>${table}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>Co dalej?</h3>
+        <p class="muted">Zostań w klubie albo zobacz oferty transferowe (min. 2).</p>
         <div class="actions">
-          <button class="btn primary" id="btn-next-season">Rozpocznij kolejny sezon</button>
+          <button class="btn primary" id="btn-stay">Zostań w ${club.short}</button>
+          <button class="btn ghost" id="btn-leave">Szukaj transferu</button>
         </div>
       </section>
     `,
@@ -494,9 +447,49 @@ export class App {
     )
   }
 
-  private bindSeasonEnd(): void {
-    this.root.querySelector('#btn-next-season')?.addEventListener('click', () => {
-      this.go(() => startNextSeason(this.state))
+  private bindSeasonReport(): void {
+    this.root.querySelector('#btn-stay')?.addEventListener('click', () => {
+      this.go(() => stayAtClub(this.state))
+    })
+    this.root.querySelector('#btn-leave')?.addEventListener('click', () => {
+      this.go(() => openTransferChoice(this.state))
+    })
+  }
+
+  private transferChoiceHtml(): string {
+    const offers = this.state.transferOffers
+    const cards = offers
+      .map((o) => {
+        const c = getClub(o.clubId)
+        const l = getLeague(o.leagueId)
+        return `
+          <button class="choice" data-offer="${o.clubId}">
+            <strong>${c.name}</strong>
+            <span>${l.name} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł</span>
+            <span>${o.message}</span>
+          </button>`
+      })
+      .join('')
+    return this.shell(
+      `
+      <section class="panel">
+        <h2>Oferty transferowe</h2>
+        <p class="muted">Wybierz klub albo wróć i zostań.</p>
+        <div class="choices">${cards}</div>
+        <div class="actions"><button class="btn ghost" id="btn-back-stay">Zostań jednak</button></div>
+      </section>`,
+      'Transfer',
+    )
+  }
+
+  private bindTransferChoice(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-offer]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => acceptOffer(this.state, btn.dataset.offer!))
+      })
+    })
+    this.root.querySelector('#btn-back-stay')?.addEventListener('click', () => {
+      this.go(() => stayAtClub(this.state))
     })
   }
 }
