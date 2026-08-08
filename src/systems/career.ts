@@ -12,6 +12,7 @@ import { CAREER_EVENTS, pickEvent, type ChoiceEffect } from '../data/events'
 import {
   CAREER_OVR_CAP,
   clamp,
+  shouldRetire,
   type CreateCareerOptions,
   type GameState,
   type MatchMomentResult,
@@ -23,7 +24,10 @@ import { pushLog } from '../state/gameState'
 import {
   applyKeyMatchToReport,
   appearanceChance,
-  simulateFullSeason,
+  describeRival,
+  makeRival,
+  simulateFirstHalf,
+  simulateSecondHalf,
 } from './seasonSim'
 import { playerTablePosition, sortedStandings } from './standings'
 import {
@@ -36,24 +40,40 @@ import {
 
 export { playerTablePosition, sortedStandings }
 
+function trackClub(player: Player, clubId: string): void {
+  if (!player.clubsPlayed.includes(clubId)) player.clubsPlayed.push(clubId)
+}
+
+function bumpPeak(player: Player): void {
+  if (player.overall > player.peakOverall) player.peakOverall = player.overall
+}
+
 export function createPlayer(options: CreateCareerOptions): Player {
   const overall = clamp(options.overall, 45, 70)
   const attrs = attrsFromOverall(options.position, overall)
   const clubId = options.clubId ?? STARTER_CLUB_ID
   const league = getLeagueForClub(clubId)
   const club = getClub(clubId)
+  const ovr = calcOverall(attrs, options.position)
   return {
     name: options.name.trim() || 'Zawodnik',
     age: clamp(options.age, 16, 22),
     position: options.position,
     preferredFoot: options.preferredFoot,
-    overall: calcOverall(attrs, options.position),
+    overall: ovr,
     attrs,
     morale: 62,
     form: 52,
     reputation: reputationFromStart(overall, league.tier),
     money: moneyFromStart(overall, club.wage),
     injury: null,
+    contract: { clubId, yearsLeft: 2, wage: Math.max(500, club.wage) },
+    loan: null,
+    peakOverall: ovr,
+    clubsPlayed: [],
+    seasonsPlayed: 0,
+    titles: 0,
+    retired: false,
   }
 }
 
@@ -62,11 +82,11 @@ export function createSeason(
   leagueId: string,
   year: number,
   inject: 'promote' | 'relegate' | 'none' = 'none',
+  strengthMods: Record<string, number> = {},
 ): SeasonState {
   const league = getLeague(leagueId)
   let clubIds = [...league.clubIds]
 
-  // Zostajesz w tym samym klubie przy awansie/spadku — wstawiamy go do nowej ligi
   if (!clubIds.includes(clubId)) {
     const byStrength = [...clubIds].sort(
       (a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength,
@@ -95,16 +115,37 @@ export function createSeason(
     preseasonDone: false,
     midTransferDone: false,
     injuryCare: 0,
+    rival: makeRival(clubId, year, strengthMods),
+    rivalPressure: 0,
+    phase: 'ready',
+    halfStats: null,
   }
 }
 
-/** Szansa na grę w danym klubie (start / UI). */
 export function estimatePlayChance(
   player: Player,
   clubId: string,
   strengthMods: Record<string, number> = {},
+  season?: SeasonState | null,
 ): number {
-  return Math.round(appearanceChance(player, clubId, strengthMods) * 100)
+  return Math.round(
+    appearanceChance(
+      player,
+      clubId,
+      strengthMods,
+      season?.rival,
+      season?.rivalPressure ?? 0,
+    ) * 100,
+  )
+}
+
+function contractYearsForOffer(leagueId: string, kind: 'transfer' | 'loan' = 'transfer'): number {
+  if (kind === 'loan') return 0
+  const tier = getLeague(leagueId).tier
+  if (tier === 1) return Math.random() < 0.55 ? 3 : 2
+  if (tier === 2) return Math.random() < 0.45 ? 3 : 2
+  if (tier === 3) return 2
+  return 2
 }
 
 export function generateStartingOffers(player: Player): TransferOffer[] {
@@ -119,19 +160,20 @@ export function generateStartingOffers(player: Player): TransferOffer[] {
       wage: Math.max(500, wage),
       signingBonus: Math.round(wage * 1.5 + player.overall * 12),
       playChance,
+      kind: 'transfer' as const,
+      contractYears: 2,
       message:
         playChance >= 65
-          ? 'Trener liczy na Ciebie w pierwszym składzie.'
+          ? 'Trener liczy na Ciebie w pierwszym składzie. Kontrakt 2 lata.'
           : playChance >= 45
-            ? 'Szansa na regularne minuty, jeśli pokażesz się na treningu.'
+            ? 'Szansa na regularne minuty. Kontrakt 2 lata.'
             : playChance >= 30
-              ? 'Konkurencja o miejsce — start raczej z rotacji.'
-              : 'Trudno o „11” — raczej ławka i wejścia z rezerw.',
+              ? 'Konkurencja o miejsce — start z rotacji. Kontrakt 2 lata.'
+              : 'Raczej ławka. Kontrakt 2 lata.',
     }
   })
 }
 
-/** Tworzy zawodnika i pokazuje 4 oferty z III ligi. */
 export function draftNewCareer(
   state: GameState,
   options: Omit<CreateCareerOptions, 'clubId'>,
@@ -143,6 +185,8 @@ export function draftNewCareer(
   state.pendingKeyMatch = null
   state.pendingKeyQueue = []
   state.seasonReport = null
+  state.winterSnapshot = null
+  state.careerSummary = null
   state.transferOffers = generateStartingOffers(state.player)
   state.seasonSummary = null
   state.log = []
@@ -159,17 +203,24 @@ export function acceptStartingOffer(state: GameState, clubId: string): void {
   player.money = moneyFromStart(player.overall, club.wage) + offer.signingBonus
   player.reputation = reputationFromStart(player.overall, league.tier)
   player.morale = clamp(player.morale + 4, 1, 100)
+  player.contract = {
+    clubId,
+    yearsLeft: offer.contractYears ?? 2,
+    wage: offer.wage,
+  }
+  player.loan = null
+  trackClub(player, clubId)
+  bumpPeak(player)
 
-  state.season = createSeason(clubId, league.id, 2026)
+  state.season = createSeason(clubId, league.id, 2026, 'none', state.clubStrengthMods ?? {})
   state.transferOffers = []
   pushLog(
     state,
-    `Start w ${club.name} (III liga). Szansa na grę ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
+    `Start w ${club.name} (III liga). Kontrakt ${player.contract.yearsLeft} lata. Szansa ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
   )
   state.screen = 'hub'
 }
 
-/** @deprecated retained for tests — prefer draftNewCareer + acceptStartingOffer */
 export function startNewCareer(state: GameState, options: CreateCareerOptions): void {
   draftNewCareer(state, options)
   const preferred = options.clubId
@@ -179,10 +230,40 @@ export function startNewCareer(state: GameState, options: CreateCareerOptions): 
   if (pick) acceptStartingOffer(state, pick)
 }
 
-function birthdayAndAge(state: GameState, player: Player): void {
+function finishCareer(state: GameState, reason: string): void {
+  const player = state.player!
+  player.retired = true
+  state.careerSummary = {
+    name: player.name,
+    seasonsPlayed: player.seasonsPlayed,
+    peakOverall: player.peakOverall,
+    clubsCount: player.clubsPlayed.length,
+    titles: player.titles,
+    finalAge: player.age,
+    finalOverall: player.overall,
+    narrative: `${reason} Kariera: ${player.seasonsPlayed} sezonów, szczyt OVR ${player.peakOverall}, ${player.clubsPlayed.length} klubów, tytułów: ${player.titles}.`,
+  }
+  state.season = null
+  state.seasonReport = null
+  state.winterSnapshot = null
+  state.transferOffers = []
+  state.pendingDecision = null
+  state.pendingKeyMatch = null
+  state.pendingKeyQueue = []
+  state.screen = 'careerEnd'
+  pushLog(state, `Koniec kariery: ${reason}`)
+}
+
+function birthdayAndAge(state: GameState, player: Player): boolean {
   player.age += 1
   const note = applyAgingDecline(player)
   if (note) pushLog(state, note)
+  bumpPeak(player)
+  if (shouldRetire(player)) {
+    finishCareer(state, `W wieku ${player.age} lat (OVR ${player.overall}) kończysz karierę.`)
+    return true
+  }
+  return false
 }
 
 function applyEffect(player: Player, effect: ChoiceEffect): void {
@@ -207,10 +288,11 @@ function applyEffect(player: Player, effect: ChoiceEffect): void {
       player.attrs.stamina = clamp(player.attrs.stamina + effect.delta)
       break
     case 'injuryCare':
-      // obsługiwane w applyPreseasonDecision na sezonie
+    case 'rivalPressure':
       break
   }
   player.overall = Math.min(CAREER_OVR_CAP, calcOverall(player.attrs, player.position))
+  bumpPeak(player)
 }
 
 export function openPreseasonDecision(state: GameState): void {
@@ -241,10 +323,12 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
   if (!choice) return
   for (const effect of choice.effects) {
     if (effect.key === 'injuryCare') {
-      state.season.injuryCare = clamp(
-        (state.season.injuryCare ?? 0) + effect.delta,
-        0,
-        5,
+      state.season.injuryCare = clamp((state.season.injuryCare ?? 0) + effect.delta, 0, 5)
+    } else if (effect.key === 'rivalPressure') {
+      state.season.rivalPressure = clamp(
+        (state.season.rivalPressure ?? 0) + effect.delta,
+        -3,
+        3,
       )
     } else {
       applyEffect(player, effect)
@@ -253,37 +337,75 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
   const care = state.season.injuryCare ?? 0
   pushLog(
     state,
-    `${pending.speaker}: odpowiedź — „${choice.label}”${care > 0 ? ` · ochrona przed urazem ${care}/5` : ''}`,
+    `${pending.speaker}: „${choice.label}”${care > 0 ? ` · ochrona urazu ${care}/5` : ''}${
+      state.season.rivalPressure ? ` · rywal ${state.season.rivalPressure > 0 ? '+' : ''}${state.season.rivalPressure}` : ''
+    }`,
   )
   state.pendingDecision = null
   state.season.preseasonDone = true
   state.screen = 'hub'
 }
 
-/** Symuluje cały sezon, potem ewentualne kluczowe mecze. */
-export function runFullSeason(state: GameState): void {
+/** 1. połowa → przerwa zimowa */
+export function runFirstHalf(state: GameState): void {
   const player = state.player!
   const season = state.season!
-  const report = simulateFullSeason(player, season, state.clubStrengthMods ?? {})
+  const snap = simulateFirstHalf(player, season, state.clubStrengthMods ?? {})
+  state.winterSnapshot = snap
+  state.season = { ...season, phase: 'firstHalfDone', midTransferDone: true }
+  state.screen = 'winterBreak'
+  pushLog(
+    state,
+    `Przerwa zimowa: ${snap.place}. miejsce, ${snap.appearances} meczów, ${snap.goals} G. ${snap.rivalNote}`,
+  )
+}
+
+/** 2. połowa → kluczowe mecze / raport */
+export function runSecondHalf(state: GameState): void {
+  const player = state.player!
+  const season = state.season!
+  const report = simulateSecondHalf(player, season, state.clubStrengthMods ?? {})
   state.seasonReport = report
+  state.winterSnapshot = null
   state.season = {
     ...season,
     standings: report.standings,
+    phase: 'ready',
+    halfStats: null,
     preseasonDone: true,
     midTransferDone: true,
   }
+
+  player.seasonsPlayed += 1
+  bumpPeak(player)
+  trackClub(player, report.clubId)
+  if (report.title) player.titles += 1
 
   if (report.keyMatchesPending.length) {
     state.pendingKeyQueue = [...report.keyMatchesPending]
     state.pendingKeyMatch = state.pendingKeyQueue.shift() ?? null
     state.screen = 'keyMatch'
-    pushLog(state, `Sezon rozegrany. Kluczowe mecze: ${report.keyMatchesPending.length}.`)
+    pushLog(state, `Sezon domknięty. Kluczowe mecze: ${report.keyMatchesPending.length}.`)
   } else {
     state.pendingKeyMatch = null
     state.pendingKeyQueue = []
     state.screen = 'seasonReport'
-    pushLog(state, `Sezon ${report.year} zakończony — ${report.place}. miejsce.`)
+    pushLog(state, `Sezon ${report.year} — ${report.place}. miejsce.`)
   }
+}
+
+/** Hub: start sezonu = zawsze 1. połowa (zima potem). */
+export function runFullSeason(state: GameState): void {
+  const season = state.season!
+  if (season.phase === 'firstHalfDone' && season.halfStats) {
+    runSecondHalf(state)
+    return
+  }
+  runFirstHalf(state)
+}
+
+export function continueAfterWinter(state: GameState): void {
+  runSecondHalf(state)
 }
 
 export function resolveKeyMatch(state: GameState, moment: MatchMomentResult): void {
@@ -297,18 +419,15 @@ export function resolveKeyMatch(state: GameState, moment: MatchMomentResult): vo
 
   const next = state.pendingKeyQueue.shift() ?? null
   state.pendingKeyMatch = next
-  if (next) {
-    state.screen = 'keyMatch'
-  } else {
-    state.screen = 'seasonReport'
-  }
+  if (next) state.screen = 'keyMatch'
+  else state.screen = 'seasonReport'
 }
 
 export function generateTransferOffers(state: GameState): TransferOffer[] {
   const player = state.player!
   const report = state.seasonReport!
   const currentLeague = getLeague(report.leagueId)
-  return buildOffersForPlayer(player, report.clubId, currentLeague, {
+  const offers = buildOffersForPlayer(player, report.clubId, currentLeague, {
     goals: report.goals,
     form: report.formLabel,
     place: report.place,
@@ -316,26 +435,111 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
     cupBoost: report.cupStage === 'winner' || report.cupStage === 'final',
     forceHigher: player.overall >= ovrThresholdForTier(currentLeague.tier - 1),
   })
+  const playPct = estimatePlayChance(player, report.clubId, state.clubStrengthMods ?? {})
+  if (playPct < 30 || !report.contractRenewed) {
+    offers.push(...generateLoanOffers(state, report.clubId, currentLeague.id, false))
+  }
+  return dedupeOffers(offers).slice(0, 5)
 }
 
-/** Oferty w trakcie sezonu — głównie wyższe ligi przy wysokim OVR. */
 export function generateMidSeasonOffers(state: GameState): TransferOffer[] {
   const player = state.player!
   const season = state.season!
   const currentLeague = getLeague(season.leagueId)
   const higher = leagueByTier(currentLeague.tier - 1)
-  if (!higher) return []
-  if (player.overall < ovrThresholdForTier(higher.tier)) return []
+  const offers: TransferOffer[] = []
 
-  return buildOffersForPlayer(player, season.clubId, currentLeague, {
-    goals: 0,
-    form: 'przyzwoita',
-    place: Math.ceil(currentLeague.clubIds.length / 2),
-    avgRating: 6.5,
-    cupBoost: false,
-    forceHigher: true,
-    midSeason: true,
+  if (higher && player.overall >= ovrThresholdForTier(higher.tier)) {
+    offers.push(
+      ...buildOffersForPlayer(player, season.clubId, currentLeague, {
+        goals: state.winterSnapshot?.goals ?? 0,
+        form: 'przyzwoita',
+        place: state.winterSnapshot?.place ?? Math.ceil(currentLeague.clubIds.length / 2),
+        avgRating: state.winterSnapshot?.avgRating ?? 6.5,
+        cupBoost: false,
+        forceHigher: true,
+        midSeason: true,
+      }),
+    )
+  } else {
+    offers.push(
+      ...buildOffersForPlayer(player, season.clubId, currentLeague, {
+        goals: state.winterSnapshot?.goals ?? 0,
+        form: 'przyzwoita',
+        place: Math.ceil(currentLeague.clubIds.length / 2),
+        avgRating: 6.5,
+        cupBoost: false,
+        forceHigher: false,
+        midSeason: true,
+      }),
+    )
+  }
+
+  const playPct = estimatePlayChance(player, season.clubId, state.clubStrengthMods ?? {}, season)
+  if (playPct < 35) {
+    offers.push(...generateLoanOffers(state, season.clubId, season.leagueId, true))
+  }
+
+  return dedupeOffers(offers).slice(0, 4)
+}
+
+export function generateLoanOffers(
+  state: GameState,
+  currentClubId: string,
+  currentLeagueId: string,
+  winter: boolean,
+): TransferOffer[] {
+  const player = state.player!
+  if (player.loan) return []
+  const currentLeague = getLeague(currentLeagueId)
+  const lower = leagueByTier(currentLeague.tier + 1)
+  const targets: string[] = []
+  const pool = [
+    ...currentLeague.clubIds.filter((id) => id !== currentClubId),
+    ...(lower?.clubIds ?? []),
+  ]
+  const sorted = [...pool].sort((a, b) => {
+    const ga = player.overall - CLUBS[a]!.strength
+    const gb = player.overall - CLUBS[b]!.strength
+    return gb - ga
   })
+  for (const id of sorted) {
+    const pct = estimatePlayChance(player, id, state.clubStrengthMods ?? {})
+    if (pct >= 40) {
+      targets.push(id)
+      if (targets.length >= 2) break
+    }
+  }
+  return targets.map((clubId) => {
+    const club = getClub(clubId)
+    const league = getLeagueForClub(clubId)
+    const playChance = Math.min(78, estimatePlayChance(player, clubId, state.clubStrengthMods ?? {}) + 12)
+    const wage = Math.round(club.wage * 0.75)
+    return {
+      clubId,
+      leagueId: league.id,
+      wage,
+      signingBonus: Math.round(wage * 0.8),
+      playChance,
+      kind: 'loan' as const,
+      contractYears: 0,
+      message: winter
+        ? `Wypożyczenie do końca sezonu. Więcej minut (≈${playChance}%), wracasz do ${getClub(currentClubId).name}.`
+        : `Wypożyczenie na sezon. Szansa gry ≈${playChance}%. Kontrakt z ${getClub(currentClubId).name} zostaje.`,
+    }
+  })
+}
+
+function dedupeOffers(offers: TransferOffer[]): TransferOffer[] {
+  const seen = new Set<string>()
+  const out: TransferOffer[] = []
+  for (const o of offers) {
+    const key = `${o.kind ?? 'transfer'}:${o.clubId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(o)
+  }
+  return out
 }
 
 function ovrThresholdForTier(tier: number): number {
@@ -374,7 +578,6 @@ function buildOffersForPlayer(
     if (preferWeak) {
       candidates.sort((a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength)
     } else if (ctx.midSeason || ctx.forceHigher) {
-      // Najpierw kluby, gdzie realnie zagrasz (słabsze w lidze)
       candidates.sort((a, b) => {
         const ga = player.overall - CLUBS[a]!.strength
         const gb = player.overall - CLUBS[b]!.strength
@@ -393,15 +596,18 @@ function buildOffersForPlayer(
         club.wage * (0.85 + player.reputation / 220 + ctx.goals / 50) * formPenalty,
       )
       const playChance = estimatePlayChance(player, clubId, {})
+      const years = contractYearsForOffer(leagueId)
       offers.push({
         clubId,
         wage: Math.max(400, wage),
         signingBonus: Math.round(
           wage * (form === 'fatalna' ? 1.2 : ctx.midSeason ? 1.8 : 2.2) + player.overall * 20,
         ),
-        message: `${msg} Szansa na grę ≈ ${playChance}%.`,
+        message: `${msg} Kontrakt ${years} lat. Szansa ≈ ${playChance}%.`,
         leagueId,
         playChance,
+        kind: 'transfer',
+        contractYears: years,
       })
     }
   }
@@ -410,33 +616,42 @@ function buildOffersForPlayer(
   const lower = leagueByTier(currentLeague.tier + 1)
 
   if (ctx.midSeason) {
-    if (higher) addFromLeague(higher.id, 2, 'Okno transferowe — wyższa liga chce Cię już teraz.')
-    addFromLeague(currentLeague.id, 1, 'Klub z ligi składa ofertę w trakcie sezonu.')
+    if (higher && player.overall >= ovrThresholdForTier(higher.tier)) {
+      addFromLeague(higher.id, 2, 'Okno zimowe — wyższa liga.')
+    }
+    addFromLeague(currentLeague.id, 1, 'Oferta z ligi w trakcie sezonu.')
+    if (lower) addFromLeague(lower.id, 1, 'Niższa liga — więcej minut.', true)
     return offers.slice(0, 3)
   }
 
   if (form === 'fatalna' || form === 'słaba') {
-    if (lower) addFromLeague(lower.id, 2, 'Słabszy klub daje szansę na odbudowę.', true)
-    addFromLeague(currentLeague.id, 2, 'Oferta z dołu tabeli / mniejszy projekt.', true)
+    if (lower) addFromLeague(lower.id, 2, 'Słabszy klub — odbudowa.', true)
+    addFromLeague(currentLeague.id, 2, 'Oferta z dołu tabeli.', true)
   } else {
-    // Silny OVR / dobry sezon → wyższe ligi
-    if (higher && (ctx.forceHigher || ctx.cupBoost || ctx.place <= 3 || ctx.goals >= 8 || player.overall >= ovrThresholdForTier(higher.tier))) {
+    if (
+      higher &&
+      (ctx.forceHigher ||
+        ctx.cupBoost ||
+        ctx.place <= 3 ||
+        ctx.goals >= 8 ||
+        player.overall >= ovrThresholdForTier(higher.tier))
+    ) {
       addFromLeague(higher.id, 2, 'Wyższa liga interesuje się Tobą.')
       const top = leagueByTier(higher.tier - 1)
       if (top && player.overall >= ovrThresholdForTier(top.tier) + 2) {
-        addFromLeague(top.id, 1, 'Skok o dwie ligi — odważny projekt.')
+        addFromLeague(top.id, 1, 'Skok o dwie ligi.')
       }
     }
-    addFromLeague(currentLeague.id, 2, 'Klub z Twojej ligi chce Cię wzmocnić.')
+    addFromLeague(currentLeague.id, 2, 'Klub z Twojej ligi.')
     if (ctx.place >= currentLeague.clubIds.length - 2 && lower) {
-      addFromLeague(lower.id, 1, 'Bezpieczny projekt w niższej lidze.', true)
+      addFromLeague(lower.id, 1, 'Bezpieczny projekt niżej.', true)
     }
   }
 
   while (offers.length < 2) {
     for (const l of LEAGUES_SAFE()) {
       if (offers.length >= 2) break
-      addFromLeague(l.id, 1, 'Dodatkowa oferta rynkowa.', form === 'fatalna' || form === 'słaba')
+      addFromLeague(l.id, 1, 'Oferta rynkowa.', form === 'fatalna' || form === 'słaba')
     }
     break
   }
@@ -453,8 +668,38 @@ export function openTransferChoice(state: GameState): void {
   state.screen = 'transferChoice'
 }
 
+export function openWinterTransfers(state: GameState): void {
+  if (!state.season || state.season.phase !== 'firstHalfDone') return
+  state.transferOffers = generateMidSeasonOffers(state)
+  if (!state.transferOffers.length) {
+    pushLog(state, 'Brak ofert zimowych.')
+    return
+  }
+  state.screen = 'transferChoice'
+}
+
+export function openWinterLoans(state: GameState): void {
+  if (!state.season || state.season.phase !== 'firstHalfDone') return
+  const loans = generateLoanOffers(
+    state,
+    state.season.clubId,
+    state.season.leagueId,
+    true,
+  )
+  if (!loans.length) {
+    pushLog(state, 'Brak sensownych wypożyczeń — za wysoki OVR albo brak klubów.')
+    return
+  }
+  state.transferOffers = loans
+  state.screen = 'transferChoice'
+}
+
 export function openMidSeasonTransfers(state: GameState): void {
   if (!state.season || state.season.midTransferDone) return
+  if (state.season.phase === 'firstHalfDone') {
+    openWinterTransfers(state)
+    return
+  }
   const offers = generateMidSeasonOffers(state)
   if (!offers.length) {
     pushLog(state, 'Brak ofert w oknie transferowym — za niski OVR na wyższą ligę.')
@@ -466,37 +711,92 @@ export function openMidSeasonTransfers(state: GameState): void {
 
 export function hasMidSeasonOffers(state: GameState): boolean {
   if (!state.player || !state.season || state.season.midTransferDone) return false
+  if (state.season.phase === 'firstHalfDone') return false
   return generateMidSeasonOffers(state).length > 0
 }
 
-/** Transfer w trakcie sezonu — bez urodzin, sezon kontynuujesz w nowym klubie. */
 export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
   const offer = state.transferOffers.find((o) => o.clubId === clubId)
   const player = state.player!
   const season = state.season!
   if (!offer || !season) return
 
+  const winter = season.phase === 'firstHalfDone' && season.halfStats
   player.money += offer.signingBonus
   player.morale = clamp(player.morale + 5, 1, 100)
   player.reputation = clamp(player.reputation + 3, 0, 100)
 
-  const next = createSeason(clubId, offer.leagueId, season.year, 'none')
+  if (offer.kind === 'loan') {
+    player.loan = {
+      parentClubId: player.contract.clubId || season.clubId,
+      parentLeagueId: getLeagueForClub(player.contract.clubId || season.clubId).id,
+      returnAfterSeason: true,
+    }
+    // kontrakt rodzica bez zmian
+  } else {
+    player.loan = null
+    player.contract = {
+      clubId,
+      yearsLeft: offer.contractYears ?? 2,
+      wage: offer.wage,
+    }
+  }
+
+  trackClub(player, clubId)
+  const half = winter ? season.halfStats : null
+  const next = createSeason(clubId, offer.leagueId, season.year, 'none', state.clubStrengthMods ?? {})
   next.preseasonDone = true
   next.midTransferDone = true
+
+  if (winter && half) {
+    // Kontynuacja 2. połowy w nowym klubie — osobiste stats z 1. połowy zostają
+    next.phase = 'firstHalfDone'
+    next.halfStats = {
+      ...half,
+      // nowy klub = nowe fixtures; zachowujemy dorobek osobisty
+    }
+    state.season = next
+    state.transferOffers = []
+    pushLog(
+      state,
+      `${offer.kind === 'loan' ? 'Wypożyczenie' : 'Transfer'} zimowy → ${getClub(clubId).name}. Szansa ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
+    )
+    state.screen = 'winterBreak'
+    if (state.winterSnapshot) {
+      state.winterSnapshot = {
+        ...state.winterSnapshot,
+        clubId,
+        leagueId: offer.leagueId,
+        narrative: `${offer.kind === 'loan' ? 'Wypożyczenie' : 'Transfer'}: ${getClub(clubId).name}. ${describeRival(player, next.rival)}`,
+        rivalNote: describeRival(player, next.rival),
+      }
+    }
+    return
+  }
+
   state.season = next
   state.transferOffers = []
   state.seasonReport = null
+  state.winterSnapshot = null
   pushLog(
     state,
-    `Transfer w trakcie sezonu → ${getClub(clubId).name} (${getLeague(offer.leagueId).name}). Szansa na grę ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
+    `Transfer w trakcie sezonu → ${getClub(clubId).name}. Szansa ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
   )
   state.screen = 'hub'
 }
 
 export function declineMidSeasonTransfers(state: GameState): void {
-  if (state.season) state.season.midTransferDone = true
+  if (state.season) {
+    if (state.season.phase === 'firstHalfDone') {
+      state.transferOffers = []
+      state.screen = 'winterBreak'
+      pushLog(state, 'Zostajesz — dokańczasz sezon w klubie.')
+      return
+    }
+    state.season.midTransferDone = true
+  }
   state.transferOffers = []
-  pushLog(state, 'Zostajesz w klubie — okno transferowe zamknięte.')
+  pushLog(state, 'Zostajesz w klubie — okno zamknięte.')
   state.screen = 'hub'
 }
 
@@ -504,7 +804,20 @@ export function stayAtClub(state: GameState): void {
   const report = state.seasonReport!
   const player = state.player!
 
-  if (!report.contractRenewed) {
+  // Wypożyczenie — powrót do rodzica
+  if (player.loan?.returnAfterSeason) {
+    const parentClub = player.loan.parentClubId
+    const parentLeague = player.loan.parentLeagueId
+    player.loan = null
+    pushLog(state, `Koniec wypożyczenia — wracasz do ${getClub(parentClub).name}.`)
+    if (birthdayAndAge(state, player)) return
+    player.money += player.contract.wage * 3
+    beginNextSeason(state, parentClub, parentLeague, true)
+    return
+  }
+
+  const underContract = player.contract.yearsLeft > 1
+  if (!report.contractRenewed && !underContract) {
     pushLog(
       state,
       `${getClub(report.clubId).name} nie przedłuża kontraktu. Musisz szukać nowego klubu.`,
@@ -513,14 +826,25 @@ export function stayAtClub(state: GameState): void {
     return
   }
 
-  birthdayAndAge(state, player)
-  player.money += getClub(report.clubId).wage * 3
+  if (underContract) {
+    player.contract.yearsLeft -= 1
+    player.contract.clubId = report.clubId
+  } else if (report.contractRenewed) {
+    player.contract = {
+      clubId: report.clubId,
+      yearsLeft: report.proposedContractYears || 2,
+      wage: Math.max(player.contract.wage, getClub(report.clubId).wage),
+    }
+    pushLog(state, `Nowy kontrakt: ${player.contract.yearsLeft} lat, pensja ~${player.contract.wage} zł.`)
+  }
+
+  if (birthdayAndAge(state, player)) return
+  player.money += player.contract.wage * 3
   beginNextSeason(state, report.clubId, report.leagueId, true)
 }
 
 export function acceptOffer(state: GameState, clubId: string): void {
-  // Transfer w trakcie sezonu (brak raportu / flaga)
-  if (state.season && !state.seasonReport) {
+  if (state.season && (state.season.phase === 'firstHalfDone' || !state.seasonReport)) {
     acceptMidSeasonOffer(state, clubId)
     return
   }
@@ -529,11 +853,36 @@ export function acceptOffer(state: GameState, clubId: string): void {
   const player = state.player!
   if (!offer) return
 
-  birthdayAndAge(state, player)
+  // Przy żywym kontrakcie transfer = nowy kontrakt; wypożyczenie zachowuje rodzica
+  if (offer.kind === 'loan') {
+    player.loan = {
+      parentClubId: player.contract.clubId,
+      parentLeagueId: getLeagueForClub(player.contract.clubId).id,
+      returnAfterSeason: true,
+    }
+  } else {
+    // Wyjście przy latach > 0 tylko gdy klub nie przedłużył / force
+    const forced = state.seasonReport && !state.seasonReport.contractRenewed
+    if (player.contract.yearsLeft > 0 && !forced && state.seasonReport) {
+      // transfer za zgodą — nowy kontrakt
+    }
+    player.loan = null
+    player.contract = {
+      clubId,
+      yearsLeft: offer.contractYears ?? 2,
+      wage: offer.wage,
+    }
+  }
+
+  if (birthdayAndAge(state, player)) return
   player.money += offer.signingBonus
   player.morale = clamp(player.morale + 6, 1, 100)
   player.reputation = clamp(player.reputation + 2, 0, 100)
-  pushLog(state, `Transfer do ${getClub(clubId).name} (${getLeague(offer.leagueId).name}).`)
+  trackClub(player, clubId)
+  pushLog(
+    state,
+    `${offer.kind === 'loan' ? 'Wypożyczenie' : 'Transfer'} → ${getClub(clubId).name} (${getLeague(offer.leagueId).name}).`,
+  )
   state.transferOffers = []
   beginNextSeason(state, clubId, offer.leagueId, false)
 }
@@ -544,13 +893,14 @@ function beginNextSeason(
   leagueId: string,
   staying: boolean,
 ): void {
+  if (state.screen === 'careerEnd') return
   const report = state.seasonReport!
   let nextLeagueId = leagueId
   let nextClubId = clubId
   let inject: 'promote' | 'relegate' | 'none' = 'none'
   if (!state.clubStrengthMods) state.clubStrengthMods = {}
 
-  if (staying && clubId === report.clubId) {
+  if (staying && clubId === report.clubId && !state.player!.loan) {
     const league = getLeague(report.leagueId)
     if (report.promotion) {
       const up = leagueByTier(league.tier - 1)
@@ -558,7 +908,6 @@ function beginNextSeason(
         nextLeagueId = up.id
         nextClubId = report.clubId
         inject = 'promote'
-        // Awans = klub mocniejszy (głębsza ławka, wyższe wymagania)
         const bump = up.tier === 1 ? 10 : up.tier === 2 ? 8 : 7
         state.clubStrengthMods[report.clubId] =
           (state.clubStrengthMods[report.clubId] ?? 0) + bump
@@ -571,19 +920,19 @@ function beginNextSeason(
         const eff = getEffectiveStrength(report.clubId, state.clubStrengthMods)
         pushLog(
           state,
-          `${getClub(report.clubId).name} awansuje do ${up.name} (siła składu ↑ do ~${eff}).`,
+          `${getClub(report.clubId).name} awansuje do ${up.name} (siła ≈${eff}).`,
         )
 
-        // Za słaby na nową ligę — klub nie chce Cię brać wyżej
         if (playPct < 28 || state.player!.overall + 3 < eff - 4) {
           pushLog(
             state,
-            `Sztab: przy OVR ${state.player!.overall} i szansie ~${playPct}% nie widzą Cię w ${up.name}. Musisz szukać klubu.`,
+            `Sztab: OVR ${state.player!.overall}, szansa ~${playPct}% — nie biorą Cię wyżej. Oferty / wypożyczenie.`,
           )
           state.seasonReport = {
             ...report,
             contractRenewed: false,
             contractNote: 'Po awansie klub nie bierze Cię do wyższej ligi — za niski poziom.',
+            proposedContractYears: 0,
           }
           openTransferChoice(state)
           return
@@ -599,21 +948,24 @@ function beginNextSeason(
           -6,
           (state.clubStrengthMods[report.clubId] ?? 0) - 5,
         )
-        pushLog(
-          state,
-          `${getClub(report.clubId).name} spada do ${down.name} — zostajesz w klubie.`,
-        )
+        pushLog(state, `${getClub(report.clubId).name} spada do ${down.name}.`)
       }
     } else {
-      pushLog(state, `Zostajesz w ${getClub(report.clubId).name} na kolejny sezon.`)
+      pushLog(state, `Zostajesz w ${getClub(report.clubId).name}.`)
     }
   }
 
-  // Wylecz drobne kontuzje między sezonami (sezonowe też reset)
   if (state.player) state.player.injury = null
 
-  state.season = createSeason(nextClubId, nextLeagueId, report.year + 1, inject)
+  state.season = createSeason(
+    nextClubId,
+    nextLeagueId,
+    report.year + 1,
+    inject,
+    state.clubStrengthMods,
+  )
   state.seasonReport = null
+  state.winterSnapshot = null
   state.pendingKeyMatch = null
   state.pendingKeyQueue = []
   state.transferOffers = []
@@ -622,7 +974,21 @@ function beginNextSeason(
 }
 
 export function startNextSeason(state: GameState): void {
-  // legacy alias
   if (state.seasonReport) stayAtClub(state)
   else state.screen = 'hub'
+}
+
+export function leaveForTransferWhileUnderContract(state: GameState): void {
+  const player = state.player!
+  const report = state.seasonReport
+  if (!report) {
+    openTransferChoice(state)
+    return
+  }
+  if (player.contract.yearsLeft > 1 && report.contractRenewed) {
+    // Lojalność: zostawiasz oferty, boost morale
+    player.morale = clamp(player.morale + 3, 1, 100)
+    pushLog(state, 'Masz ważny kontrakt — odejście tylko za porozumieniem. Otwieram oferty (nowy kontrakt).')
+  }
+  openTransferChoice(state)
 }

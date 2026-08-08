@@ -3,18 +3,22 @@ import {
   acceptOffer,
   acceptStartingOffer,
   applyPreseasonDecision,
+  continueAfterWinter,
   declineMidSeasonTransfers,
   draftNewCareer,
+  estimatePlayChance,
   hasMidSeasonOffers,
   openMidSeasonTransfers,
   openPreseasonDecision,
   openTransferChoice,
+  openWinterLoans,
+  openWinterTransfers,
   resolveKeyMatch,
   runFullSeason,
   sortedStandings,
   stayAtClub,
 } from './systems/career'
-import { appearanceChance } from './systems/seasonSim'
+import { appearanceChance, describeRival } from './systems/seasonSim'
 import { mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type { GameState, MatchAction, Position, PreferredFoot } from './state/types'
@@ -37,7 +41,9 @@ export class App {
     this.root = root
     this.state = hasSave() ? loadState() : createEmptyState()
     if (!this.state.player) this.state.screen = 'home'
-    else if (!this.state.season && this.state.screen !== 'startOffers') this.state.screen = 'home'
+    else if (this.state.screen === 'careerEnd') {
+      /* keep */
+    } else if (!this.state.season && this.state.screen !== 'startOffers') this.state.screen = 'home'
   }
 
   start(): void {
@@ -90,6 +96,14 @@ export class App {
         this.root.innerHTML = this.transferChoiceHtml()
         this.bindTransferChoice()
         break
+      case 'winterBreak':
+        this.root.innerHTML = this.winterBreakHtml()
+        this.bindWinterBreak()
+        break
+      case 'careerEnd':
+        this.root.innerHTML = this.careerEndHtml()
+        this.bindCareerEnd()
+        break
       case 'seasonEnd':
         this.state.screen = 'hub'
         this.render()
@@ -115,7 +129,7 @@ export class App {
       <section class="hero-panel">
         <p class="eyebrow">Symulator piłkarza</p>
         <h1>Sezon w jeden ruch</h1>
-        <p class="lead">Symulujesz cały sezon, oglądasz statystyki, Puchar Polski i króla strzelców. Kluczowe mecze rozgrywasz Ty.</p>
+        <p class="lead">Połowa sezonu, przerwa zimowa, rywal o skład, kontrakty i wypożyczenia. Kluczowe mecze rozgrywasz Ty.</p>
         <div class="actions">
           ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
           <button class="btn ${canContinue ? 'ghost' : 'primary'}" id="btn-new">Nowa gra</button>
@@ -241,7 +255,9 @@ export class App {
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
     const mods = this.state.clubStrengthMods ?? {}
-    const chance = Math.round(appearanceChance(p, s.clubId, mods) * 100)
+    const chance = Math.round(
+      appearanceChance(p, s.clubId, mods, s.rival, s.rivalPressure ?? 0) * 100,
+    )
     const clubPower = getEffectiveStrength(s.clubId, mods)
     const midOffers = hasMidSeasonOffers(this.state)
     const log = this.state.log
@@ -251,6 +267,11 @@ export class App {
     const injuryLine = p.injury
       ? `<p class="muted down">Kontuzja: ${p.injury.label}${p.injury.seasonEnding ? '' : ` · jeszcze ${p.injury.matchesLeft} mecz.`}</p>`
       : ''
+    const loanLine = p.loan
+      ? `<p class="muted">Wypożyczenie z ${getClub(p.loan.parentClubId).name}</p>`
+      : ''
+    const contractLine = `<p class="meta">Kontrakt: ${p.contract.yearsLeft} lat · pensja ~${p.contract.wage} zł</p>`
+    const rivalLine = `<p class="meta">Rywal: ${s.rival.name} · OVR ${s.rival.overall} · forma ${s.rival.form} — ${describeRival(p, s.rival)}</p>`
 
     return this.shell(
       `
@@ -263,6 +284,9 @@ export class App {
           <div class="money">${p.money} zł</div>
         </div>
         <p class="meta">${league.name} · sezon ${s.year} · siła klubu ${clubPower} · szansa na grę ≈ ${chance}%</p>
+        ${contractLine}
+        ${rivalLine}
+        ${loanLine}
         ${injuryLine}
         <div class="stat-grid">
           <div><span>OVR</span><strong>${p.overall}</strong></div>
@@ -278,7 +302,7 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">II liga max ~50% szansy na „11”. Kontuzje są rzadkie (~20%/sezon) — decyzje przed sezonem mogą je jeszcze obniżyć. Dobra forma = +1/+2 OVR.</p>
+        <p class="muted">Najpierw 1. połowa → przerwa zimowa (oferty / wypożyczenie) → 2. połowa. Sufit kariery OVR 80.</p>
         <div class="actions">
           ${
             s.preseasonDone
@@ -287,10 +311,12 @@ export class App {
           }
           ${
             midOffers
-              ? `<button class="btn ghost" id="btn-mid-tr">Okno transferowe</button>`
+              ? `<button class="btn ghost" id="btn-mid-tr">Wczesne okno transferowe</button>`
               : ''
           }
-          <button class="btn primary" id="btn-season">Dalej — rozegraj sezon</button>
+          <button class="btn primary" id="btn-season">${
+            s.phase === 'firstHalfDone' ? 'Dokończ sezon (2. połowa)' : 'Rozegraj 1. połowę'
+          }</button>
         </div>
       </section>
 
@@ -508,7 +534,17 @@ export class App {
             </tr>
             <tr>
               <td>Kontrakt</td>
-              <td class="${r.contractRenewed ? 'up' : 'down'}"><strong>${r.contractRenewed ? 'Przedłużenie OK' : 'Bez przedłużenia'}</strong><br/><span class="muted">${r.contractNote}</span></td>
+              <td class="${r.contractRenewed ? 'up' : 'down'}"><strong>${
+                r.contractRenewed
+                  ? r.proposedContractYears
+                    ? `Nowy kontrakt ${r.proposedContractYears} lat`
+                    : 'Kontrakt trwa'
+                  : 'Bez przedłużenia'
+              }</strong><br/><span class="muted">${r.contractNote}</span></td>
+            </tr>
+            <tr>
+              <td>Rywal</td>
+              <td>${r.rivalNote ? `<strong>${r.rivalNote}</strong>` : '<span class="muted">—</span>'}</td>
             </tr>
           </tbody>
         </table>
@@ -565,6 +601,7 @@ export class App {
 
   private transferChoiceHtml(): string {
     const offers = this.state.transferOffers
+    const winter = this.state.season?.phase === 'firstHalfDone'
     const midSeason = Boolean(this.state.season && !this.state.seasonReport)
     const forced = this.state.seasonReport && !this.state.seasonReport.contractRenewed
     const cards = offers
@@ -572,9 +609,15 @@ export class App {
         const c = getClub(o.clubId)
         const l = getLeague(o.leagueId)
         const play = o.playChance != null ? ` · gra ≈ ${o.playChance}%` : ''
+        const kind =
+          o.kind === 'loan'
+            ? '<span class="badge">Wypożyczenie</span> '
+            : o.contractYears
+              ? `<span class="muted">${o.contractYears} lat · </span>`
+              : ''
         return `
           <button class="choice" data-offer="${o.clubId}">
-            <strong>${c.name}</strong>
+            <strong>${kind}${c.name}</strong>
             <span>${l.name} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł${play}</span>
             <span>${o.message}</span>
           </button>`
@@ -583,20 +626,22 @@ export class App {
     return this.shell(
       `
       <section class="panel">
-        <h2>${midSeason ? 'Okno transferowe' : 'Oferty transferowe'}</h2>
+        <h2>${winter ? 'Okienko zimowe' : midSeason ? 'Okno transferowe' : 'Oferty transferowe'}</h2>
         <p class="muted">${
-          midSeason
-            ? 'W trakcie sezonu — wyższe ligi przy wysokim OVR. Szansa na grę różni się per klub.'
-            : forced
-              ? 'Kontrakt nieprzedłużony — wybierz nowy klub.'
-              : 'Wybierz klub albo wróć i zostań.'
+          winter
+            ? 'Po 1. połowie: transfer, wypożyczenie albo wróć i dokończ sezon.'
+            : midSeason
+              ? 'Wczesne okno — wyższe ligi przy wysokim OVR.'
+              : forced
+                ? 'Kontrakt nieprzedłużony — wybierz klub lub wypożyczenie.'
+                : 'Wybierz klub albo wróć i zostań.'
         }</p>
         <div class="choices">${cards}</div>
         ${
-          forced
+          forced && !winter
             ? ''
-            : midSeason
-              ? `<div class="actions"><button class="btn ghost" id="btn-skip-mid">Zostaję w klubie</button></div>`
+            : midSeason || winter
+              ? `<div class="actions"><button class="btn ghost" id="btn-skip-mid">${winter ? 'Wróć do przerwy zimowej' : 'Zostaję w klubie'}</button></div>`
               : `<div class="actions"><button class="btn ghost" id="btn-back-stay">Zostań jednak</button></div>`
         }
       </section>`,
@@ -615,6 +660,89 @@ export class App {
     })
     this.root.querySelector('#btn-skip-mid')?.addEventListener('click', () => {
       this.go(() => declineMidSeasonTransfers(this.state))
+    })
+  }
+
+  private winterBreakHtml(): string {
+    const w = this.state.winterSnapshot!
+    const p = this.state.player!
+    const club = getClub(w.clubId)
+    const league = getLeague(w.leagueId)
+    const playPct = estimatePlayChance(
+      p,
+      w.clubId,
+      this.state.clubStrengthMods ?? {},
+      this.state.season,
+    )
+    return this.shell(
+      `
+      <section class="panel">
+        <p class="eyebrow">${league.name} · ${w.year}</p>
+        <h2>Przerwa zimowa</h2>
+        <p class="muted">${club.name} · ${w.place}. miejsce · ${w.points} pkt po 1. połowie</p>
+        <table class="summary-table">
+          <tbody>
+            <tr><td>Występy</td><td><strong>${w.appearances}</strong></td></tr>
+            <tr><td>Gole / asysty</td><td><strong>${w.goals}</strong> G · <strong>${w.assists}</strong> A</td></tr>
+            <tr><td>Śr. ocena</td><td><strong>${w.avgRating || '—'}</strong></td></tr>
+            <tr><td>Szansa gry</td><td><strong>≈ ${playPct}%</strong></td></tr>
+            <tr><td>Rywal</td><td>${w.rivalNote}</td></tr>
+          </tbody>
+        </table>
+        <p class="muted">${w.narrative}</p>
+        <div class="actions">
+          <button class="btn primary" id="btn-winter-continue">Zostaję — 2. połowa</button>
+          <button class="btn ghost" id="btn-winter-offers">Oferty zimowe</button>
+          <button class="btn ghost" id="btn-winter-loan">Szukaj wypożyczenia</button>
+        </div>
+      </section>`,
+      'Zima',
+    )
+  }
+
+  private bindWinterBreak(): void {
+    this.root.querySelector('#btn-winter-continue')?.addEventListener('click', () => {
+      this.go(() => continueAfterWinter(this.state))
+    })
+    this.root.querySelector('#btn-winter-offers')?.addEventListener('click', () => {
+      this.go(() => openWinterTransfers(this.state))
+    })
+    this.root.querySelector('#btn-winter-loan')?.addEventListener('click', () => {
+      this.go(() => openWinterLoans(this.state))
+    })
+  }
+
+  private careerEndHtml(): string {
+    const s = this.state.careerSummary!
+    return this.shell(
+      `
+      <section class="panel hero-panel">
+        <p class="eyebrow">Koniec kariery</p>
+        <h1>${s.name}</h1>
+        <p class="lead">${s.narrative}</p>
+        <table class="summary-table">
+          <tbody>
+            <tr><td>Sezony</td><td><strong>${s.seasonsPlayed}</strong></td></tr>
+            <tr><td>Szczyt OVR</td><td><strong>${s.peakOverall}</strong></td></tr>
+            <tr><td>Kluby</td><td><strong>${s.clubsCount}</strong></td></tr>
+            <tr><td>Tytuły</td><td><strong>${s.titles}</strong></td></tr>
+            <tr><td>Wiek / OVR końcowy</td><td><strong>${s.finalAge}</strong> / <strong>${s.finalOverall}</strong></td></tr>
+          </tbody>
+        </table>
+        <div class="actions">
+          <button class="btn primary" id="btn-new-career">Nowa kariera</button>
+        </div>
+      </section>`,
+      'Emerytura',
+    )
+  }
+
+  private bindCareerEnd(): void {
+    this.root.querySelector('#btn-new-career')?.addEventListener('click', () => {
+      clearSave()
+      this.state = createEmptyState()
+      this.state.screen = 'create'
+      this.render()
     })
   }
 }

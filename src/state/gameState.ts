@@ -30,7 +30,12 @@ export function hasSave(): boolean {
     const raw = localStorage.getItem(SAVE_KEY)
     if (!raw) return false
     const parsed = JSON.parse(raw) as GameState
-    return Boolean(parsed?.player && (parsed?.season || parsed?.screen === 'startOffers'))
+    return Boolean(
+      parsed?.player &&
+        (parsed?.season ||
+          parsed?.screen === 'startOffers' ||
+          parsed?.screen === 'careerEnd'),
+    )
   } catch {
     return false
   }

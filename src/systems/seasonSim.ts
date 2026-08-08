@@ -3,12 +3,16 @@ import type {
   Attributes,
   ClubStanding,
   CupStage,
+  FormLabel,
   KeyMatchReason,
   PendingKeyMatch,
   Player,
+  PositionalRival,
   ScorerEntry,
+  SeasonHalfProgress,
   SeasonReport,
   SeasonState,
+  WinterBreakSnapshot,
 } from '../state/types'
 import {
   CAREER_OVR_CAP,
@@ -31,7 +35,6 @@ function applyOverallChange(player: Player, targetDelta: number): number {
   const before = player.overall
   if (targetDelta === 0) return 0
 
-  // Nie przebijamy sufitu kariery
   let delta = targetDelta
   if (delta > 0) {
     delta = Math.min(delta, Math.max(0, CAREER_OVR_CAP - before))
@@ -94,11 +97,40 @@ function hashSeed(seed: string): number {
   return h
 }
 
-function npcName(seed: string): string {
+export function npcName(seed: string): string {
   const h = hashSeed(seed)
   const first = NPC_FIRST[h % NPC_FIRST.length] ?? 'Jan'
   const last = NPC_LAST[Math.floor(h / 17) % NPC_LAST.length] ?? 'Kowalski'
   return `${first} ${last}`
+}
+
+export function makeRival(
+  clubId: string,
+  year: number,
+  strengthMods: Record<string, number> = {},
+): PositionalRival {
+  const strength = getEffectiveStrength(clubId, strengthMods)
+  const h = hashSeed(`${clubId}-${year}-rival`)
+  const overall = clamp(strength + ((h % 9) - 4), 40, CAREER_OVR_CAP)
+  const form = 45 + (h % 21)
+  return {
+    name: npcName(`${clubId}-${year}-rival`),
+    overall,
+    form,
+  }
+}
+
+export function describeRival(player: Player, rival: PositionalRival): string {
+  const playerEdge = player.overall + (player.morale - 50) / 10
+  const rivalEdge = rival.overall + (rival.form - 50) / 5
+  const diff = playerEdge - rivalEdge
+  if (diff > 3) {
+    return `Rywal ${rival.name} (OVR ${rival.overall}) — wygrywasz walkę o skład.`
+  }
+  if (diff < -3) {
+    return `Rywal ${rival.name} (OVR ${rival.overall}) — mocniejszy od Ciebie o miejsce w „11”.`
+  }
+  return `Rywal ${rival.name} (OVR ${rival.overall}) — równa walka o skład.`
 }
 
 /** 3 napastników/pomocników na klub — gole nie lecą na jedną osobę. */
@@ -132,7 +164,6 @@ function distributeClubGoals(
 ): void {
   if (goals <= 0) return
   const keys = ensureClubScorers(map, clubId, year)
-  // główny / 2. / 3. / reszta składu (bez wpisu na listę)
   const weights = [0.38, 0.28, 0.22, 0.12]
   for (let g = 0; g < goals; g++) {
     const roll = Math.random()
@@ -167,7 +198,6 @@ function updateStanding(row: ClubStanding, gf: number, ga: number): void {
 }
 
 function scoreline(att: number, def: number): number {
-  // ~0.8–1.0 gola/mecz — król strzelców w 14 kolejkach ≈ 8–12
   const expected = Math.max(0.08, (att - def) / 36 + 0.82)
   let g = 0
   for (let i = 0; i < 4; i++) if (chance(expected / 4)) g++
@@ -183,6 +213,8 @@ export function appearanceChance(
   player: Player,
   clubId?: string,
   strengthMods: Record<string, number> = {},
+  rival?: PositionalRival | null,
+  rivalPressure = 0,
 ): number {
   if (!clubId) {
     return Math.max(0.2, Math.min(0.55, 0.3 + player.overall / 200))
@@ -192,54 +224,63 @@ export function appearanceChance(
   const strength = getEffectiveStrength(clubId, strengthMods)
   const gap = player.overall - strength
 
-  // Bazowo: równy poziom ze składem ≈ 36–40% (konkurencja)
-  let chance = 0.38 + gap * 0.018
-  if (gap < 0) chance = 0.38 + gap * 0.028 // ostrzej w dół
+  let playChance = 0.38 + gap * 0.018
+  if (gap < 0) playChance = 0.38 + gap * 0.028
 
-  chance += (player.reputation - 20) / 600
-  chance += (player.morale - 55) / 700
-  if (player.age >= 34) chance -= 0.08
-  else if (player.age >= 30) chance -= 0.04
-  else if (player.age <= 18) chance += 0.02
+  playChance += (player.reputation - 20) / 600
+  playChance += (player.morale - 55) / 700
+  if (player.age >= 34) playChance -= 0.08
+  else if (player.age >= 30) playChance -= 0.04
+  else if (player.age <= 18) playChance += 0.02
 
-  // Sufity ligowe — odczuwalny przeskok
+  if (rival) {
+    const rivalEdge = rival.overall + (rival.form - 50) / 5
+    const playerEdge = player.overall + (player.morale - 50) / 10
+    if (rivalEdge > playerEdge) {
+      const edgeGap = rivalEdge - playerEdge
+      playChance -= Math.min(0.18, Math.max(0.04, 0.04 + edgeGap * 0.012))
+    }
+  }
+  playChance -= rivalPressure * 0.03
+
   const tierCap =
     league.tier === 4
-      ? 0.78 // III liga
+      ? 0.78
       : league.tier === 3
-        ? 0.5 // II liga — max 50%
+        ? 0.5
         : league.tier === 2
-          ? 0.48 // I liga
-          : 0.52 // Ekstraklasa
+          ? 0.48
+          : 0.52
 
-  // W II+ nie da się być „pewniakiem” bez wyraźnej przewagi OVR
   if (league.tier <= 3 && gap < 6) {
-    chance = Math.min(chance, tierCap - 0.04)
+    playChance = Math.min(playChance, tierCap - 0.04)
   }
   if (league.tier === 3 && player.overall < 58) {
-    chance = Math.min(chance, 0.48)
+    playChance = Math.min(playChance, 0.48)
   }
   if (league.tier === 2 && player.overall < 62) {
-    chance = Math.min(chance, 0.42)
+    playChance = Math.min(playChance, 0.42)
   }
   if (league.tier === 1 && gap < -8) {
-    chance = Math.min(chance, 0.22)
+    playChance = Math.min(playChance, 0.22)
   }
-  if (gap <= -18) chance = Math.min(chance, 0.05)
-  else if (gap <= -12) chance = Math.min(chance, 0.14)
+  if (gap <= -18) playChance = Math.min(playChance, 0.05)
+  else if (gap <= -12) playChance = Math.min(playChance, 0.14)
 
-  chance = Math.min(chance, tierCap)
-  return Math.max(0.03, Math.min(0.78, chance))
+  playChance = Math.min(playChance, tierCap)
+  return Math.max(0.03, Math.min(0.78, playChance))
 }
 
-/** Szansa w trakcie sezonu — chwilowy humor meczowy. */
+/** Szansa w trakcie sezonu — chwilowy humor meczowy + rywal. */
 function matchAppearanceChance(
   player: Player,
   matchMood: number,
   clubId: string,
   strengthMods: Record<string, number>,
+  rival?: PositionalRival | null,
+  rivalPressure = 0,
 ): number {
-  const base = appearanceChance(player, clubId, strengthMods)
+  const base = appearanceChance(player, clubId, strengthMods, rival, rivalPressure)
   const moodBit = (matchMood - 50) / 320
   return Math.max(0.03, Math.min(0.8, base + moodBit))
 }
@@ -268,7 +309,6 @@ function buildSeasonFixtures(
       if ((round + i) % 2 === 0) firstHalf.push({ homeId: a, awayId: b })
       else firstHalf.push({ homeId: b, awayId: a })
     }
-    // rotacja „okrężna”
     const fixed = teams[0]
     const movable = teams.slice(1)
     const last = movable.pop()
@@ -287,9 +327,32 @@ function bumpScorer(map: Map<string, ScorerEntry>, key: string, entry: ScorerEnt
   else map.set(key, { ...entry, goals })
 }
 
+function scorerMapFromEntries(entries: ScorerEntry[]): Map<string, ScorerEntry> {
+  const map = new Map<string, ScorerEntry>()
+  const npcIdx: Record<string, number> = {}
+  for (const e of entries) {
+    if (e.isPlayer) {
+      const cur = map.get('player')
+      if (cur) cur.goals += e.goals
+      else map.set('player', { ...e })
+      continue
+    }
+    const idx = npcIdx[e.clubId] ?? 0
+    npcIdx[e.clubId] = idx + 1
+    const key = `npc-${e.clubId}-${idx}`
+    const cur = map.get(key)
+    if (cur) cur.goals += e.goals
+    else map.set(key, { ...e })
+  }
+  return map
+}
+
 function simulatePolishCup(
   playerClubId: string,
   player: Player,
+  strengthMods: Record<string, number>,
+  rival?: PositionalRival | null,
+  rivalPressure = 0,
 ): { stage: CupStage; playerGoals: number; playerApps: number } {
   const rounds: Array<{ id: CupStage; difficulty: number }> = [
     { id: 'r32', difficulty: 0.92 },
@@ -307,8 +370,10 @@ function simulatePolishCup(
 
   for (const round of rounds) {
     const rivalId = rivalsPool[rngInt(rivalsPool.length)]!
-    const rival = getClub(rivalId)
-    const played = chance(appearanceChance(player, playerClubId))
+    const cupRival = getClub(rivalId)
+    const played = chance(
+      appearanceChance(player, playerClubId, strengthMods, rival, rivalPressure),
+    )
     if (played) {
       playerApps++
       const goalP =
@@ -322,7 +387,7 @@ function simulatePolishCup(
       ? (player.overall - 50) * 0.07 + (Math.random() * 6 - 2)
       : -2
     const ownP = own.strength + boost + Math.random() * 6
-    const rivP = rival.strength * round.difficulty + Math.random() * 6
+    const rivP = cupRival.strength * round.difficulty + Math.random() * 6
     const win = ownP >= rivP
 
     if (!win) {
@@ -410,7 +475,6 @@ function buildKeyMatches(
     )
   }
 
-  // jeśli brak kluczowych, a puchar głęboko — dodaj mecz pucharowy
   if (keys.length === 0 && (cupStage === 'qf' || cupStage === 'r16')) {
     push(
       'cup',
@@ -424,59 +488,31 @@ function buildKeyMatches(
   return keys.slice(0, 2)
 }
 
-export function simulateFullSeason(
+interface FixtureBatchState {
+  appearances: number
+  goals: number
+  assists: number
+  ratingSum: number
+  matchesMissedInjury: number
+  injuryLabels: string[]
+  matchMood: number
+  appsThisSeason: number
+  injuryAtApp: number
+}
+
+function runFixtureBatch(
+  fixtures: Array<{ homeId: string; awayId: string }>,
   player: Player,
   season: SeasonState,
-  strengthMods: Record<string, number> = {},
-): SeasonReport {
-  const league = getLeague(season.leagueId)
-  // Kluby z aktualnego sezonu (po awansie/spadku mogą różnić się od szablonu ligi)
-  const clubIds = season.standings.map((s) => s.clubId)
-  const clubCount = clubIds.length
-  const allFixtures = buildSeasonFixtures(clubIds)
-  const playerFixtures = allFixtures.filter(
-    (f) => f.homeId === season.clubId || f.awayId === season.clubId,
-  )
-  const fixturesForPlayer = playerFixtures.length
-  const overallBefore = player.overall
+  standings: ClubStanding[],
+  scorerMap: Map<string, ScorerEntry>,
+  strengthMods: Record<string, number>,
+  state: FixtureBatchState,
+): void {
+  const rival = season.rival
+  const rivalPressure = season.rivalPressure ?? 0
 
-  const standings: ClubStanding[] = clubIds.map((id) => ({
-    clubId: id,
-    played: 0,
-    won: 0,
-    drawn: 0,
-    lost: 0,
-    goalsFor: 0,
-    goalsAgainst: 0,
-    points: 0,
-  }))
-
-  const scorerMap = new Map<string, ScorerEntry>()
-  for (const clubId of clubIds) {
-    ensureClubScorers(scorerMap, clubId, season.year)
-  }
-
-  let appearances = 0
-  let goals = 0
-  let assists = 0
-  let ratingSum = 0
-  let matchesMissedInjury = 0
-  let injuryNote: string | null = null
-  const injuryLabels: string[] = []
-
-  // ~20% szansy na kontuzję w całym sezonie (opieka z decyzji obniża)
-  const care = clamp(season.injuryCare ?? 0, 0, 5)
-  const seasonInjuryP = Math.max(0.06, 0.2 * (1 - care * 0.14))
-  const willGetInjured = Math.random() < seasonInjuryP
-  const injuryAtApp = willGetInjured
-    ? 1 + rngInt(Math.max(1, Math.floor(fixturesForPlayer * 0.85)))
-    : -1
-  let appsThisSeason = 0
-
-  // Humor meczowy — wraca do średniej, nie spirala w dół
-  let matchMood = clamp(50 + (Math.random() * 12 - 4), 38, 62)
-
-  for (const fixture of allFixtures) {
+  for (const fixture of fixtures) {
     const { homeId, awayId } = fixture
     const involvesPlayer = homeId === season.clubId || awayId === season.clubId
 
@@ -486,50 +522,63 @@ export function simulateFullSeason(
     let matchAssists = 0
 
     if (involvesPlayer) {
-      matchMood = clamp(matchMood * 0.82 + 50 * 0.18 + (Math.random() * 10 - 5), 28, 88)
-      if (chance(0.04)) matchMood = clamp(matchMood + (4 + Math.random() * 8), 28, 88)
-      if (chance(0.03)) matchMood = clamp(matchMood - (3 + Math.random() * 6), 28, 88)
+      state.matchMood = clamp(
+        state.matchMood * 0.82 + 50 * 0.18 + (Math.random() * 10 - 5),
+        28,
+        88,
+      )
+      if (chance(0.04)) state.matchMood = clamp(state.matchMood + (4 + Math.random() * 8), 28, 88)
+      if (chance(0.03)) state.matchMood = clamp(state.matchMood - (3 + Math.random() * 6), 28, 88)
 
       const injuredOut =
         player.injury != null &&
         (player.injury.seasonEnding || player.injury.matchesLeft > 0)
 
       if (injuredOut) {
-        matchesMissedInjury++
+        state.matchesMissedInjury++
         if (player.injury && !player.injury.seasonEnding) {
           player.injury.matchesLeft = Math.max(0, player.injury.matchesLeft - 1)
           if (player.injury.matchesLeft === 0) {
-            injuryLabels.push(`Powrót po: ${player.injury.label}`)
+            state.injuryLabels.push(`Powrót po: ${player.injury.label}`)
             player.injury = null
-            matchMood = clamp(matchMood - 6, 20, 80)
+            state.matchMood = clamp(state.matchMood - 6, 20, 80)
           }
         }
-        matchMood = clamp(matchMood - 2, 15, 80)
+        state.matchMood = clamp(state.matchMood - 2, 15, 80)
       } else {
-        starts = chance(matchAppearanceChance(player, matchMood, season.clubId, strengthMods))
+        starts = chance(
+          matchAppearanceChance(
+            player,
+            state.matchMood,
+            season.clubId,
+            strengthMods,
+            rival,
+            rivalPressure,
+          ),
+        )
 
         if (starts) {
-          appearances++
-          boost = (player.overall - 50) * 0.1 + (matchMood - 50) * 0.04
+          state.appearances++
+          boost = (player.overall - 50) * 0.1 + (state.matchMood - 50) * 0.04
           const goalChance =
             (player.position === 'NP' ? 0.26 : player.position === 'POM' ? 0.11 : 0.045) *
-            (0.85 + matchMood / 250) *
+            (0.85 + state.matchMood / 250) *
             (player.attrs.shooting / 72)
           if (chance(Math.min(0.48, goalChance))) {
             matchGoals = chance(0.14) ? 2 : 1
-            goals += matchGoals
+            state.goals += matchGoals
           }
           const assistChance =
             (player.position === 'POM' || player.position === 'NP' ? 0.18 : 0.08) *
             (player.attrs.passing / 78) *
-            (0.85 + matchMood / 250)
+            (0.85 + state.matchMood / 250)
           if (chance(Math.min(0.4, assistChance))) {
             matchAssists = 1
-            assists++
+            state.assists++
           }
           const rating = clamp(
             5.4 +
-              matchMood / 85 +
+              state.matchMood / 85 +
               (player.overall - 45) / 40 +
               matchGoals * 0.8 +
               matchAssists * 0.4 +
@@ -537,13 +586,14 @@ export function simulateFullSeason(
             3.5,
             9.6,
           )
-          ratingSum += rating
-          if (rating >= 7.4) matchMood = clamp(matchMood + 2 + Math.random() * 2, 28, 88)
-          else if (rating < 5.0) matchMood = clamp(matchMood - (1 + Math.random() * 2), 28, 88)
+          state.ratingSum += rating
+          if (rating >= 7.4) state.matchMood = clamp(state.matchMood + 2 + Math.random() * 2, 28, 88)
+          else if (rating < 5.0) {
+            state.matchMood = clamp(state.matchMood - (1 + Math.random() * 2), 28, 88)
+          }
 
-          // Jedna zaplanowana kontuzja w sezonie (rzadko) — nie co mecz
-          appsThisSeason++
-          if (appsThisSeason === injuryAtApp && !player.injury) {
+          state.appsThisSeason++
+          if (state.appsThisSeason === state.injuryAtApp && !player.injury) {
             const roll = Math.random()
             if (roll < 0.07) {
               player.injury = {
@@ -551,8 +601,8 @@ export function simulateFullSeason(
                 label: 'Poważna kontuzja (koniec sezonu)',
                 seasonEnding: true,
               }
-              injuryLabels.push('Poważna kontuzja — praktycznie koniec sezonu')
-              matchMood = clamp(matchMood - 12, 10, 70)
+              state.injuryLabels.push('Poważna kontuzja — praktycznie koniec sezonu')
+              state.matchMood = clamp(state.matchMood - 12, 10, 70)
             } else if (roll < 0.45) {
               const n = 3 + rngInt(4)
               player.injury = {
@@ -560,8 +610,8 @@ export function simulateFullSeason(
                 label: `Uraz mięśniowy (${n} meczów)`,
                 seasonEnding: false,
               }
-              injuryLabels.push(`Kontuzja: wypadasz na ${n} meczów`)
-              matchMood = clamp(matchMood - 6, 15, 75)
+              state.injuryLabels.push(`Kontuzja: wypadasz na ${n} meczów`)
+              state.matchMood = clamp(state.matchMood - 6, 15, 75)
             } else {
               const n = 1 + rngInt(2)
               player.injury = {
@@ -569,13 +619,13 @@ export function simulateFullSeason(
                 label: `Lekki uraz (${n} meczów)`,
                 seasonEnding: false,
               }
-              injuryLabels.push(`Lekki uraz: ${n} mecz(e) przerwy`)
-              matchMood = clamp(matchMood - 3, 20, 80)
+              state.injuryLabels.push(`Lekki uraz: ${n} mecz(e) przerwy`)
+              state.matchMood = clamp(state.matchMood - 3, 20, 80)
             }
             player.attrs.stamina = clamp(player.attrs.stamina - (1 + rngInt(2)))
           }
         } else {
-          matchMood = clamp(matchMood * 0.9 + 48 * 0.1, 28, 88)
+          state.matchMood = clamp(state.matchMood * 0.9 + 48 * 0.1, 28, 88)
         }
       }
     }
@@ -614,14 +664,185 @@ export function simulateFullSeason(
       }
     }
   }
+}
 
-  if (goals > 0) {
+function tweakRivalForm(rival: PositionalRival, appearances: number, goals: number, halfApps: number): void {
+  if (appearances >= Math.max(3, halfApps * 0.45) && goals >= 2) {
+    rival.form = clamp(rival.form - (3 + rngInt(3)), 28, 78)
+  } else if (appearances >= Math.max(2, halfApps * 0.35)) {
+    rival.form = clamp(rival.form - 2, 30, 78)
+  } else if (appearances <= 1) {
+    rival.form = clamp(rival.form + (2 + rngInt(3)), 30, 80)
+  } else {
+    rival.form = clamp(rival.form + (Math.random() * 4 - 2), 30, 78)
+  }
+}
+
+function buildHalfProgress(
+  state: FixtureBatchState,
+  overallBefore: number,
+  fixturesForPlayer: number,
+  scorerMap: Map<string, ScorerEntry>,
+): SeasonHalfProgress {
+  return {
+    appearances: state.appearances,
+    goals: state.goals,
+    assists: state.assists,
+    ratingSum: state.ratingSum,
+    matchesMissedInjury: state.matchesMissedInjury,
+    injuryLabels: [...state.injuryLabels],
+    matchMood: state.matchMood,
+    appsThisSeason: state.appsThisSeason,
+    injuryAtApp: state.injuryAtApp,
+    overallBefore,
+    fixturesForPlayer,
+    scorerEntries: [...scorerMap.values()].map((e) => ({ ...e })),
+  }
+}
+
+/** 1. połowa → przerwa zimowa */
+export function simulateFirstHalf(
+  player: Player,
+  season: SeasonState,
+  strengthMods: Record<string, number> = {},
+): WinterBreakSnapshot {
+  const clubIds = season.standings.map((s) => s.clubId)
+  const allFixtures = buildSeasonFixtures(clubIds)
+  const mid = Math.ceil(allFixtures.length / 2)
+  const fixtures = allFixtures.slice(0, mid)
+  const playerFixturesFull = allFixtures.filter(
+    (f) => f.homeId === season.clubId || f.awayId === season.clubId,
+  )
+  const fixturesForPlayer = playerFixturesFull.length
+  const playerFixturesHalf = fixtures.filter(
+    (f) => f.homeId === season.clubId || f.awayId === season.clubId,
+  )
+  const overallBefore = player.overall
+
+  const standings: ClubStanding[] = clubIds.map((id) => {
+    const existing = season.standings.find((s) => s.clubId === id)
+    return (
+      existing ?? {
+        clubId: id,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        points: 0,
+      }
+    )
+  })
+  for (const row of standings) {
+    row.played = 0
+    row.won = 0
+    row.drawn = 0
+    row.lost = 0
+    row.goalsFor = 0
+    row.goalsAgainst = 0
+    row.points = 0
+  }
+
+  const scorerMap = new Map<string, ScorerEntry>()
+  for (const clubId of clubIds) {
+    ensureClubScorers(scorerMap, clubId, season.year)
+  }
+
+  const care = clamp(season.injuryCare ?? 0, 0, 5)
+  const seasonInjuryP = Math.max(0.06, 0.2 * (1 - care * 0.14))
+  const willGetInjured = Math.random() < seasonInjuryP
+  const injuryAtApp = willGetInjured
+    ? 1 + rngInt(Math.max(1, Math.floor(fixturesForPlayer * 0.85)))
+    : -1
+
+  const batch: FixtureBatchState = {
+    appearances: 0,
+    goals: 0,
+    assists: 0,
+    ratingSum: 0,
+    matchesMissedInjury: 0,
+    injuryLabels: [],
+    matchMood: clamp(50 + (Math.random() * 12 - 4), 38, 62),
+    appsThisSeason: 0,
+    injuryAtApp,
+  }
+
+  runFixtureBatch(fixtures, player, season, standings, scorerMap, strengthMods, batch)
+
+  if (batch.goals > 0) {
     bumpScorer(
       scorerMap,
       'player',
       { name: player.name, clubId: season.clubId, goals: 0, isPlayer: true },
-      goals,
+      batch.goals,
     )
+  }
+
+  season.standings = standings
+  season.halfStats = buildHalfProgress(batch, overallBefore, fixturesForPlayer, scorerMap)
+  season.phase = 'firstHalfDone'
+
+  tweakRivalForm(season.rival, batch.appearances, batch.goals, playerFixturesHalf.length)
+
+  const sorted = sortedStandings({ standings })
+  const place = sorted.findIndex((s) => s.clubId === season.clubId) + 1
+  const myRow = standings.find((s) => s.clubId === season.clubId)!
+  const avgRating = batch.appearances ? Math.round((batch.ratingSum / batch.appearances) * 10) / 10 : 0
+  const rivalNote = describeRival(player, season.rival)
+
+  let narrative = `Przerwa zimowa: ${getClub(season.clubId).name} na ${place}. miejscu (${myRow.points} pkt). `
+  narrative += `Zagrałeś ${batch.appearances} meczów, ${batch.goals} G / ${batch.assists} A`
+  if (avgRating > 0) narrative += `, średnia ${avgRating}`
+  narrative += `. ${rivalNote}`
+  if (batch.injuryLabels.length) {
+    narrative += ` Kontuzje: ${batch.injuryLabels[batch.injuryLabels.length - 1]}.`
+  }
+
+  return {
+    year: season.year,
+    leagueId: season.leagueId,
+    clubId: season.clubId,
+    place,
+    points: myRow.points,
+    appearances: batch.appearances,
+    goals: batch.goals,
+    assists: batch.assists,
+    avgRating,
+    rivalNote,
+    narrative,
+  }
+}
+
+function finalizeSeasonReport(
+  player: Player,
+  season: SeasonState,
+  strengthMods: Record<string, number>,
+  standings: ClubStanding[],
+  scorerMap: Map<string, ScorerEntry>,
+  batch: FixtureBatchState,
+  overallBefore: number,
+  fixturesForPlayer: number,
+): SeasonReport {
+  const league = getLeague(season.leagueId)
+  const clubIds = standings.map((s) => s.clubId)
+  const clubCount = clubIds.length
+
+  let { appearances, goals, assists, ratingSum, matchesMissedInjury } = batch
+  const injuryLabels = [...batch.injuryLabels]
+  let injuryNote: string | null = null
+  const matchMood = batch.matchMood
+
+  if (goals > 0) {
+    const playerEntry = scorerMap.get('player')
+    if (!playerEntry || playerEntry.goals < goals) {
+      bumpScorer(
+        scorerMap,
+        'player',
+        { name: player.name, clubId: season.clubId, goals: 0, isPlayer: true },
+        goals - (playerEntry?.goals ?? 0),
+      )
+    }
   }
 
   const leagueApps = appearances
@@ -634,14 +855,16 @@ export function simulateFullSeason(
   if (player.injury?.seasonEnding) {
     injuryNote = player.injury.label
   } else if (player.injury && player.injury.matchesLeft > 0) {
-    // Koniec sezonu — wyczyść drobne urazy
     player.injury = null
   }
 
-  const cup = simulatePolishCup(season.clubId, {
-    ...player,
-    form: clamp(matchMood, 25, 80),
-  })
+  const cup = simulatePolishCup(
+    season.clubId,
+    { ...player, form: clamp(matchMood, 25, 80) },
+    strengthMods,
+    season.rival,
+    season.rivalPressure ?? 0,
+  )
   goals += cup.playerGoals
   appearances += cup.playerApps
   if (cup.playerGoals > 0) {
@@ -653,7 +876,6 @@ export function simulateFullSeason(
     )
   }
 
-  // Forma = wynik względem oczekiwań + los; kontuzje mocno ciążą
   let perfForm = performanceFormScore(
     player.position,
     goals,
@@ -666,13 +888,11 @@ export function simulateFullSeason(
   if (matchesMissedInjury >= fixturesForPlayer * 0.35) perfForm -= 10
   else if (matchesMissedInjury >= 3) perfForm -= 5
   if (injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu')) perfForm -= 8
-  // Niski OVR: więcej szczęścia w formie; wysoki: ciaśniejszy los
   const luckSpan = player.overall <= 50 ? 18 : player.overall <= 62 ? 14 : 10
   const luck = Math.random() * luckSpan - luckSpan * 0.32
   const avgForm = clamp(perfForm + luck, 18, 94)
-  let formLabel = formLabelFromAvg(avgForm, player.overall)
+  let formLabel: FormLabel = formLabelFromAvg(avgForm, player.overall)
 
-  // Średnia ocena meczowa ogranicza etykietę formy — 6.8 ≠ świetny sezon
   const rating = leagueApps ? leagueAvgRating : 0
   if (rating > 0) {
     if (rating < 6.5 && (formLabel === 'świetna' || formLabel === 'dobra')) formLabel = 'przyzwoita'
@@ -680,7 +900,6 @@ export function simulateFullSeason(
     else if (rating < 7.3 && formLabel === 'świetna' && avgForm < 82) formLabel = 'dobra'
   }
 
-  // OVR z formy — młodzi rosną szybciej niż starzy, ale bez gwarantowanych +2/+3
   let ovrTarget = 0
   const young = player.age <= 25
   const veryYoung = player.age <= 21
@@ -691,7 +910,6 @@ export function simulateFullSeason(
   else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.55) ? 0 : -1) : -1
   else if (formLabel === 'fatalna') ovrTarget = -2
 
-  // Bonus tylko za naprawdę mocny sezon (nie za samo „bycie młodym”)
   if (young && ovrTarget >= 0 && rating >= 7.15 && leagueApps >= fixturesForPlayer * 0.45) {
     if (formLabel === 'świetna' && chance(veryYoung ? 0.4 : 0.28)) ovrTarget += 1
     else if (formLabel === 'dobra' && veryYoung && chance(0.2)) ovrTarget += 1
@@ -703,14 +921,12 @@ export function simulateFullSeason(
   if (leagueApps < fixturesForPlayer * 0.15 && formLabel !== 'świetna') ovrTarget -= 1
   if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
 
-  // Twardy sufit ze średniej oceny: 6.8 → max +1, 7.2+ → max +2/+3
   if (rating > 0) {
     const ratingCap =
       rating < 6.5 ? (young ? 1 : 0) : rating < 6.9 ? 1 : rating < 7.25 ? 2 : young ? 3 : 2
     ovrTarget = Math.min(ovrTarget, ratingCap)
   }
 
-  // Malejące zwroty bliżej sufitu kariery (80)
   if (ovrTarget > 0) {
     if (player.overall >= 78) ovrTarget = Math.min(ovrTarget, chance(0.35) ? 1 : 0)
     else if (player.overall >= 75) ovrTarget = Math.min(ovrTarget, 1)
@@ -719,10 +935,8 @@ export function simulateFullSeason(
   }
 
   ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget)
-
   applyOverallChange(player, ovrTarget)
 
-  // Forma nie jest trwałym atrybutem — reset
   player.form = 50
   syncPlayerOverall(player)
   player.morale = clamp(
@@ -750,12 +964,12 @@ export function simulateFullSeason(
     0,
     100,
   )
-  player.money += getClub(season.clubId).wage * 8
+  player.money += (player.contract.wage || getClub(season.clubId).wage) * 8
 
   const finalOverall = player.overall
   const finalDelta = finalOverall - overallBefore
 
-  const sorted = sortedStandings({ ...season, standings })
+  const sorted = sortedStandings({ standings })
   const place = sorted.findIndex((s) => s.clubId === season.clubId) + 1
   const myRow = standings.find((s) => s.clubId === season.clubId)!
 
@@ -777,22 +991,40 @@ export function simulateFullSeason(
         : false
   const title = league.tier === 1 && place === 1
 
-  // Przedłużenie kontraktu — rzadkie, głównie przy fatalnej formie
-  let refuseChance = 0.025
-  if (formLabel === 'fatalna') refuseChance += 0.14
-  else if (formLabel === 'słaba') refuseChance += 0.05
-  if (leagueApps < fixturesForPlayer * 0.2) refuseChance += 0.06
-  if (leagueAvgRating > 0 && leagueAvgRating < 5.0 && leagueApps >= 8) refuseChance += 0.05
-  if (place >= clubCount - 1) refuseChance += 0.03
-  if (formLabel === 'świetna' || formLabel === 'dobra' || goals >= 8 || cup.stage === 'winner')
-    refuseChance *= 0.2
-  if (matchesMissedInjury >= fixturesForPlayer * 0.4) refuseChance += 0.12
-  const contractRenewed = Math.random() >= refuseChance
-  const contractNote = contractRenewed
-    ? 'Klub chce przedłużyć kontrakt.'
-    : formLabel === 'fatalna' || matchesMissedInjury >= fixturesForPlayer * 0.4
-      ? 'Klub nie przedłuża kontraktu — forma / kontuzje i brak zaufania.'
-      : 'Klub nie przedłuża kontraktu — szuka innego kierunku.'
+  const underContract = player.contract.yearsLeft > 1
+  let contractRenewed: boolean
+  let proposedContractYears: number
+  let contractNote: string
+
+  if (underContract) {
+    contractRenewed = true
+    proposedContractYears = 0
+    const remaining = player.contract.yearsLeft - 1
+    contractNote =
+      remaining === 1
+        ? 'Masz jeszcze rok kontraktu — klub nie musi przedłużać.'
+        : `Masz jeszcze ${remaining} lata kontraktu — klub nie musi przedłużać.`
+  } else {
+    let refuseChance = 0.025
+    if (formLabel === 'fatalna') refuseChance += 0.14
+    else if (formLabel === 'słaba') refuseChance += 0.05
+    if (leagueApps < fixturesForPlayer * 0.2) refuseChance += 0.06
+    if (leagueAvgRating > 0 && leagueAvgRating < 5.0 && leagueApps >= 8) refuseChance += 0.05
+    if (place >= clubCount - 1) refuseChance += 0.03
+    if (formLabel === 'świetna' || formLabel === 'dobra' || goals >= 8 || cup.stage === 'winner') {
+      refuseChance *= 0.2
+    }
+    if (matchesMissedInjury >= fixturesForPlayer * 0.4) refuseChance += 0.12
+    contractRenewed = Math.random() >= refuseChance
+    proposedContractYears = contractRenewed ? (chance(0.4) ? 3 : 2) : 0
+    contractNote = contractRenewed
+      ? `Klub chce przedłużyć kontrakt o ${proposedContractYears} lat.`
+      : formLabel === 'fatalna' || matchesMissedInjury >= fixturesForPlayer * 0.4
+        ? 'Klub nie przedłuża kontraktu — forma / kontuzje i brak zaufania.'
+        : 'Klub nie przedłuża kontraktu — szuka innego kierunku.'
+  }
+
+  const rivalNote = describeRival(player, season.rival)
 
   let narrative = `${getClub(season.clubId).name} kończy sezon na ${place}. miejscu (${myRow.points} pkt, ${myRow.played} meczów). `
   narrative += `Zagrałeś ${leagueApps}/${fixturesForPlayer} meczów ligowych (+ puchar). Forma: ${formLabel}. `
@@ -803,6 +1035,7 @@ export function simulateFullSeason(
   if (relegation) narrative += 'Spadek klubu. '
   if (title) narrative += 'Mistrzostwo Polski! '
   if (injuryNote) narrative += `Kontuzje: ${injuryNote} (opuszczone mecze: ${matchesMissedInjury}). `
+  narrative += `${rivalNote} `
   narrative += cupStageLabel(cup.stage) + '. ' + contractNote
 
   return {
@@ -835,9 +1068,129 @@ export function simulateFullSeason(
     title,
     contractRenewed,
     contractNote,
+    proposedContractYears,
     injuryNote,
     matchesMissedInjury,
+    rivalNote,
   }
+}
+
+/** 2. połowa → raport sezonu */
+export function simulateSecondHalf(
+  player: Player,
+  season: SeasonState,
+  strengthMods: Record<string, number> = {},
+): SeasonReport {
+  season.phase = 'secondHalf'
+  const half = season.halfStats
+  const clubIds = season.standings.map((s) => s.clubId)
+  const allFixtures = buildSeasonFixtures(clubIds)
+  const mid = Math.ceil(allFixtures.length / 2)
+  const tableStarted = season.standings.some((s) => s.played > 0)
+
+  // Ten sam klub: dokończ 2. połowę. Nowy klub (pusta tabela): pełny batch jako „reszta sezonu”.
+  const fixtures = tableStarted ? allFixtures.slice(mid) : allFixtures
+
+  const standings: ClubStanding[] = season.standings.map((s) => ({ ...s }))
+  if (!tableStarted) {
+    for (const row of standings) {
+      row.played = 0
+      row.won = 0
+      row.drawn = 0
+      row.lost = 0
+      row.goalsFor = 0
+      row.goalsAgainst = 0
+      row.points = 0
+    }
+  }
+
+  const scorerMap = half
+    ? scorerMapFromEntries(half.scorerEntries)
+    : new Map<string, ScorerEntry>()
+  for (const clubId of clubIds) {
+    ensureClubScorers(scorerMap, clubId, season.year)
+  }
+
+  const playerFixturesFull = allFixtures.filter(
+    (f) => f.homeId === season.clubId || f.awayId === season.clubId,
+  )
+  const batchPlayerFixtures = fixtures.filter(
+    (f) => f.homeId === season.clubId || f.awayId === season.clubId,
+  )
+
+  let fixturesForPlayer =
+    half?.fixturesForPlayer ?? playerFixturesFull.length
+  if (!tableStarted && half) {
+    // Transfer zimowy — dorobek osobisty z 1. połowy + mecze w nowym klubie
+    const firstHalfAppsPossible = Math.ceil(half.fixturesForPlayer / 2)
+    fixturesForPlayer = firstHalfAppsPossible + batchPlayerFixtures.length
+  }
+
+  const overallBefore = half?.overallBefore ?? player.overall
+
+  const care = clamp(season.injuryCare ?? 0, 0, 5)
+  const seasonInjuryP = Math.max(0.06, 0.2 * (1 - care * 0.14))
+  const defaultInjuryAtApp =
+    half?.injuryAtApp ??
+    (Math.random() < seasonInjuryP
+      ? 1 + rngInt(Math.max(1, Math.floor(fixturesForPlayer * 0.85)))
+      : -1)
+
+  const batch: FixtureBatchState = {
+    appearances: half?.appearances ?? 0,
+    goals: half?.goals ?? 0,
+    assists: half?.assists ?? 0,
+    ratingSum: half?.ratingSum ?? 0,
+    matchesMissedInjury: half?.matchesMissedInjury ?? 0,
+    injuryLabels: half ? [...half.injuryLabels] : [],
+    matchMood: half?.matchMood ?? clamp(50 + (Math.random() * 12 - 4), 38, 62),
+    appsThisSeason: half?.appsThisSeason ?? 0,
+    injuryAtApp: defaultInjuryAtApp,
+  }
+
+  const goalsBeforeBatch = batch.goals
+  runFixtureBatch(fixtures, player, season, standings, scorerMap, strengthMods, batch)
+
+  const goalsAdded = batch.goals - goalsBeforeBatch
+  if (goalsAdded > 0) {
+    bumpScorer(
+      scorerMap,
+      'player',
+      { name: player.name, clubId: season.clubId, goals: 0, isPlayer: true },
+      goalsAdded,
+    )
+  }
+
+  tweakRivalForm(
+    season.rival,
+    batch.appearances - (half?.appearances ?? 0),
+    batch.goals - (half?.goals ?? 0),
+    batchPlayerFixtures.length,
+  )
+
+  season.standings = standings
+  season.halfStats = null
+
+  return finalizeSeasonReport(
+    player,
+    season,
+    strengthMods,
+    standings,
+    scorerMap,
+    batch,
+    overallBefore,
+    fixturesForPlayer,
+  )
+}
+
+/** Pełny sezon = 1. połowa + 2. połowa (wrapper). */
+export function simulateFullSeason(
+  player: Player,
+  season: SeasonState,
+  strengthMods: Record<string, number> = {},
+): SeasonReport {
+  simulateFirstHalf(player, season, strengthMods)
+  return simulateSecondHalf(player, season, strengthMods)
 }
 
 export function applyKeyMatchToReport(
@@ -875,13 +1228,9 @@ export function applyKeyMatchToReport(
         row.goalsFor += 1
       }
       report.points += 2
-      // przelicz miejsce
       const fakeSeason = {
-        year: report.year,
-        leagueId: report.leagueId,
         clubId: report.clubId,
         standings: report.standings,
-        preseasonDone: true,
       }
       report.place = playerTablePosition(fakeSeason)
     }
@@ -906,4 +1255,3 @@ export function applyKeyMatchToReport(
     report.narrative += ` Kluczowa akcja nie wyszła (${Math.round(momentScore)}%).`
   }
 }
-

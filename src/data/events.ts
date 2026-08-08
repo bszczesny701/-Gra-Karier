@@ -8,6 +8,8 @@ export type EffectKey =
   | 'staminaDrain'
   /** Obniża ryzyko kontuzji w nadchodzącym sezonie (wartość dodatnia = bezpieczniej) */
   | 'injuryCare'
+  /** Wpływ na rywalizację o skład w tym sezonie (ujemne = łatwiej grać) */
+  | 'rivalPressure'
 
 export interface ChoiceEffect {
   key: EffectKey
@@ -689,6 +691,204 @@ export const CAREER_EVENTS: CareerEvent[] = [
           { key: 'stamina', delta: 2 },
           { key: 'reputation', delta: 1 },
           { key: 'injuryCare', delta: 2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'agent_higher_league',
+    title: 'Agent: wyższa liga',
+    speaker: 'Twój agent',
+    speakerRole: 'Twój agent',
+    messages: [
+      'Słuchaj — mam sygnał z wyższej ligi.',
+      'Mogę naciskać na transfer już teraz, albo zostajemy lojalni i budujemy wartość tutaj.',
+    ],
+    weight: 2,
+    minReputation: 14,
+    choices: [
+      {
+        id: 'push',
+        label: 'Naciskaj na transfer',
+        hint: '+reputacja, −morale (trener)',
+        effects: [
+          { key: 'reputation', delta: 3 },
+          { key: 'morale', delta: -4 },
+        ],
+      },
+      {
+        id: 'loyal',
+        label: 'Zostaję lojalny',
+        hint: '+morale, lekka −reputacja',
+        effects: [
+          { key: 'morale', delta: 4 },
+          { key: 'reputation', delta: -1 },
+        ],
+      },
+      {
+        id: 'wait',
+        label: 'Poczekajmy do zimy',
+        hint: '+reputacja',
+        effects: [{ key: 'reputation', delta: 1 }],
+      },
+    ],
+  },
+  {
+    id: 'coach_rival_fight',
+    title: 'Walka o skład',
+    speaker: 'Trener',
+    speakerRole: 'Sztab',
+    messages: [
+      'Rywal na Twojej pozycji nie odpuszcza.',
+      'Albo wchodzisz w tryb walki o „11”, albo akceptujesz rotację.',
+    ],
+    weight: 3,
+    choices: [
+      {
+        id: 'fight',
+        label: 'Walczę o miejsce',
+        hint: 'łatwiej grać vs rywal, −kondycja',
+        effects: [
+          { key: 'rivalPressure', delta: -2 },
+          { key: 'stamina', delta: -1 },
+          { key: 'morale', delta: 2 },
+        ],
+      },
+      {
+        id: 'bench',
+        label: 'Akceptuję ławkę',
+        hint: '+morale, trudniej o minuty',
+        effects: [
+          { key: 'rivalPressure', delta: 1 },
+          { key: 'morale', delta: 3 },
+        ],
+      },
+      {
+        id: 'extra',
+        label: 'Zostaję po treningu',
+        hint: '+podanie, walka o skład',
+        effects: [
+          { key: 'passing', delta: 1 },
+          { key: 'rivalPressure', delta: -1 },
+          { key: 'morale', delta: -1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'captain_loyalty',
+    title: 'Kapitan o lojalności',
+    speaker: 'Kapitan',
+    speakerRole: 'Szatnia',
+    messages: [
+      'Krążą plotki o ofertach.',
+      'Drużyna potrzebuje Cię tu. Zostajesz z nami na poważnie?',
+    ],
+    weight: 2,
+    minReputation: 16,
+    choices: [
+      {
+        id: 'stay_loyal',
+        label: 'Zostaję — to mój klub',
+        hint: '+morale, +reputacja',
+        effects: [
+          { key: 'morale', delta: 5 },
+          { key: 'reputation', delta: 2 },
+        ],
+      },
+      {
+        id: 'honest',
+        label: 'Jeśli przyjdzie dobra oferta…',
+        hint: '−morale szatni, +reputacja',
+        effects: [
+          { key: 'morale', delta: -3 },
+          { key: 'reputation', delta: 2 },
+        ],
+      },
+      {
+        id: 'focus',
+        label: 'Skupiam się na boisku',
+        hint: '+kondycja',
+        effects: [{ key: 'stamina', delta: 1 }],
+      },
+    ],
+  },
+  {
+    id: 'agent_loan_idea',
+    title: 'Agent: wypożyczenie',
+    speaker: 'Twój agent',
+    speakerRole: 'Twój agent',
+    messages: [
+      'Jak minuty będą słabe, rozważymy wypożyczenie.',
+      'Niższa liga, więcej gry, wracasz mocniejszy. Co myślisz?',
+    ],
+    weight: 2,
+    minReputation: 10,
+    choices: [
+      {
+        id: 'open',
+        label: 'Jestem otwarty',
+        hint: '+reputacja (agent pracuje)',
+        effects: [{ key: 'reputation', delta: 2 }],
+      },
+      {
+        id: 'refuse_loan',
+        label: 'Nie — walczę tutaj',
+        hint: '+morale, walka o skład',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'rivalPressure', delta: -1 },
+        ],
+      },
+      {
+        id: 'money_first',
+        label: 'Tylko jak pensja urośnie',
+        hint: '+pieniądze (zaliczka agenta), −reputacja',
+        effects: [
+          { key: 'money', delta: 800 },
+          { key: 'reputation', delta: -2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'night_vs_rival',
+    title: 'Noc czy rywal',
+    speaker: 'Kolega z drużyny',
+    speakerRole: 'Szatnia',
+    messages: [
+      'Ekipa idzie na miasto. Rywal na Twojej pozycji pewnie śpi przed treningiem.',
+      'Co robisz?',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'party',
+        label: 'Lecę z ekipą',
+        hint: '+morale, −kondycja, rywal mocniejszy',
+        effects: [
+          { key: 'morale', delta: 4 },
+          { key: 'stamina', delta: -2 },
+          { key: 'rivalPressure', delta: 1 },
+        ],
+      },
+      {
+        id: 'train',
+        label: 'Trening pod rywala',
+        hint: 'łatwiej o minuty, −morale',
+        effects: [
+          { key: 'rivalPressure', delta: -2 },
+          { key: 'morale', delta: -2 },
+          { key: 'stamina', delta: 1 },
+        ],
+      },
+      {
+        id: 'early',
+        label: 'Wczesny sen',
+        hint: '+kondycja, −ryzyko urazu',
+        effects: [
+          { key: 'stamina', delta: 2 },
+          { key: 'injuryCare', delta: 1 },
         ],
       },
     ],

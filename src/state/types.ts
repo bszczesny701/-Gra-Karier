@@ -22,6 +22,10 @@ export type Screen =
   | 'seasonReport'
   | 'transferChoice'
   | 'seasonEnd'
+  | 'winterBreak'
+  | 'careerEnd'
+
+export type SeasonPhase = 'ready' | 'firstHalfDone' | 'secondHalf'
 
 export interface Attributes {
   pace: number
@@ -29,6 +33,25 @@ export interface Attributes {
   passing: number
   defending: number
   stamina: number
+}
+
+export interface PlayerContract {
+  clubId: string
+  yearsLeft: number
+  wage: number
+}
+
+export interface PlayerLoan {
+  parentClubId: string
+  parentLeagueId: string
+  /** Po 2. połowie / końcu sezonu wracasz do rodzica */
+  returnAfterSeason: boolean
+}
+
+export interface PositionalRival {
+  name: string
+  overall: number
+  form: number
 }
 
 export interface Player {
@@ -42,14 +65,19 @@ export interface Player {
   form: number
   reputation: number
   money: number
-  /** Aktualna kontuzja — mecze do opuszczenia */
   injury: PlayerInjury | null
+  contract: PlayerContract
+  loan: PlayerLoan | null
+  peakOverall: number
+  clubsPlayed: string[]
+  seasonsPlayed: number
+  titles: number
+  retired: boolean
 }
 
 export interface PlayerInjury {
   matchesLeft: number
   label: string
-  /** Kontuzja sezonowa — praktycznie koniec sezonu */
   seasonEnding: boolean
 }
 
@@ -59,7 +87,6 @@ export interface CreateCareerOptions {
   preferredFoot: PreferredFoot
   age: number
   overall: number
-  /** Uzupełniane po wyborze oferty startowej */
   clubId?: string
 }
 
@@ -81,17 +108,35 @@ export interface ScorerEntry {
   isPlayer: boolean
 }
 
+/** Postęp 1. połowy — kontynuacja w 2. połowie */
+export interface SeasonHalfProgress {
+  appearances: number
+  goals: number
+  assists: number
+  ratingSum: number
+  matchesMissedInjury: number
+  injuryLabels: string[]
+  matchMood: number
+  appsThisSeason: number
+  injuryAtApp: number
+  overallBefore: number
+  fixturesForPlayer: number
+  scorerEntries: ScorerEntry[]
+}
+
 export interface SeasonState {
   year: number
   leagueId: string
   clubId: string
   standings: ClubStanding[]
-  /** Czy decyzja przed sezonem już podjęta */
   preseasonDone: boolean
-  /** Czy wykorzystano okno transferowe w trakcie sezonu */
   midTransferDone: boolean
-  /** Opieka / ostrożność — obniża ryzyko kontuzji (0–5) */
   injuryCare: number
+  rival: PositionalRival
+  /** Tymczasowy modyfikator kary rywala (−2…+2) z decyzji */
+  rivalPressure: number
+  phase: SeasonPhase
+  halfStats: SeasonHalfProgress | null
 }
 
 export interface PendingKeyMatch {
@@ -101,7 +146,6 @@ export interface PendingKeyMatch {
   reason: KeyMatchReason
   label: string
   description: string
-  /** Jak wpływa na raport po sukcesie/porażce akcji */
   stake: 'leaguePoints' | 'cupProgress'
 }
 
@@ -116,8 +160,10 @@ export interface TransferOffer {
   signingBonus: number
   message: string
   leagueId: string
-  /** Szansa na regularną grę (0–100), głównie oferty startowe */
   playChance?: number
+  kind?: 'transfer' | 'loan'
+  /** Lata kontraktu przy transferze (1–3) */
+  contractYears?: number
 }
 
 export interface PendingDecision {
@@ -162,12 +208,38 @@ export interface SeasonReport {
   promotion: boolean
   relegation: boolean
   title: boolean
-  /** Czy klub chce przedłużyć kontrakt */
   contractRenewed: boolean
   contractNote: string
-  /** Opis kontuzji w sezonie (jeśli była) */
+  /** Propozycja nowego kontraktu gdy kończy się stary */
+  proposedContractYears: number
   injuryNote: string | null
   matchesMissedInjury: number
+  rivalNote: string | null
+}
+
+export interface WinterBreakSnapshot {
+  year: number
+  leagueId: string
+  clubId: string
+  place: number
+  points: number
+  appearances: number
+  goals: number
+  assists: number
+  avgRating: number
+  rivalNote: string
+  narrative: string
+}
+
+export interface CareerSummary {
+  name: string
+  seasonsPlayed: number
+  peakOverall: number
+  clubsCount: number
+  titles: number
+  finalAge: number
+  finalOverall: number
+  narrative: string
 }
 
 export interface GameState {
@@ -181,13 +253,14 @@ export interface GameState {
   seasonReport: SeasonReport | null
   transferOffers: TransferOffer[]
   seasonSummary: string | null
+  winterSnapshot: WinterBreakSnapshot | null
+  careerSummary: CareerSummary | null
   log: string[]
-  /** Trwałe modyfikatory siły klubów (np. + po awansie) */
   clubStrengthMods: Record<string, number>
 }
 
-export const SAVE_KEY = 'gra-karier-save-v9'
-export const SAVE_VERSION = 9
+export const SAVE_KEY = 'gra-karier-save-v10'
+export const SAVE_VERSION = 10
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -199,19 +272,15 @@ export const CAREER_OVR_CAP = 80
 /** Limity zmiany OVR po sezonie wg wieku. */
 export function clampSeasonOvrDelta(age: number, raw: number): number {
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
-  // Wolniejszy rozwój: młody talent +2–3 max, nie +4/+5 co sezon
   const maxUp = age <= 21 ? 3 : age <= 25 ? 2 : 2
   let delta = Math.max(maxDown, Math.min(maxUp, Math.round(raw)))
 
-  // +3 u juniorów rzadkie
   if (age <= 21 && delta >= 3) {
     if (Math.random() > 0.28) delta = 2
   }
-  // Po 25. +2 też nie co sezon
   if (age > 25 && delta >= 2) {
     if (Math.random() > 0.4) delta = 1
   }
-  // Po 30. wzrost wyjątkowy
   if (age >= 30 && delta > 1) delta = 1
   if (age >= 32 && delta > 0 && Math.random() > 0.35) delta = 0
   if (age >= 35 && delta > 0) delta = 0
@@ -226,7 +295,6 @@ export function footLabel(foot: PreferredFoot): string {
 }
 
 export function formLabelFromAvg(avg: number, overall = 55): FormLabel {
-  // Im wyższy OVR, tym wyższy próg „świetnej” / „dobrej” formy
   const świetnaMin = clamp(Math.round(70 + (overall - 45) * 0.4), 68, 86)
   const dobraMin = clamp(Math.round(56 + (overall - 45) * 0.25), 52, 70)
   const przyzwoitaMin = clamp(Math.round(44 + (overall - 45) * 0.12), 40, 52)
@@ -238,23 +306,14 @@ export function formLabelFromAvg(avg: number, overall = 55): FormLabel {
   return 'fatalna'
 }
 
-/**
- * Bias formy wg OVR: niski overall łatwiej „eksploduje” formą,
- * wysoki musi mieć wyjątkowy sezon, żeby dostać świetną.
- */
 export function formPotentialBias(overall: number): number {
-  // ~45 → +14…+18, ~55 → +3…+5, ~65 → −4, ~75 → −12, ~80 → −16
   if (overall <= 48) return clamp(14 + Math.round((48 - overall) * 0.9), 10, 20)
-  if (overall <= 55) return Math.round(14 - (overall - 48) * 1.4) // 14 → ~4
-  if (overall <= 65) return Math.round(4 - (overall - 55) * 0.9) // 4 → −5
-  if (overall <= 75) return Math.round(-5 - (overall - 65) * 0.8) // −5 → −13
+  if (overall <= 55) return Math.round(14 - (overall - 48) * 1.4)
+  if (overall <= 65) return Math.round(4 - (overall - 55) * 0.9)
+  if (overall <= 75) return Math.round(-5 - (overall - 65) * 0.8)
   return clamp(Math.round(-13 - (overall - 75) * 1.0), -20, -10)
 }
 
-/**
- * Forma sezonu względem oczekiwań pozycji.
- * Spełnienie normy ≈ 52 (przyzwoita). Fatalna tylko przy wyraźnie pustym sezonie.
- */
 export function performanceFormScore(
   position: Position,
   goals: number,
@@ -285,7 +344,6 @@ export function performanceFormScore(
   const expected = expectedGoals + expectedAssists * 0.75
   const outRatio = produced / Math.max(0.8, expected)
 
-  // Baza = przyzwoita; wynik względem normy
   let score = 52
   score += clamp((outRatio - 1) * 18, -16, 24)
   score += clamp((avgRating - 6.15) * 7, -12, 14)
@@ -296,8 +354,6 @@ export function performanceFormScore(
   else if (appRate >= 0.45) score += 2
   else if (appRate < 0.22) score -= 3
 
-  // Podłogi / sufity miękkie (nagradzają dorobek, nie tylko karzą)
-  // Przy wysokim OVR nie dociągamy automatycznie do „świetnej”
   const softFloorCap = overall >= 68 ? 62 : overall >= 60 ? 66 : 72
   if (position === 'NP') {
     if (goals >= 12) score = Math.max(score, Math.min(68, softFloorCap + 6))
@@ -349,7 +405,17 @@ export function createEmptyState(): GameState {
     seasonReport: null,
     transferOffers: [],
     seasonSummary: null,
+    winterSnapshot: null,
+    careerSummary: null,
     log: [],
     clubStrengthMods: {},
   }
+}
+
+export function shouldRetire(player: Player): boolean {
+  if (player.retired) return true
+  if (player.age >= 37) return true
+  if (player.age >= 35 && player.overall <= 58) return true
+  if (player.age >= 34 && player.overall <= 52) return true
+  return false
 }

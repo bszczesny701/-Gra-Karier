@@ -351,6 +351,20 @@ h3 {
   font-size: 0.9rem;
 }
 
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  background: var(--accent);
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 .scoreboard {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
