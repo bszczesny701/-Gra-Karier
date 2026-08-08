@@ -54,10 +54,11 @@ function applyOverallChange(player: Player, targetDelta: number): number {
 
 const NPC_FIRST = [
   'Adam', 'Kamil', 'Piotr', 'Michał', 'Jakub', 'Bartosz', 'Tomasz', 'Mateusz', 'Damian', 'Filip',
+  'Patryk', 'Sebastian', 'Krzysztof', 'Marcin', 'Łukasz',
 ]
 const NPC_LAST = [
   'Kowalski', 'Nowak', 'Wiśniewski', 'Wójcik', 'Kamiński', 'Lewandowski', 'Zieliński', 'Szymański',
-  'Woźniak', 'Dąbrowski', 'Kozłowski', 'Jankowski',
+  'Woźniak', 'Dąbrowski', 'Kozłowski', 'Jankowski', 'Piotrowski', 'Grabowski', 'Pawlak',
 ]
 
 function rngInt(n: number): number {
@@ -68,10 +69,67 @@ function chance(p: number): boolean {
   return Math.random() < p
 }
 
-function npcName(seed: string): string {
+function hashSeed(seed: string): number {
   let h = 0
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  return `${NPC_FIRST[h % NPC_FIRST.length]} ${NPC_LAST[(h >> 4) % NPC_LAST.length]}`
+  return h
+}
+
+function npcName(seed: string): string {
+  const h = hashSeed(seed)
+  const first = NPC_FIRST[h % NPC_FIRST.length] ?? 'Jan'
+  const last = NPC_LAST[Math.floor(h / 17) % NPC_LAST.length] ?? 'Kowalski'
+  return `${first} ${last}`
+}
+
+/** 3 napastników/pomocników na klub — gole nie lecą na jedną osobę. */
+function ensureClubScorers(
+  map: Map<string, ScorerEntry>,
+  clubId: string,
+  year: number,
+): string[] {
+  const keys: string[] = []
+  for (let i = 0; i < 3; i++) {
+    const key = `npc-${clubId}-${i}`
+    keys.push(key)
+    if (!map.has(key)) {
+      map.set(key, {
+        name: npcName(`${clubId}-${year}-s${i}`),
+        clubId,
+        goals: 0,
+        isPlayer: false,
+      })
+    }
+  }
+  return keys
+}
+
+/** Rozdziel gole meczu między trzech strzelców; ~12% „inni” (nie na listę). */
+function distributeClubGoals(
+  map: Map<string, ScorerEntry>,
+  clubId: string,
+  year: number,
+  goals: number,
+): void {
+  if (goals <= 0) return
+  const keys = ensureClubScorers(map, clubId, year)
+  // główny / 2. / 3. / reszta składu (bez wpisu na listę)
+  const weights = [0.38, 0.28, 0.22, 0.12]
+  for (let g = 0; g < goals; g++) {
+    const roll = Math.random()
+    let acc = 0
+    let pickIdx = weights.length - 1
+    for (let i = 0; i < weights.length; i++) {
+      acc += weights[i]!
+      if (roll < acc) {
+        pickIdx = i
+        break
+      }
+    }
+    if (pickIdx >= keys.length) continue
+    const row = map.get(keys[pickIdx]!)!
+    row.goals += 1
+  }
 }
 
 function updateStanding(row: ClubStanding, gf: number, ga: number): void {
@@ -90,11 +148,12 @@ function updateStanding(row: ClubStanding, gf: number, ga: number): void {
 }
 
 function scoreline(att: number, def: number): number {
-  const expected = Math.max(0.15, (att - def) / 30 + 1.15)
+  // ~0.8–1.0 gola/mecz — król strzelców w 14 kolejkach ≈ 8–12
+  const expected = Math.max(0.08, (att - def) / 36 + 0.82)
   let g = 0
-  for (let i = 0; i < 5; i++) if (chance(expected / 5)) g++
-  if (chance(0.07)) g++
-  return g
+  for (let i = 0; i < 4; i++) if (chance(expected / 4)) g++
+  if (chance(0.04)) g++
+  return Math.min(g, 4)
 }
 
 /** Szansa na występ — z OVR / reputacji / morale (forma nie jest stałą statystyką). */
@@ -317,18 +376,7 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
 
   const scorerMap = new Map<string, ScorerEntry>()
   for (const clubId of clubIds) {
-    if (clubId === season.clubId) continue
-    bumpScorer(
-      scorerMap,
-      `npc-${clubId}`,
-      {
-        name: npcName(clubId + season.year),
-        clubId,
-        goals: 0,
-        isPlayer: false,
-      },
-      0,
-    )
+    ensureClubScorers(scorerMap, clubId, season.year)
   }
 
   let appearances = 0
@@ -416,26 +464,16 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     updateStanding(standings.find((s) => s.clubId === homeId)!, hg, ag)
     updateStanding(standings.find((s) => s.clubId === awayId)!, ag, hg)
 
-    // NPC gole — rozdziel między strzelców klubów
+    // NPC gole — 3 strzelców na klub; u gracza reszta po odjęciu jego goli
     for (const [clubId, gFor] of [
       [homeId, hg],
       [awayId, ag],
     ] as const) {
-      if (clubId === season.clubId) continue
-      let remaining = gFor
-      while (remaining > 0) {
-        bumpScorer(
-          scorerMap,
-          `npc-${clubId}`,
-          {
-            name: npcName(clubId + season.year),
-            clubId,
-            goals: 0,
-            isPlayer: false,
-          },
-          1,
-        )
-        remaining--
+      if (clubId === season.clubId) {
+        const teammates = Math.max(0, gFor - (starts ? matchGoals : 0))
+        distributeClubGoals(scorerMap, clubId, season.year, teammates)
+      } else {
+        distributeClubGoals(scorerMap, clubId, season.year, gFor)
       }
     }
   }
