@@ -52,7 +52,7 @@ function c(
 
 export const CLUBS: Record<string, Club> = {
   // Skala europejska: 5★ = Real/City, top PL ≈ 2.5★ (nie 4★)
-  // III liga — 1★
+  // III liga — 1★ (16 klubów)
   'hutnik-krakow': c('hutnik-krakow', 'Hutnik Kraków', 'HUT', 40, 700, 1),
   'polonia-bytom': c('polonia-bytom', 'Polonia Bytom', 'PBT', 42, 750, 1),
   'resovia': c('resovia', 'Resovia Rzeszów', 'RES', 41, 720, 1),
@@ -61,8 +61,16 @@ export const CLUBS: Record<string, Club> = {
   'podbeskidzie': c('podbeskidzie', 'Podbeskidzie', 'POD', 44, 800, 1),
   'gks-tichy': c('gks-tichy', 'GKS Tychy', 'TYC', 45, 820, 1),
   'wieczysta': c('wieczysta', 'Wieczysta Kraków', 'WIE', 46, 850, 1),
+  'garbarnia': c('garbarnia', 'Garbarnia Kraków', 'GAR', 38, 650, 1),
+  'skra': c('skra', 'Skra Częstochowa', 'SKR', 39, 680, 1),
+  'olimpia-grudziadz': c('olimpia-grudziadz', 'Olimpia Grudziądz', 'OGR', 41, 710, 1),
+  'stilon': c('stilon', 'Stilon Gorzów', 'STI', 40, 690, 1),
+  'rekord': c('rekord', 'Rekord Bielsko-Biała', 'REK', 42, 730, 1),
+  'unia-tarnow': c('unia-tarnow', 'Unia Tarnów', 'UTA', 38, 640, 1),
+  'carina': c('carina', 'Carina Gubin', 'CGU', 37, 620, 1),
+  'swit': c('swit', 'Świt Szczecin', 'SWT', 40, 700, 1),
 
-  // II liga — 1–1.5★
+  // II liga — 1–1.5★ (18 klubów)
   'znicz': c('znicz', 'Znicz Pruszków', 'ZNI', 48, 1100, 1),
   'kalisz': c('kalisz', 'KKS Kalisz', 'KAL', 47, 1050, 1),
   'belchatow': c('belchatow', 'GKS Bełchatów', 'BEL', 49, 1150, 1.5),
@@ -71,8 +79,18 @@ export const CLUBS: Record<string, Club> = {
   'polkowice': c('polkowice', 'Górnik Polkowice', 'GPO', 44, 900, 1),
   'stomil': c('stomil', 'Stomil Olsztyn', 'STO', 47, 1020, 1),
   'ruch': c('ruch', 'Ruch Chorzów', 'RCH', 51, 1300, 1.5),
+  'sosnowiec': c('sosnowiec', 'Zagłębie Sosnowiec', 'ZSO', 48, 1080, 1),
+  'sandecja': c('sandecja', 'Sandecja Nowy Sącz', 'SAN', 49, 1120, 1.5),
+  'hutnik-ii': c('hutnik-ii', 'Hutnik Warszawa', 'HWA', 45, 980, 1),
+  'legia-ii': c('legia-ii', 'Legia II', 'LG2', 50, 1200, 1.5),
+  'pogon-siedlce': c('pogon-siedlce', 'Pogoń Siedlce', 'PSI', 46, 1000, 1),
+  'kks-ii': c('kks-ii', 'KKS Olimpia Zamość', 'OZA', 44, 920, 1),
+  'wigry': c('wigry', 'Wigry Suwałki', 'WIG', 45, 960, 1),
+  'gornik-polkowice-2': c('gornik-polkowice-2', 'Polonia Warszawa II', 'PW2', 43, 880, 1),
+  'stal-rze-ii': c('stal-rze-ii', 'Stal Rzeszów II', 'SR2', 42, 850, 1),
+  'radunia': c('radunia', 'Radunia Stężyca', 'RADU', 44, 900, 1),
 
-  // I liga — 1.5–2★
+  // I liga — 1.5–2★ (18 klubów)
   'wisla-krakow': c('wisla-krakow', 'Wisła Kraków', 'WIS', 58, 2200, 2),
   'slask-wroclaw': c('slask-wroclaw', 'Śląsk Wrocław', 'SLW', 56, 2000, 2),
   'lks-lodz': c('lks-lodz', 'ŁKS Łódź', 'LKS', 54, 1800, 1.5),
@@ -81,6 +99,16 @@ export const CLUBS: Record<string, Club> = {
   'odra-opole': c('odra-opole', 'Odra Opole', 'ODR', 50, 1400, 1.5),
   'gornik-leczna': c('gornik-leczna', 'Górnik Łęczna', 'GLE', 49, 1350, 1.5),
   'stal-rzeszow': c('stal-rzeszow', 'Stal Rzeszów', 'STR', 51, 1500, 1.5),
+  'stal-mielec': c('stal-mielec', 'Stal Mielec', 'STM', 55, 1900, 2),
+  'warta-poznan': c('warta-poznan', 'Warta Poznań', 'WAR', 54, 1750, 1.5),
+  'chrobry': c('chrobry', 'Chrobry Głogów', 'CHG', 51, 1450, 1.5),
+  'nieciecza-i': c('nieciecza-i', 'Bruk-Bet Nieciecza', 'BBN', 53, 1650, 1.5),
+  'gks-tichy-i': c('gks-tichy-i', 'GKS Tychy (I)', 'TYI', 52, 1550, 1.5),
+  'polonia-bytom-i': c('polonia-bytom-i', 'Polonia Bytom (I)', 'PBY', 49, 1350, 1.5),
+  'resovia-i': c('resovia-i', 'Resovia (I)', 'REI', 48, 1280, 1.5),
+  'podbeskidzie-i': c('podbeskidzie-i', 'Podbeskidzie (I)', 'PDI', 50, 1400, 1.5),
+  'ruch-i': c('ruch-i', 'Ruch Chorzów (I)', 'RCI', 55, 1850, 2),
+  'wisla-pulawy-i': c('wisla-pulawy-i', 'Wisła Puławy (I)', 'WPI', 48, 1300, 1.5),
 
   // Ekstraklasa — max ~2.5★ (daleko od Realu 5★)
   'lech-poznan': c('lech-poznan', 'Lech Poznań', 'LPO', 78, 5200, 2.5),
@@ -295,6 +323,16 @@ export const LEAGUES: League[] = [
       'odra-opole',
       'gornik-leczna',
       'stal-rzeszow',
+      'stal-mielec',
+      'warta-poznan',
+      'chrobry',
+      'nieciecza-i',
+      'gks-tichy-i',
+      'polonia-bytom-i',
+      'resovia-i',
+      'podbeskidzie-i',
+      'ruch-i',
+      'wisla-pulawy-i',
     ],
   },
   {
@@ -311,6 +349,16 @@ export const LEAGUES: League[] = [
       'polkowice',
       'stomil',
       'ruch',
+      'sosnowiec',
+      'sandecja',
+      'hutnik-ii',
+      'legia-ii',
+      'pogon-siedlce',
+      'kks-ii',
+      'wigry',
+      'gornik-polkowice-2',
+      'stal-rze-ii',
+      'radunia',
     ],
   },
   {
@@ -327,6 +375,14 @@ export const LEAGUES: League[] = [
       'podbeskidzie',
       'gks-tichy',
       'wieczysta',
+      'garbarnia',
+      'skra',
+      'olimpia-grudziadz',
+      'stilon',
+      'rekord',
+      'unia-tarnow',
+      'carina',
+      'swit',
     ],
   },
 ]

@@ -893,6 +893,212 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
     ],
   },
+  {
+    id: 'locker_fight',
+    title: 'Kłótnia w szatni',
+    speaker: 'Kapitan',
+    speakerRole: 'Szatnia',
+    messages: [
+      'Po treningu poszło ostrzej. Rywal na Twojej pozycji mówi, że „młodzi tylko zajmują miejsce”.',
+      'Szatnia patrzy. Co robisz?',
+    ],
+    weight: 3,
+    choices: [
+      {
+        id: 'confront',
+        label: 'Odpinam się publicznie',
+        hint: '+reputacja, −morale, rywal mocniejszy',
+        effects: [
+          { key: 'reputation', delta: 2 },
+          { key: 'morale', delta: -4 },
+          { key: 'rivalPressure', delta: 2 },
+        ],
+      },
+      {
+        id: 'calm',
+        label: 'Gaszę temat',
+        hint: '+morale, lekko słabszy rywal',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'rivalPressure', delta: -1 },
+        ],
+      },
+      {
+        id: 'coach',
+        label: 'Idę do trenera',
+        hint: 'łatwiej o skład, −reputacja w szatni',
+        effects: [
+          { key: 'rivalPressure', delta: -2 },
+          { key: 'reputation', delta: -2 },
+          { key: 'morale', delta: -1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'media_beef',
+    title: 'Afera w mediach',
+    speaker: 'Rzecznik klubu',
+    speakerRole: 'Media',
+    messages: [
+      'Dziennikarz pyta o „napięcie w szatni”. Kolega już coś napisał w socialach.',
+      'Jak odpowiesz — będzie głośno albo ucichnie.',
+    ],
+    weight: 2,
+    minReputation: 12,
+    choices: [
+      {
+        id: 'fire',
+        label: 'Odpalam — mówię wprost',
+        hint: '+reputacja, −morale, rywal ↑',
+        effects: [
+          { key: 'reputation', delta: 3 },
+          { key: 'morale', delta: -3 },
+          { key: 'rivalPressure', delta: 2 },
+        ],
+      },
+      {
+        id: 'mute',
+        label: 'Zero komentarza',
+        hint: 'neutralnie, lekki spokój',
+        effects: [
+          { key: 'morale', delta: 1 },
+          { key: 'rivalPressure', delta: -1 },
+        ],
+      },
+      {
+        id: 'apologize',
+        label: 'Przepraszam i gaszę',
+        hint: '+morale drużyny, −reputacja',
+        effects: [
+          { key: 'morale', delta: 4 },
+          { key: 'reputation', delta: -2 },
+          { key: 'rivalPressure', delta: -1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'extra_gym_ovr',
+    title: 'Blok siłowy',
+    speaker: 'Trener przygotowania',
+    speakerRole: 'Sztab',
+    messages: [
+      'Mamy wolne popołudnie. Możesz wejść w ciężki blok — to podniesie Twoją klasę (OVR).',
+      'Albo odpoczywasz pod mecz.',
+    ],
+    weight: 3,
+    choices: [
+      {
+        id: 'hard',
+        label: 'Wchodzę w ciężki blok',
+        hint: '+OVR (tempo/kondycja), −morale',
+        effects: [
+          { key: 'pace', delta: 2 },
+          { key: 'stamina', delta: 2 },
+          { key: 'morale', delta: -3 },
+        ],
+      },
+      {
+        id: 'smart',
+        label: 'Lekka praca + regeneracja',
+        hint: '+kondycja, −ryzyko urazu',
+        effects: [
+          { key: 'stamina', delta: 1 },
+          { key: 'injuryCare', delta: 2 },
+        ],
+      },
+      {
+        id: 'rest',
+        label: 'Odpoczywam',
+        hint: '+morale',
+        effects: [{ key: 'morale', delta: 3 }],
+      },
+    ],
+  },
+  {
+    id: 'skill_camp',
+    title: 'Obóz umiejętności',
+    speaker: 'Asystent trenera',
+    speakerRole: 'Sztab',
+    messages: [
+      'Weekendowy obóz: strzały, podania albo obrona — wybór wpływa na OVR.',
+      'To męczy nogi, ale widać postęp.',
+    ],
+    weight: 3,
+    choices: [
+      {
+        id: 'shoot_camp',
+        label: 'Blok strzelecki',
+        hint: '+OVR (strzał), −kondycja',
+        effects: [
+          { key: 'shooting', delta: 3 },
+          { key: 'stamina', delta: -2 },
+        ],
+      },
+      {
+        id: 'pass_camp',
+        label: 'Blok podań',
+        hint: '+OVR (podanie), −kondycja',
+        effects: [
+          { key: 'passing', delta: 3 },
+          { key: 'stamina', delta: -2 },
+        ],
+      },
+      {
+        id: 'def_camp',
+        label: 'Blok defensywny',
+        hint: '+OVR (obrona), −kondycja',
+        effects: [
+          { key: 'defending', delta: 3 },
+          { key: 'stamina', delta: -2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'captain_clash',
+    title: 'Starcie z kapitanem',
+    speaker: 'Kapitan',
+    speakerRole: 'Szatnia',
+    messages: [
+      'Kapitan mówi, że za mało pressujesz. Ty uważasz, że on Cię wystawia.',
+      'Albo dogadacie się — albo będzie zimno w szatni.',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'argue',
+        label: 'Idę w konfrontację',
+        hint: 'rywal ↑, +reputacja „twardziel”',
+        effects: [
+          { key: 'rivalPressure', delta: 2 },
+          { key: 'reputation', delta: 2 },
+          { key: 'morale', delta: -3 },
+        ],
+      },
+      {
+        id: 'respect',
+        label: 'Słucham i pracuję',
+        hint: '+podanie/obrona (OVR), −morale chwilowo',
+        effects: [
+          { key: 'passing', delta: 1 },
+          { key: 'defending', delta: 1 },
+          { key: 'morale', delta: -1 },
+          { key: 'rivalPressure', delta: -1 },
+        ],
+      },
+      {
+        id: 'mediate',
+        label: 'Proszę o rozmowę we trzech',
+        hint: '+morale, spokój w szatni',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'rivalPressure', delta: -2 },
+        ],
+      },
+    ],
+  },
 ]
 
 export function pickEvent(

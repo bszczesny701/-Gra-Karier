@@ -306,14 +306,13 @@ export function matchAppearanceChance(
 }
 
 /**
- * Pełny terminarz ligowy — każdy klub gra z każdym.
- * Małe ligi (≤10): dwurundowo. Większe (Ekstraklasa): jedna runda.
+ * Pełny terminarz ligowy — każdy z każdym u siebie i na wyjeździe (2 rundy).
+ * 20 drużyn → 38 kolejek dla klubu; 18 → 34 itd.
  */
 export function buildSeasonFixtures(
   clubIds: string[],
 ): Array<{ homeId: string; awayId: string }> {
   const ids = [...clubIds]
-  const doubleRound = ids.length <= 10
   const teams: Array<string | null> =
     ids.length % 2 === 0 ? [...ids] : [...ids, null]
   const n = teams.length
@@ -336,7 +335,6 @@ export function buildSeasonFixtures(
     teams.splice(0, teams.length, fixed!, ...movable)
   }
 
-  if (!doubleRound) return firstHalf
   const secondHalf = firstHalf.map((f) => ({ homeId: f.awayId, awayId: f.homeId }))
   return [...firstHalf, ...secondHalf]
 }

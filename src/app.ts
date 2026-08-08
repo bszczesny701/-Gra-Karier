@@ -301,21 +301,33 @@ export class App {
         ${loanLine}
         ${injuryLine}
         <div class="stat-grid">
-          <div><span>OVR</span><strong>${p.overall}</strong></div>
-          <div><span>Morale</span><strong>${p.morale}</strong></div>
-          <div><span>Rep.</span><strong>${p.reputation}</strong></div>
-          <div><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
-          <div><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
-          <div><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
-          <div><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
-          <div><span>Obrona</span><strong>${p.attrs.defending}</strong></div>
+          <div title="Klasa zawodnika (1–99). Rośnie głównie po sezonie z minutami."><span>OVR</span><strong>${p.overall}</strong></div>
+          <div title="Samopoczucie w klubie. Wpływa na % gry i decyzje. Niskie = trudniej o skład."><span>Morale</span><strong>${p.morale}</strong></div>
+          <div title="Rozpoznawalność / status. Odblokowuje oferty i wydarzenia. Rośnie z golami i sukcesami."><span>Rep.</span><strong>${p.reputation}</strong></div>
+          <div title="Kondycja fizyczna. Część OVR; spada przy ciężkich treningach i urazach."><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
+          <div title="Szybkość. Ważna dla napastników i skrzydeł; buduje OVR."><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
+          <div title="Skuteczność strzału. Kluczowa dla NP; wpływa na OVR i gole."><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
+          <div title="Jakość podań. Kluczowa dla pomocników; asysty i OVR."><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
+          <div title="Gra w obronie. Kluczowa dla OB/ŚO; OVR i zatrzymywanie akcji."><span>Obrona</span><strong>${p.attrs.defending}</strong></div>
         </div>
+        <details class="stats-help">
+          <summary>Co oznaczają statystyki?</summary>
+          <ul class="muted">
+            <li><strong>OVR</strong> — ogólna klasa. Na koniec sezonu rośnie/spada (młody z minutami: szybki tor 45→60).</li>
+            <li><strong>Morale</strong> — nastrój. Wysokie = łatwiej o grę; niskie po kłótniach / ławce.</li>
+            <li><strong>Rep.</strong> — reputacja. Pomaga w ofertach i mediach.</li>
+            <li><strong>Tempo / Strzał / Podanie / Obrona / Kondycja</strong> — atrybuty budujące OVR wg pozycji.</li>
+            <li><strong>Forma meczowa</strong> — krótki humor pod dany mecz (nie mylić z OVR).</li>
+            <li><strong>Rywal</strong> — konkurent o miejsce w „11”; decyzje mogą go wzmocnić lub osłabić.</li>
+            <li><strong>Gra ≈ %</strong> — szansa, że trener Cię wystawi w następnym meczu.</li>
+          </ul>
+        </details>
       </section>
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
         ${nextLine}
-        <p class="muted">Grajesz mecz po meczu. Czasem wpadnie okazja bramkowa (minigierka). W połowie terminarza — przerwa zimowa.</p>
+        <p class="muted">Pełny sezon dwurundowy (np. 20 drużyn = 38 Twoich meczów). Czasem minigierka wg pozycji. W połowie — zima.</p>
         <div class="actions">
           ${
             s.preseasonDone
