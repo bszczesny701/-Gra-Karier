@@ -90,6 +90,8 @@ export interface SeasonState {
   preseasonDone: boolean
   /** Czy wykorzystano okno transferowe w trakcie sezonu */
   midTransferDone: boolean
+  /** Opieka / ostrożność — obniża ryzyko kontuzji (0–5) */
+  injuryCare: number
 }
 
 export interface PendingKeyMatch {

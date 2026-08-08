@@ -445,6 +445,15 @@ export function simulateFullSeason(
   let injuryNote: string | null = null
   const injuryLabels: string[] = []
 
+  // ~20% szansy na kontuzję w całym sezonie (opieka z decyzji obniża)
+  const care = clamp(season.injuryCare ?? 0, 0, 5)
+  const seasonInjuryP = Math.max(0.06, 0.2 * (1 - care * 0.14))
+  const willGetInjured = Math.random() < seasonInjuryP
+  const injuryAtApp = willGetInjured
+    ? 1 + rngInt(Math.max(1, Math.floor(fixturesForPlayer * 0.85)))
+    : -1
+  let appsThisSeason = 0
+
   // Humor meczowy — wraca do średniej, nie spirala w dół
   let matchMood = clamp(50 + (Math.random() * 12 - 4), 38, 62)
 
@@ -513,42 +522,38 @@ export function simulateFullSeason(
           if (rating >= 7.4) matchMood = clamp(matchMood + 2 + Math.random() * 2, 28, 88)
           else if (rating < 5.0) matchMood = clamp(matchMood - (1 + Math.random() * 2), 28, 88)
 
-          // Kontuzja w meczu
-          const risk =
-            0.025 +
-            (100 - player.attrs.stamina) / 900 +
-            (player.age >= 32 ? 0.02 : 0) +
-            (matchMood < 40 ? 0.015 : 0)
-          if (chance(risk)) {
+          // Jedna zaplanowana kontuzja w sezonie (rzadko) — nie co mecz
+          appsThisSeason++
+          if (appsThisSeason === injuryAtApp && !player.injury) {
             const roll = Math.random()
-            if (roll < 0.08) {
+            if (roll < 0.07) {
               player.injury = {
                 matchesLeft: 99,
                 label: 'Poważna kontuzja (koniec sezonu)',
                 seasonEnding: true,
               }
               injuryLabels.push('Poważna kontuzja — praktycznie koniec sezonu')
-              matchMood = clamp(matchMood - 15, 10, 70)
-            } else if (roll < 0.4) {
-              const n = 4 + rngInt(5)
+              matchMood = clamp(matchMood - 12, 10, 70)
+            } else if (roll < 0.45) {
+              const n = 3 + rngInt(4)
               player.injury = {
                 matchesLeft: n,
                 label: `Uraz mięśniowy (${n} meczów)`,
                 seasonEnding: false,
               }
               injuryLabels.push(`Kontuzja: wypadasz na ${n} meczów`)
-              matchMood = clamp(matchMood - 8, 15, 75)
+              matchMood = clamp(matchMood - 6, 15, 75)
             } else {
-              const n = 1 + rngInt(3)
+              const n = 1 + rngInt(2)
               player.injury = {
                 matchesLeft: n,
                 label: `Lekki uraz (${n} meczów)`,
                 seasonEnding: false,
               }
               injuryLabels.push(`Lekki uraz: ${n} mecz(e) przerwy`)
-              matchMood = clamp(matchMood - 4, 20, 80)
+              matchMood = clamp(matchMood - 3, 20, 80)
             }
-            player.attrs.stamina = clamp(player.attrs.stamina - (2 + rngInt(3)))
+            player.attrs.stamina = clamp(player.attrs.stamina - (1 + rngInt(2)))
           }
         } else {
           matchMood = clamp(matchMood * 0.9 + 48 * 0.1, 28, 88)
@@ -639,43 +644,40 @@ export function simulateFullSeason(
     leagueAvgRating || 6.0,
     player.overall,
   )
-  if (matchesMissedInjury >= fixturesForPlayer * 0.35) perfForm -= 14
-  else if (matchesMissedInjury >= 3) perfForm -= 7
-  if (injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu')) perfForm -= 12
+  if (matchesMissedInjury >= fixturesForPlayer * 0.35) perfForm -= 10
+  else if (matchesMissedInjury >= 3) perfForm -= 5
+  if (injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu')) perfForm -= 8
   const luck = Math.random() * 14 - 5
   const avgForm = clamp(perfForm + luck, 18, 94)
   const formLabel = formLabelFromAvg(avgForm)
 
+  // OVR: dobra forma → +1, świetna → +2; młodzi rozwijają się lepiej
   let ovrTarget = 0
-  if (leagueApps >= fixturesForPlayer * 0.5 && formLabel !== 'fatalna') {
-    if (avgForm >= 60 && leagueAvgRating >= 6.4) ovrTarget += 1
-  }
-  if (leagueApps >= fixturesForPlayer * 0.65 && leagueAvgRating >= 7.0 && formLabel !== 'słaba' && formLabel !== 'fatalna') {
+  if (formLabel === 'świetna') ovrTarget = 2
+  else if (formLabel === 'dobra') ovrTarget = 1
+  else if (formLabel === 'przyzwoita') ovrTarget = chance(0.4) ? 1 : 0
+  else if (formLabel === 'słaba') ovrTarget = -1
+  else if (formLabel === 'fatalna') ovrTarget = -2
+
+  // Młody wiek — solidny rozwój na starcie kariery
+  if (player.age <= 23) {
+    if (formLabel === 'świetna' && chance(0.45)) ovrTarget += 1
+    if (formLabel === 'przyzwoita' && leagueApps >= fixturesForPlayer * 0.35 && ovrTarget < 1) {
+      ovrTarget = 1
+    }
+    if (player.age <= 21 && formLabel !== 'słaba' && formLabel !== 'fatalna' && ovrTarget < 1) {
+      ovrTarget = 1
+    }
+  } else if (player.age <= 25 && formLabel === 'świetna' && chance(0.3)) {
     ovrTarget += 1
   }
+
   if (cup.stage === 'winner' || cup.stage === 'final') ovrTarget += 1
+  if (player.position === 'NP' && goals >= 12) ovrTarget += 1
+  if (player.position === 'POM' && goals + assists >= 10) ovrTarget += 1
+  if (leagueApps < fixturesForPlayer * 0.15 && formLabel !== 'świetna') ovrTarget -= 1
+  if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
 
-  if (player.position === 'NP') {
-    if (goals >= 10) ovrTarget += 1
-    if (goals >= 15) ovrTarget += 1
-    if (goals === 0 && leagueApps >= 10) ovrTarget -= 1
-  } else if (player.position === 'POM') {
-    const contrib = goals + assists
-    if (contrib >= 9) ovrTarget += 1
-    if (contrib === 0 && leagueApps >= 12) ovrTarget -= 1
-  } else {
-    if (leagueAvgRating >= 7.2 && leagueApps >= fixturesForPlayer * 0.6) ovrTarget += 1
-    if (leagueAvgRating > 0 && leagueAvgRating < 5.2 && leagueApps >= 8) ovrTarget -= 1
-  }
-
-  // Forma wpływa łagodnie — tylko skrajności
-  if (formLabel === 'świetna') ovrTarget += 1
-  if (formLabel === 'fatalna') ovrTarget -= 1
-  if (leagueApps < fixturesForPlayer * 0.15) ovrTarget -= 1
-
-  // Młodzi: do +4 (rzadko), max −2; później mniejszy potencjał wzrostu
-  if (player.age <= 25 && formLabel === 'świetna' && leagueAvgRating >= 7.0) ovrTarget += 1
-  if (player.age <= 22 && goals >= 12 && player.position === 'NP') ovrTarget += 1
   ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget)
 
   applyOverallChange(player, ovrTarget)

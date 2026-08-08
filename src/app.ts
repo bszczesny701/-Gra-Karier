@@ -278,7 +278,7 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">II liga i wyżej: max ~50% szansy na „11”. Po awansie klub zyskuje siłę — możesz wypaść ze składu.</p>
+        <p class="muted">II liga max ~50% szansy na „11”. Kontuzje są rzadkie (~20%/sezon) — decyzje przed sezonem mogą je jeszcze obniżyć. Dobra forma = +1/+2 OVR.</p>
         <div class="actions">
           ${
             s.preseasonDone

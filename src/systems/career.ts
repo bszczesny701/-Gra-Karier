@@ -93,6 +93,7 @@ export function createSeason(
     })),
     preseasonDone: false,
     midTransferDone: false,
+    injuryCare: 0,
   }
 }
 
@@ -204,6 +205,9 @@ function applyEffect(player: Player, effect: ChoiceEffect): void {
     case 'staminaDrain':
       player.attrs.stamina = clamp(player.attrs.stamina + effect.delta)
       break
+    case 'injuryCare':
+      // obsługiwane w applyPreseasonDecision na sezonie
+      break
   }
   player.overall = calcOverall(player.attrs, player.position)
 }
@@ -234,8 +238,22 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
   const event = CAREER_EVENTS.find((e) => e.id === pending.eventId)
   const choice = event?.choices.find((c) => c.id === choiceId)
   if (!choice) return
-  for (const effect of choice.effects) applyEffect(player, effect)
-  pushLog(state, `${pending.speaker}: odpowiedź — „${choice.label}”`)
+  for (const effect of choice.effects) {
+    if (effect.key === 'injuryCare') {
+      state.season.injuryCare = clamp(
+        (state.season.injuryCare ?? 0) + effect.delta,
+        0,
+        5,
+      )
+    } else {
+      applyEffect(player, effect)
+    }
+  }
+  const care = state.season.injuryCare ?? 0
+  pushLog(
+    state,
+    `${pending.speaker}: odpowiedź — „${choice.label}”${care > 0 ? ` · ochrona przed urazem ${care}/5` : ''}`,
+  )
   state.pendingDecision = null
   state.season.preseasonDone = true
   state.screen = 'hub'

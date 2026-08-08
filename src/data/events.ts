@@ -6,6 +6,8 @@ export type EffectKey =
   | 'reputation'
   | 'money'
   | 'staminaDrain'
+  /** Obniża ryzyko kontuzji w nadchodzącym sezonie (wartość dodatnia = bezpieczniej) */
+  | 'injuryCare'
 
 export interface ChoiceEffect {
   key: EffectKey
@@ -231,11 +233,12 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'home',
         label: 'Zostaję w domu',
-        hint: '+kondycja, −morale',
+        hint: '+kondycja, −morale, −ryzyko urazu',
         effects: [
           { key: 'stamina', delta: 3 },
           { key: 'morale', delta: -1 },
           { key: 'reputation', delta: 1 },
+          { key: 'injuryCare', delta: 1 },
         ],
       },
     ],
@@ -335,29 +338,32 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'careful',
         label: 'Oszczędzam się',
-        hint: '+kondycja, −tempo',
+        hint: '+kondycja, −tempo, −ryzyko urazu',
         effects: [
           { key: 'stamina', delta: 2 },
           { key: 'pace', delta: -1 },
+          { key: 'injuryCare', delta: 2 },
         ],
       },
       {
         id: 'push',
         label: 'Gram przez ból',
-        hint: '−kondycja, +reputacja',
+        hint: '−kondycja, +reputacja, +ryzyko urazu',
         effects: [
           { key: 'stamina', delta: -4 },
           { key: 'morale', delta: 1 },
           { key: 'reputation', delta: 1 },
+          { key: 'injuryCare', delta: -1 },
         ],
       },
       {
         id: 'physio',
         label: 'Pełna rehabilitacja',
-        hint: '+kondycja, −pieniądze',
+        hint: '+kondycja, −pieniądze, −ryzyko urazu',
         effects: [
           { key: 'stamina', delta: 3 },
           { key: 'money', delta: -100 },
+          { key: 'injuryCare', delta: 3 },
         ],
       },
     ],
@@ -537,11 +543,12 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'strict',
         label: 'Trzymam dietę 1:1',
-        hint: '+kondycja, −morale',
+        hint: '+kondycja, −morale, −ryzyko urazu',
         effects: [
           { key: 'stamina', delta: 2 },
           { key: 'pace', delta: 1 },
           { key: 'morale', delta: -2 },
+          { key: 'injuryCare', delta: 2 },
         ],
       },
       {
@@ -551,6 +558,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
         effects: [
           { key: 'stamina', delta: 1 },
           { key: 'morale', delta: 1 },
+          { key: 'injuryCare', delta: 1 },
         ],
       },
       {
@@ -676,10 +684,11 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'sleep',
         label: 'Idę spać o 22',
-        hint: '+kondycja',
+        hint: '+kondycja, −ryzyko urazu',
         effects: [
           { key: 'stamina', delta: 2 },
           { key: 'reputation', delta: 1 },
+          { key: 'injuryCare', delta: 2 },
         ],
       },
     ],
