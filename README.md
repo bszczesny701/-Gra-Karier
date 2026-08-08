@@ -18,11 +18,11 @@ npm run preview
 
 ## GitHub Pages
 
-1. Utwórz repozytorium o nazwie **`Gra-Karier`** (lub zmień `REPO_NAME` w `vite.config.ts`).
+1. Utwórz repozytorium o nazwie **`-Gra-Karier`** (lub zmień `REPO_NAME` w `vite.config.ts`).
 2. Włącz Pages: **Settings → Pages → Source: GitHub Actions**.
 3. Wypchnij kod na `main` / `master` — workflow `.github/workflows/deploy.yml` zbuduje i wdroży stronę.
 
-Adres: `https://<twoj-user>.github.io/Gra-Karier/`
+Adres: `https://<twoj-user>.github.io/-Gra-Karier/`
 
 ## Rozgrywka
 

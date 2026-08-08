@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // Nazwa repozytorium na GitHubie (ścieżka Pages: /<repo>/)
-const REPO_NAME = 'Gra-Karier'
+const REPO_NAME = '-Gra-Karier'
 
 export default defineConfig({
   base: process.env.GITHUB_PAGES === 'true' ? `/${REPO_NAME}/` : '/',
