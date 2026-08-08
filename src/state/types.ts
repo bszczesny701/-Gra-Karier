@@ -196,19 +196,17 @@ export function clamp(n: number, min = 1, max = 99): number {
 /** Limity zmiany OVR po sezonie wg wieku. */
 export function clampSeasonOvrDelta(age: number, raw: number): number {
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
-  const maxUp = age <= 25 ? 4 : 3
+  // Młodzi mogą rosnąć mocniej (droga do ~70 OVR)
+  const maxUp = age <= 21 ? 5 : age <= 25 ? 4 : 3
   let delta = Math.max(maxDown, Math.min(maxUp, Math.round(raw)))
 
-  // +3 / +4 rzadziej u młodych
-  if (age <= 25 && delta >= 4) {
-    if (Math.random() > 0.28) delta = 3
+  // U młodych rzadko obcinamy duże skoki — tylko lekko +5
+  if (age <= 25 && delta >= 5) {
+    if (Math.random() > 0.4) delta = 4
   }
-  if (age <= 25 && delta >= 3) {
-    if (Math.random() > 0.5) delta = 2
-  }
-  // Po 25. +3 też rzadsze
+  // Po 25. +3 rzadsze
   if (age > 25 && delta >= 3) {
-    if (Math.random() > 0.4) delta = 2
+    if (Math.random() > 0.35) delta = 2
   }
   // Po 32. trudniej rosnąć
   if (age >= 32 && delta > 1) delta = 1

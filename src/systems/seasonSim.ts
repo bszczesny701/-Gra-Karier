@@ -651,30 +651,36 @@ export function simulateFullSeason(
   const avgForm = clamp(perfForm + luck, 18, 94)
   const formLabel = formLabelFromAvg(avgForm)
 
-  // OVR: dobra forma → +1, świetna → +2; młodzi rozwijają się lepiej
+  // OVR z formy — do 25. r.ż. wyraźnie szybszy rozwój (cel: realna droga do ~70)
   let ovrTarget = 0
-  if (formLabel === 'świetna') ovrTarget = 2
-  else if (formLabel === 'dobra') ovrTarget = 1
-  else if (formLabel === 'przyzwoita') ovrTarget = chance(0.4) ? 1 : 0
-  else if (formLabel === 'słaba') ovrTarget = -1
+  const young = player.age <= 25
+  const veryYoung = player.age <= 21
+
+  if (formLabel === 'świetna') ovrTarget = young ? 3 : 2
+  else if (formLabel === 'dobra') ovrTarget = young ? 2 : 1
+  else if (formLabel === 'przyzwoita') ovrTarget = young ? (chance(0.65) ? 2 : 1) : chance(0.35) ? 1 : 0
+  else if (formLabel === 'słaba') ovrTarget = young ? (chance(0.4) ? 0 : -1) : -1
   else if (formLabel === 'fatalna') ovrTarget = -2
 
-  // Młody wiek — solidny rozwój na starcie kariery
-  if (player.age <= 23) {
-    if (formLabel === 'świetna' && chance(0.45)) ovrTarget += 1
-    if (formLabel === 'przyzwoita' && leagueApps >= fixturesForPlayer * 0.35 && ovrTarget < 1) {
-      ovrTarget = 1
+  if (young) {
+    // Bonus za granie — nawet przeciętny sezon niesie wzrost
+    if (leagueApps >= fixturesForPlayer * 0.4 && ovrTarget >= 0) {
+      if (veryYoung) ovrTarget += 1
+      else if (chance(0.55)) ovrTarget += 1
     }
-    if (player.age <= 21 && formLabel !== 'słaba' && formLabel !== 'fatalna' && ovrTarget < 1) {
-      ovrTarget = 1
+    // Świetny sezon młodego talentu
+    if (formLabel === 'świetna' && chance(0.5)) ovrTarget += 1
+    if (formLabel === 'dobra' && veryYoung && chance(0.35)) ovrTarget += 1
+    // Minimum: solidny młody nie stoi w miejscu
+    if (formLabel !== 'słaba' && formLabel !== 'fatalna' && ovrTarget < 1) ovrTarget = 1
+    if (veryYoung && formLabel !== 'fatalna' && ovrTarget < 2 && leagueApps >= fixturesForPlayer * 0.3) {
+      ovrTarget = Math.max(ovrTarget, 2)
     }
-  } else if (player.age <= 25 && formLabel === 'świetna' && chance(0.3)) {
-    ovrTarget += 1
   }
 
   if (cup.stage === 'winner' || cup.stage === 'final') ovrTarget += 1
-  if (player.position === 'NP' && goals >= 12) ovrTarget += 1
-  if (player.position === 'POM' && goals + assists >= 10) ovrTarget += 1
+  if (player.position === 'NP' && goals >= 10) ovrTarget += 1
+  if (player.position === 'POM' && goals + assists >= 9) ovrTarget += 1
   if (leagueApps < fixturesForPlayer * 0.15 && formLabel !== 'świetna') ovrTarget -= 1
   if (matchesMissedInjury >= fixturesForPlayer * 0.45) ovrTarget -= 1
 
