@@ -225,12 +225,30 @@ export function footLabel(foot: PreferredFoot): string {
   return 'Obunożny'
 }
 
-export function formLabelFromAvg(avg: number): FormLabel {
-  if (avg >= 76) return 'świetna'
-  if (avg >= 63) return 'dobra'
-  if (avg >= 47) return 'przyzwoita'
-  if (avg >= 34) return 'słaba'
+export function formLabelFromAvg(avg: number, overall = 55): FormLabel {
+  // Im wyższy OVR, tym wyższy próg „świetnej” / „dobrej” formy
+  const świetnaMin = clamp(Math.round(70 + (overall - 45) * 0.4), 68, 86)
+  const dobraMin = clamp(Math.round(56 + (overall - 45) * 0.25), 52, 70)
+  const przyzwoitaMin = clamp(Math.round(44 + (overall - 45) * 0.12), 40, 52)
+  const slabaMin = clamp(Math.round(32 + (overall - 45) * 0.08), 28, 40)
+  if (avg >= świetnaMin) return 'świetna'
+  if (avg >= dobraMin) return 'dobra'
+  if (avg >= przyzwoitaMin) return 'przyzwoita'
+  if (avg >= slabaMin) return 'słaba'
   return 'fatalna'
+}
+
+/**
+ * Bias formy wg OVR: niski overall łatwiej „eksploduje” formą,
+ * wysoki musi mieć wyjątkowy sezon, żeby dostać świetną.
+ */
+export function formPotentialBias(overall: number): number {
+  // ~45 → +14…+18, ~55 → +3…+5, ~65 → −4, ~75 → −12, ~80 → −16
+  if (overall <= 48) return clamp(14 + Math.round((48 - overall) * 0.9), 10, 20)
+  if (overall <= 55) return Math.round(14 - (overall - 48) * 1.4) // 14 → ~4
+  if (overall <= 65) return Math.round(4 - (overall - 55) * 0.9) // 4 → −5
+  if (overall <= 75) return Math.round(-5 - (overall - 65) * 0.8) // −5 → −13
+  return clamp(Math.round(-13 - (overall - 75) * 1.0), -20, -10)
 }
 
 /**
@@ -271,6 +289,7 @@ export function performanceFormScore(
   let score = 52
   score += clamp((outRatio - 1) * 18, -16, 24)
   score += clamp((avgRating - 6.15) * 7, -12, 14)
+  score += formPotentialBias(overall)
 
   if (apps === 0) score -= 10
   else if (appRate >= 0.65) score += 5
@@ -278,18 +297,20 @@ export function performanceFormScore(
   else if (appRate < 0.22) score -= 3
 
   // Podłogi / sufity miękkie (nagradzają dorobek, nie tylko karzą)
+  // Przy wysokim OVR nie dociągamy automatycznie do „świetnej”
+  const softFloorCap = overall >= 68 ? 62 : overall >= 60 ? 66 : 72
   if (position === 'NP') {
-    if (goals >= 12) score = Math.max(score, 68)
-    else if (goals >= 8) score = Math.max(score, 58)
+    if (goals >= 12) score = Math.max(score, Math.min(68, softFloorCap + 6))
+    else if (goals >= 8) score = Math.max(score, Math.min(58, softFloorCap))
     else if (goals >= 5) score = Math.max(score, 50)
     if (goals === 0 && apps >= 10) score = Math.min(score, 38)
   } else if (position === 'POM') {
     const contrib = goals + assists
-    if (contrib >= 12) score = Math.max(score, 68)
-    else if (contrib >= 7) score = Math.max(score, 56)
+    if (contrib >= 12) score = Math.max(score, Math.min(68, softFloorCap + 6))
+    else if (contrib >= 7) score = Math.max(score, Math.min(56, softFloorCap))
     if (contrib === 0 && apps >= 12) score = Math.min(score, 40)
   } else if (avgRating >= 7.0 && appRate >= 0.55) {
-    score = Math.max(score, 60)
+    score = Math.max(score, Math.min(60, softFloorCap))
   }
 
   return clamp(score, 20, 94)

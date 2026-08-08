@@ -666,9 +666,11 @@ export function simulateFullSeason(
   if (matchesMissedInjury >= fixturesForPlayer * 0.35) perfForm -= 10
   else if (matchesMissedInjury >= 3) perfForm -= 5
   if (injuryNote?.includes('Poważna') || injuryNote?.includes('koniec sezonu')) perfForm -= 8
-  const luck = Math.random() * 14 - 5
+  // Niski OVR: więcej szczęścia w formie; wysoki: ciaśniejszy los
+  const luckSpan = player.overall <= 50 ? 18 : player.overall <= 62 ? 14 : 10
+  const luck = Math.random() * luckSpan - luckSpan * 0.32
   const avgForm = clamp(perfForm + luck, 18, 94)
-  let formLabel = formLabelFromAvg(avgForm)
+  let formLabel = formLabelFromAvg(avgForm, player.overall)
 
   // Średnia ocena meczowa ogranicza etykietę formy — 6.8 ≠ świetny sezon
   const rating = leagueApps ? leagueAvgRating : 0
