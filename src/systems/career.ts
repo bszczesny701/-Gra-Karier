@@ -112,11 +112,13 @@ export function generateStartingOffers(player: Player): TransferOffer[] {
       signingBonus: Math.round(wage * 1.5 + player.overall * 12),
       playChance,
       message:
-        playChance >= 70
+        playChance >= 75
           ? 'Trener liczy na Ciebie w pierwszym składzie.'
-          : playChance >= 50
+          : playChance >= 55
             ? 'Szansa na regularne minuty, jeśli pokażesz się na treningu.'
-            : 'Konkurencja o miejsce — start raczej z ławki.',
+            : playChance >= 35
+              ? 'Konkurencja o miejsce — start raczej z rotacji.'
+              : 'Trudno o „11” — raczej ławka i wejścia z rezerw.',
     }
   })
 }

@@ -1,4 +1,4 @@
-import { CLUBS, getClub, getLeague } from '../data/clubs'
+import { CLUBS, getClub, getLeague, getLeagueForClub } from '../data/clubs'
 import type {
   Attributes,
   ClubStanding,
@@ -156,30 +156,41 @@ function scoreline(att: number, def: number): number {
   return Math.min(g, 4)
 }
 
-/** Szansa na występ — OVR vs siła klubu + reputacja / morale / wiek. */
+/**
+ * Szansa na występ w danym klubie.
+ * Główny czynnik: OVR − strength klubu (równy poziom ≈ ~50–55%).
+ */
 export function appearanceChance(player: Player, clubId?: string): number {
-  const ovrPart = player.overall / 145
-  const repPart = player.reputation / 240
-  const moralePart = player.morale / 300
-  const agePart =
-    player.age >= 36 ? -0.14 : player.age >= 33 ? -0.08 : player.age >= 30 ? -0.04 : 0
+  const club = clubId ? getClub(clubId) : null
+  const clubStrength = club?.strength ?? player.overall
 
-  let clubBit = 0
-  if (clubId) {
-    const club = getClub(clubId)
-    // Silniejszy klub → trudniej o „11”; słabszy → łatwiej
-    const gap = player.overall - club.strength
-    clubBit = gap / 48
+  // Równy OVR i siła klubu → ok. 52% (konkurencja o miejsce)
+  const gap = player.overall - clubStrength
+  let chance = 0.52 + gap * 0.028
+
+  // Drobne modyfikatory — nie mogą zdominować wyniku
+  chance += (player.reputation - 20) / 400
+  chance += (player.morale - 50) / 500
+  if (player.age >= 36) chance -= 0.12
+  else if (player.age >= 33) chance -= 0.07
+  else if (player.age >= 30) chance -= 0.03
+  else if (player.age <= 19) chance += 0.02
+
+  // W wyższej lidze ten sam gap jest trudniejszy (głębsza ławka)
+  if (club) {
+    const league = getLeagueForClub(club.id)
+    if (league.tier === 1) chance -= 0.06
+    else if (league.tier === 2) chance -= 0.03
   }
 
-  return Math.max(0.1, Math.min(0.92, 0.28 + ovrPart + repPart + moralePart + agePart + clubBit))
+  return Math.max(0.12, Math.min(0.88, chance))
 }
 
 /** Szansa w trakcie sezonu — chwilowy humor meczowy, nie zapisana forma. */
 function matchAppearanceChance(player: Player, matchMood: number, clubId: string): number {
   const base = appearanceChance(player, clubId)
-  const moodBit = (matchMood - 50) / 220
-  return Math.max(0.1, Math.min(0.94, base + moodBit))
+  const moodBit = (matchMood - 50) / 280
+  return Math.max(0.1, Math.min(0.9, base + moodBit))
 }
 
 /**
