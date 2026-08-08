@@ -1,5 +1,5 @@
 import type { Attributes, Position } from '../state/types'
-import { CAREER_OVR_CAP, clamp } from '../state/types'
+import { clamp } from '../state/types'
 
 const PROFILES: Record<Position, Attributes> = {
   NP: { pace: 1.08, shooting: 1.18, passing: 0.88, defending: 0.62, stamina: 1.0 },
@@ -101,7 +101,7 @@ export function applyAgingDecline(player: {
   player.attrs.shooting = clamp(player.attrs.shooting - shooting)
   player.attrs.passing = clamp(player.attrs.passing - passing)
   player.attrs.defending = clamp(player.attrs.defending - defending)
-  player.overall = Math.min(CAREER_OVR_CAP, calcOverall(player.attrs, player.position))
+  player.overall = calcOverall(player.attrs, player.position)
 
   const drop = before - player.overall
   const bits: string[] = []

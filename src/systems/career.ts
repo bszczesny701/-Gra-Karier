@@ -10,7 +10,6 @@ import {
 } from '../data/clubs'
 import { CAREER_EVENTS, pickEvent, type ChoiceEffect } from '../data/events'
 import {
-  CAREER_OVR_CAP,
   clamp,
   shouldRetire,
   type CreateCareerOptions,
@@ -291,7 +290,7 @@ function applyEffect(player: Player, effect: ChoiceEffect): void {
     case 'rivalPressure':
       break
   }
-  player.overall = Math.min(CAREER_OVR_CAP, calcOverall(player.attrs, player.position))
+  player.overall = calcOverall(player.attrs, player.position)
   bumpPeak(player)
 }
 

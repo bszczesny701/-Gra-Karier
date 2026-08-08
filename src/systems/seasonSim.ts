@@ -15,7 +15,6 @@ import type {
   WinterBreakSnapshot,
 } from '../state/types'
 import {
-  CAREER_OVR_CAP,
   clamp,
   clampSeasonOvrDelta,
   cupStageLabel,
@@ -26,7 +25,7 @@ import { calcOverall } from './playerFactory'
 import { playerTablePosition, sortedStandings } from './standings'
 
 function syncPlayerOverall(player: Player): number {
-  player.overall = Math.min(CAREER_OVR_CAP, calcOverall(player.attrs, player.position))
+  player.overall = calcOverall(player.attrs, player.position)
   return player.overall
 }
 
@@ -35,11 +34,7 @@ function applyOverallChange(player: Player, targetDelta: number): number {
   const before = player.overall
   if (targetDelta === 0) return 0
 
-  let delta = targetDelta
-  if (delta > 0) {
-    delta = Math.min(delta, Math.max(0, CAREER_OVR_CAP - before))
-    if (delta === 0) return 0
-  }
+  const delta = targetDelta
 
   const focusOrder: Array<keyof Attributes> =
     player.position === 'NP'
@@ -53,7 +48,7 @@ function applyOverallChange(player: Player, targetDelta: number): number {
   let guard = 0
   if (delta > 0) {
     let i = 0
-    while (player.overall < before + delta && player.overall < CAREER_OVR_CAP && guard < 40) {
+    while (player.overall < before + delta && guard < 40) {
       const key = focusOrder[i % focusOrder.length]!
       player.attrs[key] = clamp(player.attrs[key] + 1)
       syncPlayerOverall(player)
@@ -111,7 +106,7 @@ export function makeRival(
 ): PositionalRival {
   const strength = getEffectiveStrength(clubId, strengthMods)
   const h = hashSeed(`${clubId}-${year}-rival`)
-  const overall = clamp(strength + ((h % 9) - 4), 40, CAREER_OVR_CAP)
+  const overall = clamp(strength + ((h % 9) - 4), 40, 88)
   const form = 45 + (h % 21)
   return {
     name: npcName(`${clubId}-${year}-rival`),
@@ -962,10 +957,10 @@ function finalizeSeasonReport(
   }
 
   if (ovrTarget > 0) {
-    if (player.overall >= 78) ovrTarget = Math.min(ovrTarget, chance(0.35) ? 1 : 0)
-    else if (player.overall >= 75) ovrTarget = Math.min(ovrTarget, 1)
-    else if (player.overall >= 70) ovrTarget = Math.min(ovrTarget, young ? 2 : 1)
-    ovrTarget = Math.min(ovrTarget, Math.max(0, CAREER_OVR_CAP - player.overall))
+    // Wyżej OVR = wolniejszy wzrost (bez twardego sufitu)
+    if (player.overall >= 88) ovrTarget = Math.min(ovrTarget, chance(0.3) ? 1 : 0)
+    else if (player.overall >= 82) ovrTarget = Math.min(ovrTarget, 1)
+    else if (player.overall >= 75) ovrTarget = Math.min(ovrTarget, young ? 2 : 1)
   }
 
   ovrTarget = clampSeasonOvrDelta(player.age, ovrTarget)

@@ -266,9 +266,6 @@ export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
 }
 
-/** Sufit kariery — nawet mega dobra ścieżka ~80 OVR (top Ekstraklasa). */
-export const CAREER_OVR_CAP = 80
-
 /** Limity zmiany OVR po sezonie wg wieku. */
 export function clampSeasonOvrDelta(age: number, raw: number): number {
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4

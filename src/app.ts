@@ -302,7 +302,7 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">Najpierw 1. połowa → przerwa zimowa (oferty / wypożyczenie) → 2. połowa. Sufit kariery OVR 80.</p>
+        <p class="muted">Najpierw 1. połowa → przerwa zimowa (oferty / wypożyczenie) → 2. połowa. Młody + dużo minut = szybszy rozwój.</p>
         <div class="actions">
           ${
             s.preseasonDone
