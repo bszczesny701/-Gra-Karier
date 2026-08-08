@@ -90,16 +90,13 @@ export function createSeason(
       points: 0,
     })),
     preseasonDone: false,
+    midTransferDone: false,
   }
 }
 
 /** Szansa na grę w danym klubie (start / UI). */
 export function estimatePlayChance(player: Player, clubId: string): number {
-  const club = getClub(clubId)
-  const gap = player.overall - club.strength
-  const base = appearanceChance(player)
-  const clubBit = gap / 70
-  return Math.max(28, Math.min(92, Math.round((base + clubBit) * 100)))
+  return Math.round(appearanceChance(player, clubId) * 100)
 }
 
 export function generateStartingOffers(player: Player): TransferOffer[] {
@@ -208,7 +205,10 @@ export function openPreseasonDecision(state: GameState): void {
   state.pendingDecision = {
     eventId: event.id,
     title: event.title,
-    description: event.description,
+    speaker: event.speaker,
+    speakerRole: event.speakerRole,
+    messages: event.messages,
+    description: event.messages.join(' '),
     choices: event.choices.map((c) => ({
       id: c.id,
       label: c.label,
@@ -226,7 +226,7 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
   const choice = event?.choices.find((c) => c.id === choiceId)
   if (!choice) return
   for (const effect of choice.effects) applyEffect(player, effect)
-  pushLog(state, `Przed sezonem: ${choice.label}`)
+  pushLog(state, `${pending.speaker}: odpowiedź — „${choice.label}”`)
   state.pendingDecision = null
   state.season.preseasonDone = true
   state.screen = 'hub'
@@ -242,6 +242,7 @@ export function runFullSeason(state: GameState): void {
     ...season,
     standings: report.standings,
     preseasonDone: true,
+    midTransferDone: true,
   }
 
   if (report.keyMatchesPending.length) {
@@ -279,9 +280,60 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
   const player = state.player!
   const report = state.seasonReport!
   const currentLeague = getLeague(report.leagueId)
+  return buildOffersForPlayer(player, report.clubId, currentLeague, {
+    goals: report.goals,
+    form: report.formLabel,
+    place: report.place,
+    avgRating: report.avgRating,
+    cupBoost: report.cupStage === 'winner' || report.cupStage === 'final',
+    forceHigher: player.overall >= ovrThresholdForTier(currentLeague.tier - 1),
+  })
+}
+
+/** Oferty w trakcie sezonu — głównie wyższe ligi przy wysokim OVR. */
+export function generateMidSeasonOffers(state: GameState): TransferOffer[] {
+  const player = state.player!
+  const season = state.season!
+  const currentLeague = getLeague(season.leagueId)
+  const higher = leagueByTier(currentLeague.tier - 1)
+  if (!higher) return []
+  if (player.overall < ovrThresholdForTier(higher.tier)) return []
+
+  return buildOffersForPlayer(player, season.clubId, currentLeague, {
+    goals: 0,
+    form: 'przyzwoita',
+    place: Math.ceil(currentLeague.clubIds.length / 2),
+    avgRating: 6.5,
+    cupBoost: false,
+    forceHigher: true,
+    midSeason: true,
+  })
+}
+
+function ovrThresholdForTier(tier: number): number {
+  if (tier <= 1) return 64
+  if (tier === 2) return 56
+  if (tier === 3) return 50
+  return 46
+}
+
+function buildOffersForPlayer(
+  player: Player,
+  currentClubId: string,
+  currentLeague: ReturnType<typeof getLeague>,
+  ctx: {
+    goals: number
+    form: string
+    place: number
+    avgRating: number
+    cupBoost: boolean
+    forceHigher: boolean
+    midSeason?: boolean
+  },
+): TransferOffer[] {
   const offers: TransferOffer[] = []
-  const used = new Set<string>([report.clubId])
-  const form = report.formLabel
+  const used = new Set<string>([currentClubId])
+  const form = ctx.form
 
   const addFromLeague = (
     leagueId: string,
@@ -293,6 +345,13 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
     let candidates = [...league.clubIds].filter((id) => !used.has(id))
     if (preferWeak) {
       candidates.sort((a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength)
+    } else if (ctx.midSeason || ctx.forceHigher) {
+      // Najpierw kluby, gdzie realnie zagrasz (słabsze w lidze)
+      candidates.sort((a, b) => {
+        const ga = player.overall - CLUBS[a]!.strength
+        const gb = player.overall - CLUBS[b]!.strength
+        return gb - ga
+      })
     } else {
       candidates.sort(() => Math.random() - 0.5)
     }
@@ -303,50 +362,53 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
       const formPenalty =
         form === 'fatalna' ? 0.55 : form === 'słaba' ? 0.75 : form === 'świetna' ? 1.15 : 1
       const wage = Math.round(
-        club.wage * (0.85 + player.reputation / 220 + report.goals / 50) * formPenalty,
+        club.wage * (0.85 + player.reputation / 220 + ctx.goals / 50) * formPenalty,
       )
+      const playChance = estimatePlayChance(player, clubId)
       offers.push({
         clubId,
         wage: Math.max(400, wage),
-        signingBonus: Math.round(wage * (form === 'fatalna' ? 1.2 : 2.2) + player.overall * 20),
-        message: msg,
+        signingBonus: Math.round(
+          wage * (form === 'fatalna' ? 1.2 : ctx.midSeason ? 1.8 : 2.2) + player.overall * 20,
+        ),
+        message: `${msg} Szansa na grę ≈ ${playChance}%.`,
         leagueId,
+        playChance,
       })
     }
   }
 
+  const higher = leagueByTier(currentLeague.tier - 1)
+  const lower = leagueByTier(currentLeague.tier + 1)
+
+  if (ctx.midSeason) {
+    if (higher) addFromLeague(higher.id, 2, 'Okno transferowe — wyższa liga chce Cię już teraz.')
+    addFromLeague(currentLeague.id, 1, 'Klub z ligi składa ofertę w trakcie sezonu.')
+    return offers.slice(0, 3)
+  }
+
   if (form === 'fatalna' || form === 'słaba') {
-    const lower = leagueByTier(currentLeague.tier + 1)
     if (lower) addFromLeague(lower.id, 2, 'Słabszy klub daje szansę na odbudowę.', true)
     addFromLeague(currentLeague.id, 2, 'Oferta z dołu tabeli / mniejszy projekt.', true)
-  } else if (report.place <= 3 || report.goals >= 10 || report.cupStage === 'winner') {
-    const better = leagueByTier(currentLeague.tier - 1)
-    if (better) addFromLeague(better.id, 1, 'Awans sportowy — lepsza liga interesuje się Tobą.')
-    addFromLeague(currentLeague.id, 2, 'Klub z Twojej ligi chce Cię wzmocnić.')
-  } else if (report.place >= currentLeague.clubIds.length - 2) {
-    const lower = leagueByTier(currentLeague.tier + 1)
-    addFromLeague(currentLeague.id, 1, 'Oferta z ligi — nowy start.')
-    if (lower) addFromLeague(lower.id, 1, 'Bezpieczny projekt w niższej lidze.', true)
-    addFromLeague(currentLeague.id, 1, 'Druga oferta z ligi.')
   } else {
-    addFromLeague(currentLeague.id, 2, 'Solidny sezon — kluby składają oferty.')
-    const better = leagueByTier(currentLeague.tier - 1)
-    if (better && (player.overall >= 60 || report.avgRating >= 7)) {
-      addFromLeague(better.id, 1, 'Szansa na wyższy poziom.')
+    // Silny OVR / dobry sezon → wyższe ligi
+    if (higher && (ctx.forceHigher || ctx.cupBoost || ctx.place <= 3 || ctx.goals >= 8 || player.overall >= ovrThresholdForTier(higher.tier))) {
+      addFromLeague(higher.id, 2, 'Wyższa liga interesuje się Tobą.')
+      const top = leagueByTier(higher.tier - 1)
+      if (top && player.overall >= ovrThresholdForTier(top.tier) + 2) {
+        addFromLeague(top.id, 1, 'Skok o dwie ligi — odważny projekt.')
+      }
+    }
+    addFromLeague(currentLeague.id, 2, 'Klub z Twojej ligi chce Cię wzmocnić.')
+    if (ctx.place >= currentLeague.clubIds.length - 2 && lower) {
+      addFromLeague(lower.id, 1, 'Bezpieczny projekt w niższej lidze.', true)
     }
   }
 
   while (offers.length < 2) {
     for (const l of LEAGUES_SAFE()) {
       if (offers.length >= 2) break
-      addFromLeague(
-        l.id,
-        1,
-        form === 'fatalna' || form === 'słaba'
-          ? 'Jedyna realna oferta po słabym sezonie.'
-          : 'Dodatkowa oferta rynkowa.',
-        form === 'fatalna' || form === 'słaba',
-      )
+      addFromLeague(l.id, 1, 'Dodatkowa oferta rynkowa.', form === 'fatalna' || form === 'słaba')
     }
     break
   }
@@ -355,12 +417,59 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
 }
 
 function LEAGUES_SAFE() {
-  return [getLeague('liga-3'), getLeague('liga-2'), getLeague('liga-1')]
+  return [getLeague('liga-3'), getLeague('liga-ii'), getLeague('liga-2'), getLeague('liga-1')]
 }
 
 export function openTransferChoice(state: GameState): void {
   state.transferOffers = generateTransferOffers(state)
   state.screen = 'transferChoice'
+}
+
+export function openMidSeasonTransfers(state: GameState): void {
+  if (!state.season || state.season.midTransferDone) return
+  const offers = generateMidSeasonOffers(state)
+  if (!offers.length) {
+    pushLog(state, 'Brak ofert w oknie transferowym — za niski OVR na wyższą ligę.')
+    return
+  }
+  state.transferOffers = offers
+  state.screen = 'transferChoice'
+}
+
+export function hasMidSeasonOffers(state: GameState): boolean {
+  if (!state.player || !state.season || state.season.midTransferDone) return false
+  return generateMidSeasonOffers(state).length > 0
+}
+
+/** Transfer w trakcie sezonu — bez urodzin, sezon kontynuujesz w nowym klubie. */
+export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
+  const offer = state.transferOffers.find((o) => o.clubId === clubId)
+  const player = state.player!
+  const season = state.season!
+  if (!offer || !season) return
+
+  player.money += offer.signingBonus
+  player.morale = clamp(player.morale + 5, 1, 100)
+  player.reputation = clamp(player.reputation + 3, 0, 100)
+
+  const next = createSeason(clubId, offer.leagueId, season.year, 'none')
+  next.preseasonDone = true
+  next.midTransferDone = true
+  state.season = next
+  state.transferOffers = []
+  state.seasonReport = null
+  pushLog(
+    state,
+    `Transfer w trakcie sezonu → ${getClub(clubId).name} (${getLeague(offer.leagueId).name}). Szansa na grę ≈ ${offer.playChance ?? estimatePlayChance(player, clubId)}%.`,
+  )
+  state.screen = 'hub'
+}
+
+export function declineMidSeasonTransfers(state: GameState): void {
+  if (state.season) state.season.midTransferDone = true
+  state.transferOffers = []
+  pushLog(state, 'Zostajesz w klubie — okno transferowe zamknięte.')
+  state.screen = 'hub'
 }
 
 export function stayAtClub(state: GameState): void {
@@ -383,6 +492,12 @@ export function stayAtClub(state: GameState): void {
 }
 
 export function acceptOffer(state: GameState, clubId: string): void {
+  // Transfer w trakcie sezonu (brak raportu / flaga)
+  if (state.season && !state.seasonReport) {
+    acceptMidSeasonOffer(state, clubId)
+    return
+  }
+
   const offer = state.transferOffers.find((o) => o.clubId === clubId)
   const player = state.player!
   if (!offer) return

@@ -22,7 +22,10 @@ export interface EventChoice {
 export interface CareerEvent {
   id: string
   title: string
-  description: string
+  speaker: string
+  speakerRole: string
+  /** Wiadomości od rozmówcy (bąbelki) */
+  messages: string[]
   weight: number
   positions?: Position[]
   minReputation?: number
@@ -32,13 +35,18 @@ export interface CareerEvent {
 export const CAREER_EVENTS: CareerEvent[] = [
   {
     id: 'gym',
-    title: 'Trening siłowy',
-    description: 'Trener każe zostać po treningu na siłownię. Nogom będzie ciężko, ale ciało mocniejsze.',
+    title: 'Siłownia',
+    speaker: 'Trener Kondycji',
+    speakerRole: 'Sztab',
+    messages: [
+      'Zostajesz na siłownię czy spadasz do domu?',
+      'Jak dasz radę do końca, tempo i kondycja pójdą w górę.',
+    ],
     weight: 3,
     choices: [
       {
         id: 'full',
-        label: 'Zostaję do końca',
+        label: 'Zostaję do końca 💪',
         hint: '+tempo, +kondycja, −morale',
         effects: [
           { key: 'pace', delta: 1 },
@@ -48,16 +56,14 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
       {
         id: 'half',
-        label: 'Robię połowę',
-        hint: 'Mały wzrost, bez dużego zmęczenia',
-        effects: [
-          { key: 'stamina', delta: 1 },
-        ],
+        label: 'Zrobię połowę i lecę',
+        hint: '+kondycja',
+        effects: [{ key: 'stamina', delta: 1 }],
       },
       {
         id: 'skip',
-        label: 'Idę do domu',
-        hint: '+morale, −reputacja sztabu',
+        label: 'Dziś odpuszczam',
+        hint: '+morale, −reputacja',
         effects: [
           { key: 'morale', delta: 2 },
           { key: 'reputation', delta: -1 },
@@ -67,33 +73,37 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'shooting',
-    title: 'Sesja strzałów',
-    description: 'Możesz zostać na boisku i powtórzyć setki uderzeń albo odpocząć przed meczem.',
+    title: 'Strzały',
+    speaker: 'Trener bramkarzy',
+    speakerRole: 'Sztab',
+    messages: [
+      'Możemy zostać na dodatkowe uderzenia.',
+      'Albo oszczędzasz nogi przed weekendem — decyzja Twoja.',
+    ],
     weight: 3,
     positions: ['NP', 'POM'],
     choices: [
       {
         id: 'extra',
-        label: 'Zostaję na dodatkowe',
+        label: 'Zostaję, strzelam serię',
         hint: '+strzał, −kondycja',
         effects: [
           { key: 'shooting', delta: 2 },
-          { key: 'stamina', delta: -1 },
           { key: 'stamina', delta: -2 },
         ],
       },
       {
         id: 'normal',
-        label: 'Tylko trening grupowy',
+        label: 'Wystarczy grupowy trening',
         hint: '+kondycja',
         effects: [{ key: 'stamina', delta: 1 }],
       },
       {
         id: 'rest',
-        label: 'Wczesny odpoczynek',
+        label: 'Idę wcześniej odpocząć',
         hint: '+kondycja, −strzał',
         effects: [
-          { key: 'stamina', delta: 3 },
+          { key: 'stamina', delta: 2 },
           { key: 'shooting', delta: -1 },
           { key: 'morale', delta: 1 },
         ],
@@ -102,8 +112,13 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'passing',
-    title: 'Ćwiczenia podań',
-    description: 'Analityk pokazuje wideo: za dużo strat w środku pola. Czas na rondo.',
+    title: 'Rondo',
+    speaker: 'Analityk',
+    speakerRole: 'Sztab',
+    messages: [
+      'Na wideo widać zbyt dużo strat w środku.',
+      'Robimy rondo, czy wolisz pogadać z chłopakami?',
+    ],
     weight: 3,
     positions: ['POM', 'ŚO'],
     choices: [
@@ -129,7 +144,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
       {
         id: 'chat',
-        label: 'Rozmawiam z kolegami',
+        label: 'Wolę pogadać z ekipą',
         hint: '+morale',
         effects: [
           { key: 'morale', delta: 3 },
@@ -140,8 +155,13 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'defending',
-    title: 'Lekcja ustawiania',
-    description: 'Asystent trenera chce z Tobą przejrzeć ustawienie w obronie.',
+    title: 'Ustawienie',
+    speaker: 'Asystent',
+    speakerRole: 'Sztab',
+    messages: [
+      'Chcę z Tobą przejrzeć ustawienie w obronie.',
+      'Albo robimy siłę, albo lecisz w atak — co wybierasz?',
+    ],
     weight: 3,
     positions: ['OB', 'ŚO'],
     choices: [
@@ -156,7 +176,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
       {
         id: 'physical',
-        label: 'Stawiam na siłę',
+        label: 'Stawiam na siłę w starciach',
         hint: '+obrona, −tempo',
         effects: [
           { key: 'defending', delta: 2 },
@@ -166,7 +186,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
       {
         id: 'skip',
-        label: 'Wolę atak',
+        label: 'Wolę strefę ataku',
         hint: '+strzał, −obrona',
         effects: [
           { key: 'shooting', delta: 1 },
@@ -178,8 +198,13 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'nightlife',
-    title: 'Wyjście z ekipą',
-    description: 'Kolega z szatni zaprasza na miasto. Mecz za trzy dni.',
+    title: 'Miasto',
+    speaker: 'Kuba',
+    speakerRole: 'Kolega z szatni',
+    messages: [
+      'Ej, lecimy na miasto po treningu 🍺',
+      'Mecz za 3 dni, ale raz się żyje. Wpadasz?',
+    ],
     weight: 2,
     choices: [
       {
@@ -195,8 +220,8 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
       {
         id: 'short',
-        label: 'Wpadam na godzinę',
-        hint: '+morale, lekki spadek kondycji',
+        label: 'Wpadnę na godzinę',
+        hint: '+morale, −kondycja',
         effects: [
           { key: 'morale', delta: 2 },
           { key: 'stamina', delta: -2 },
@@ -217,13 +242,18 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'interview',
-    title: 'Wywiad lokalny',
-    description: 'Dziennikarz pyta o ambicje. Twoje słowa mogą podnieść lub obniżyć napięcie w szatni.',
+    title: 'Wywiad',
+    speaker: 'Dziennikarz',
+    speakerRole: 'Media',
+    messages: [
+      'Szybkie pytanie na mikrofon.',
+      'Jakie masz ambicje w tym sezonie? Skromnie czy ostro?',
+    ],
     weight: 2,
     choices: [
       {
         id: 'humble',
-        label: 'Mówię skromnie',
+        label: 'Mówię skromnie, o pracy',
         hint: '+reputacja, +morale',
         effects: [
           { key: 'reputation', delta: 2 },
@@ -241,7 +271,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
       {
         id: 'refuse',
-        label: 'Odmawiam wywiadu',
+        label: 'Bez komentarza, sorry',
         hint: 'Bez zmian',
         effects: [],
       },
@@ -249,14 +279,19 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'sponsor',
-    title: 'Oferta sponsora',
-    description: 'Lokalna firma chce, żebyś pojawił się na otwarciu sklepu.',
+    title: 'Sponsor',
+    speaker: 'Agent',
+    speakerRole: 'Twój agent',
+    messages: [
+      'Lokalna firma płaci za otwarcie sklepu.',
+      'Łatwe pieniądze, ale tracisz popołudnie treningowe.',
+    ],
     weight: 2,
-    minReputation: 15,
+    minReputation: 12,
     choices: [
       {
         id: 'accept',
-        label: 'Przyjmuję',
+        label: 'Biorę kasę',
         hint: '+pieniądze, −kondycja',
         effects: [
           { key: 'money', delta: 400 },
@@ -267,25 +302,40 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'train',
         label: 'Wolę trening',
-        hint: '+kondycja, +reputacja w klubie',
+        hint: '+kondycja, +reputacja',
         effects: [
           { key: 'stamina', delta: 2 },
           { key: 'reputation', delta: 1 },
           { key: 'morale', delta: 1 },
         ],
       },
+      {
+        id: 'negotiate',
+        label: 'Negocjuję wyższą stawkę',
+        hint: '+pieniądze, −reputacja',
+        effects: [
+          { key: 'money', delta: 550 },
+          { key: 'reputation', delta: -1 },
+          { key: 'stamina', delta: -1 },
+        ],
+      },
     ],
   },
   {
     id: 'injury_scare',
-    title: 'Lekki uraz',
-    description: 'Po treningu czujesz ciągnięcie w udzie. Fizjo proponuje plan.',
+    title: 'Fizjo',
+    speaker: 'Fizjo',
+    speakerRole: 'Medyczny',
+    messages: [
+      'Czujesz to ciągnięcie w udzie?',
+      'Mogę zestawić plan — albo grasz przez ból. Nie polecam.',
+    ],
     weight: 2,
     choices: [
       {
         id: 'careful',
         label: 'Oszczędzam się',
-        hint: '+kondycja, −tempo tymczasowo',
+        hint: '+kondycja, −tempo',
         effects: [
           { key: 'stamina', delta: 2 },
           { key: 'pace', delta: -1 },
@@ -294,7 +344,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'push',
         label: 'Gram przez ból',
-        hint: 'Ryzyko: −kondycja',
+        hint: '−kondycja, +reputacja',
         effects: [
           { key: 'stamina', delta: -4 },
           { key: 'morale', delta: 1 },
@@ -314,14 +364,19 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'tactics',
-    title: 'Spotkanie taktyczne',
-    description: 'Trener omawia plan na weekend. Możesz zabrać głos albo siedzieć cicho.',
+    title: 'Taktyka',
+    speaker: 'Trener',
+    speakerRole: 'Pierwszy trener',
+    messages: [
+      'Omówimy plan na weekend.',
+      'Masz pomysł? Albo słuchasz. Telefon schowaj.',
+    ],
     weight: 2,
     choices: [
       {
         id: 'speak',
-        label: 'Proponuję pomysł',
-        hint: '+reputacja, +morale',
+        label: 'Proponuję swój wariant',
+        hint: '+reputacja, +podanie',
         effects: [
           { key: 'reputation', delta: 2 },
           { key: 'morale', delta: 2 },
@@ -331,7 +386,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
       {
         id: 'listen',
         label: 'Słucham uważnie',
-        hint: '+podanie',
+        hint: '+podanie, +obrona',
         effects: [
           { key: 'passing', delta: 1 },
           { key: 'defending', delta: 1 },
@@ -339,7 +394,7 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
       {
         id: 'phone',
-        label: 'Zeruję w telefon',
+        label: 'Zeruję w telefon…',
         hint: '−reputacja',
         effects: [
           { key: 'reputation', delta: -3 },
@@ -350,9 +405,14 @@ export const CAREER_EVENTS: CareerEvent[] = [
   },
   {
     id: 'family',
-    title: 'Rodzina dzwoni',
-    description: 'Rodzice chcą Cię zobaczyć w weekend. To koliduje z wyjazdem sparingowym.',
-    weight: 1,
+    title: 'Rodzina',
+    speaker: 'Mama',
+    speakerRole: 'Rodzina',
+    messages: [
+      'Synku, przyjedź w weekend, tęsknimy.',
+      'Wiem, że masz sparing… ale naprawdę chcielibyśmy Cię zobaczyć.',
+    ],
+    weight: 2,
     choices: [
       {
         id: 'visit',
@@ -372,6 +432,254 @@ export const CAREER_EVENTS: CareerEvent[] = [
           { key: 'reputation', delta: 2 },
           { key: 'morale', delta: -2 },
           { key: 'stamina', delta: 1 },
+        ],
+      },
+      {
+        id: 'call',
+        label: 'Zadzwonię dłużej wieczorem',
+        hint: '+morale',
+        effects: [
+          { key: 'morale', delta: 2 },
+          { key: 'reputation', delta: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'captain',
+    title: 'Kapitan',
+    speaker: 'Kapitan',
+    speakerRole: 'Szatnia',
+    messages: [
+      'Młodzi patrzą na Ciebie.',
+      'Chcesz poprowadzić rozgrzewkę, czy wolisz siedzieć cicho?',
+    ],
+    weight: 2,
+    minReputation: 18,
+    choices: [
+      {
+        id: 'lead',
+        label: 'Biorę rozgrzewkę',
+        hint: '+reputacja, +morale',
+        effects: [
+          { key: 'reputation', delta: 3 },
+          { key: 'morale', delta: 2 },
+        ],
+      },
+      {
+        id: 'support',
+        label: 'Wspieram z boku',
+        hint: '+morale',
+        effects: [
+          { key: 'morale', delta: 2 },
+          { key: 'reputation', delta: 1 },
+        ],
+      },
+      {
+        id: 'avoid',
+        label: 'Nie czuję się na siłach',
+        hint: '−reputacja',
+        effects: [{ key: 'reputation', delta: -2 }],
+      },
+    ],
+  },
+  {
+    id: 'rival_chat',
+    title: 'DM od rywala',
+    speaker: 'Rywal',
+    speakerRole: 'Przeciwnik',
+    messages: [
+      'W weekend Cię zjem 😂',
+      'Albo boisz się odpisać?',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'fire',
+        label: 'Odpisuję ogniem',
+        hint: '+morale, −reputacja',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'reputation', delta: -2 },
+        ],
+      },
+      {
+        id: 'class',
+        label: 'Odpisuję z klasą',
+        hint: '+reputacja',
+        effects: [
+          { key: 'reputation', delta: 2 },
+          { key: 'morale', delta: 1 },
+        ],
+      },
+      {
+        id: 'ignore',
+        label: 'Zostawiam na przeczytane',
+        hint: '+kondycja (spokój)',
+        effects: [
+          { key: 'stamina', delta: 1 },
+          { key: 'morale', delta: -1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'diet',
+    title: 'Kuchnia',
+    speaker: 'Dietetyk',
+    speakerRole: 'Sztab',
+    messages: [
+      'Menu na tydzień: albo rygor, albo luz.',
+      'Co jesz — to grasz. Wybierasz?',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'strict',
+        label: 'Trzymam dietę 1:1',
+        hint: '+kondycja, −morale',
+        effects: [
+          { key: 'stamina', delta: 2 },
+          { key: 'pace', delta: 1 },
+          { key: 'morale', delta: -2 },
+        ],
+      },
+      {
+        id: 'balance',
+        label: 'Jedzenie + mały luz',
+        hint: '+kondycja, +morale',
+        effects: [
+          { key: 'stamina', delta: 1 },
+          { key: 'morale', delta: 1 },
+        ],
+      },
+      {
+        id: 'cheat',
+        label: 'Cheat day z pizzą',
+        hint: '+morale, −kondycja',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'stamina', delta: -2 },
+          { key: 'money', delta: -40 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'agent_call',
+    title: 'Telefon',
+    speaker: 'Agent',
+    speakerRole: 'Twój agent',
+    messages: [
+      'Słuchaj, kręcą się plotki o zainteresowaniu z wyższej ligi.',
+      'Mogę naciskać, albo siedzisz cicho i robisz robotę. Co robimy?',
+    ],
+    weight: 2,
+    minReputation: 20,
+    choices: [
+      {
+        id: 'push',
+        label: 'Naciskaj, chcę transfer',
+        hint: '+reputacja, −morale klubu',
+        effects: [
+          { key: 'reputation', delta: 3 },
+          { key: 'morale', delta: -2 },
+        ],
+      },
+      {
+        id: 'focus',
+        label: 'Najpierw wyniki tu',
+        hint: '+morale, +reputacja',
+        effects: [
+          { key: 'morale', delta: 2 },
+          { key: 'reputation', delta: 1 },
+          { key: 'stamina', delta: 1 },
+        ],
+      },
+      {
+        id: 'money',
+        label: 'Pytaj o podwyżkę tu',
+        hint: '+pieniądze',
+        effects: [
+          { key: 'money', delta: 300 },
+          { key: 'reputation', delta: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'fan',
+    title: 'Fan',
+    speaker: 'Kibic',
+    speakerRole: 'Przy bramie',
+    messages: [
+      'Mistrzu, dasz autograf i fotę?',
+      'Dzieciak czeka z koszulką, nie zawiedź go.',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'yes',
+        label: 'Zostaję, robię fotę',
+        hint: '+reputacja, +morale',
+        effects: [
+          { key: 'reputation', delta: 2 },
+          { key: 'morale', delta: 2 },
+        ],
+      },
+      {
+        id: 'quick',
+        label: 'Szybki autograf i lecę',
+        hint: '+reputacja',
+        effects: [{ key: 'reputation', delta: 1 }],
+      },
+      {
+        id: 'no',
+        label: 'Przepraszam, spieszę się',
+        hint: '−reputacja',
+        effects: [
+          { key: 'reputation', delta: -2 },
+          { key: 'morale', delta: -1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'gaming',
+    title: 'Pokój',
+    speaker: 'Bartek',
+    speakerRole: 'Współlokator',
+    messages: [
+      'Nocny ranked? Albo idziesz spać jak profesjonalista.',
+      'Ja i tak gram do 3:00 😅',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'game',
+        label: 'Gram do późna',
+        hint: '+morale, −kondycja',
+        effects: [
+          { key: 'morale', delta: 2 },
+          { key: 'stamina', delta: -3 },
+        ],
+      },
+      {
+        id: 'one',
+        label: 'Jedna gra i śpię',
+        hint: '+morale',
+        effects: [
+          { key: 'morale', delta: 1 },
+          { key: 'stamina', delta: -1 },
+        ],
+      },
+      {
+        id: 'sleep',
+        label: 'Idę spać o 22',
+        hint: '+kondycja',
+        effects: [
+          { key: 'stamina', delta: 2 },
+          { key: 'reputation', delta: 1 },
         ],
       },
     ],

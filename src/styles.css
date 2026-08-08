@@ -444,6 +444,119 @@ h3 {
   cursor: not-allowed;
 }
 
+/* Messenger-style decyzje */
+.chat-panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 14px 18px;
+  box-shadow: var(--shadow);
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.chat-header p {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+}
+
+.chat-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: linear-gradient(145deg, #2a6b4e, #184a36);
+  border: 2px solid rgba(200, 245, 96, 0.35);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  min-height: 80px;
+}
+
+.chat-bubble {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 10px 14px;
+  border-radius: 16px 16px 16px 4px;
+  background: #1a3d2f;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  line-height: 1.35;
+  animation: chat-in 0.28s ease both;
+}
+
+.chat-bubble:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.chat-prompt {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+}
+
+.chat-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-reply {
+  text-align: left;
+  border: 1px solid rgba(200, 245, 96, 0.28);
+  background: rgba(200, 245, 96, 0.08);
+  color: var(--text);
+  border-radius: 14px 14px 4px 14px;
+  padding: 12px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform 0.15s ease, background 0.15s ease;
+  font: inherit;
+}
+
+.chat-reply:hover {
+  background: rgba(200, 245, 96, 0.16);
+}
+
+.chat-reply:active {
+  transform: scale(0.98);
+}
+
+.chat-reply-text {
+  font-weight: 600;
+}
+
+.chat-reply-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+@keyframes chat-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (max-width: 420px) {
   .stat-grid {
     grid-template-columns: repeat(2, 1fr);

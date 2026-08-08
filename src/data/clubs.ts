@@ -14,7 +14,7 @@ export interface League {
 }
 
 export const CLUBS: Record<string, Club> = {
-  // III liga — start kariery
+  // III liga — start kariery (tier 4)
   'hutnik-krakow': { id: 'hutnik-krakow', name: 'Hutnik Kraków', short: 'HUT', strength: 40, wage: 700 },
   'polonia-bytom': { id: 'polonia-bytom', name: 'Polonia Bytom', short: 'PBT', strength: 42, wage: 750 },
   'resovia': { id: 'resovia', name: 'Resovia Rzeszów', short: 'RES', strength: 41, wage: 720 },
@@ -24,7 +24,17 @@ export const CLUBS: Record<string, Club> = {
   'gks-tichy': { id: 'gks-tichy', name: 'GKS Tychy', short: 'TYC', strength: 45, wage: 820 },
   'wieczysta': { id: 'wieczysta', name: 'Wieczysta Kraków', short: 'WIE', strength: 46, wage: 850 },
 
-  // I liga
+  // II liga (tier 3)
+  'znicz': { id: 'znicz', name: 'Znicz Pruszków', short: 'ZNI', strength: 48, wage: 1100 },
+  'kalisz': { id: 'kalisz', name: 'KKS Kalisz', short: 'KAL', strength: 47, wage: 1050 },
+  'belchatow': { id: 'belchatow', name: 'GKS Bełchatów', short: 'BEL', strength: 49, wage: 1150 },
+  'elblag': { id: 'elblag', name: 'Olimpia Elbląg', short: 'ELB', strength: 45, wage: 950 },
+  'wisla-pulawy': { id: 'wisla-pulawy', name: 'Wisła Puławy', short: 'WPU', strength: 46, wage: 1000 },
+  'polkowice': { id: 'polkowice', name: 'Górnik Polkowice', short: 'GPO', strength: 44, wage: 900 },
+  'stomil': { id: 'stomil', name: 'Stomil Olsztyn', short: 'STO', strength: 47, wage: 1020 },
+  'ruch': { id: 'ruch', name: 'Ruch Chorzów', short: 'RCH', strength: 51, wage: 1300 },
+
+  // I liga (tier 2)
   'wisla-krakow': { id: 'wisla-krakow', name: 'Wisła Kraków', short: 'WIS', strength: 58, wage: 2200 },
   'slask-wroclaw': { id: 'slask-wroclaw', name: 'Śląsk Wrocław', short: 'SLW', strength: 56, wage: 2000 },
   'lks-lodz': { id: 'lks-lodz', name: 'ŁKS Łódź', short: 'LKS', strength: 54, wage: 1800 },
@@ -34,7 +44,7 @@ export const CLUBS: Record<string, Club> = {
   'gornik-leczna': { id: 'gornik-leczna', name: 'Górnik Łęczna', short: 'GLE', strength: 49, wage: 1350 },
   'stal-rzeszow': { id: 'stal-rzeszow', name: 'Stal Rzeszów', short: 'STR', strength: 51, wage: 1500 },
 
-  // Ekstraklasa 2025/26
+  // Ekstraklasa (tier 1)
   'lech-poznan': { id: 'lech-poznan', name: 'Lech Poznań', short: 'LPO', strength: 78, wage: 5200 },
   'rakow': { id: 'rakow', name: 'Raków Częstochowa', short: 'RAK', strength: 77, wage: 5000 },
   'legia': { id: 'legia', name: 'Legia Warszawa', short: 'LEG', strength: 76, wage: 5100 },
@@ -55,37 +65,8 @@ export const CLUBS: Record<string, Club> = {
   'termalica': { id: 'termalica', name: 'Termalica Nieciecza', short: 'TNE', strength: 58, wage: 2300 },
 }
 
+/** tier 1 = Ekstraklasa … tier 4 = III liga */
 export const LEAGUES: League[] = [
-  {
-    id: 'liga-3',
-    name: 'III liga',
-    tier: 3,
-    clubIds: [
-      'hutnik-krakow',
-      'polonia-bytom',
-      'resovia',
-      'chojniczanka',
-      'stal-stalowa',
-      'podbeskidzie',
-      'gks-tichy',
-      'wieczysta',
-    ],
-  },
-  {
-    id: 'liga-2',
-    name: 'I liga',
-    tier: 2,
-    clubIds: [
-      'wisla-krakow',
-      'slask-wroclaw',
-      'lks-lodz',
-      'polonia-warszawa',
-      'miedz-legnica',
-      'odra-opole',
-      'gornik-leczna',
-      'stal-rzeszow',
-    ],
-  },
   {
     id: 'liga-1',
     name: 'Ekstraklasa',
@@ -109,6 +90,51 @@ export const LEAGUES: League[] = [
       'wisla-plock',
       'arka',
       'termalica',
+    ],
+  },
+  {
+    id: 'liga-2',
+    name: 'I liga',
+    tier: 2,
+    clubIds: [
+      'wisla-krakow',
+      'slask-wroclaw',
+      'lks-lodz',
+      'polonia-warszawa',
+      'miedz-legnica',
+      'odra-opole',
+      'gornik-leczna',
+      'stal-rzeszow',
+    ],
+  },
+  {
+    id: 'liga-ii',
+    name: 'II liga',
+    tier: 3,
+    clubIds: [
+      'znicz',
+      'kalisz',
+      'belchatow',
+      'elblag',
+      'wisla-pulawy',
+      'polkowice',
+      'stomil',
+      'ruch',
+    ],
+  },
+  {
+    id: 'liga-3',
+    name: 'III liga',
+    tier: 4,
+    clubIds: [
+      'hutnik-krakow',
+      'polonia-bytom',
+      'resovia',
+      'chojniczanka',
+      'stal-stalowa',
+      'podbeskidzie',
+      'gks-tichy',
+      'wieczysta',
     ],
   },
 ]
@@ -155,4 +181,12 @@ export function pickStartingClubIds(count = 4): string[] {
     ;[ids[i], ids[j]] = [ids[j]!, ids[i]!]
   }
   return ids.slice(0, Math.min(count, ids.length))
+}
+
+/** Minimalny OVR, by kluby z danej ligi interesowały się zawodnikiem. */
+export function ovrForHigherLeague(tier: number): number {
+  if (tier <= 1) return 66
+  if (tier === 2) return 58
+  if (tier === 3) return 52
+  return 48
 }

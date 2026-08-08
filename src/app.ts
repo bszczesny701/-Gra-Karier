@@ -3,7 +3,10 @@ import {
   acceptOffer,
   acceptStartingOffer,
   applyPreseasonDecision,
+  declineMidSeasonTransfers,
   draftNewCareer,
+  hasMidSeasonOffers,
+  openMidSeasonTransfers,
   openPreseasonDecision,
   openTransferChoice,
   resolveKeyMatch,
@@ -237,7 +240,8 @@ export class App {
     const s = this.state.season!
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
-    const chance = Math.round(appearanceChance(p) * 100)
+    const chance = Math.round(appearanceChance(p, s.clubId) * 100)
+    const midOffers = hasMidSeasonOffers(this.state)
     const log = this.state.log
       .slice(0, 4)
       .map((l) => `<li>${l}</li>`)
@@ -253,7 +257,7 @@ export class App {
           </div>
           <div class="money">${p.money} zł</div>
         </div>
-        <p class="meta">${league.name} · sezon ${s.year} · szansa na grę ≈ ${chance}%</p>
+        <p class="meta">${league.name} · sezon ${s.year} · szansa na grę w ${club.short} ≈ ${chance}%</p>
         <div class="stat-grid">
           <div><span>OVR</span><strong>${p.overall}</strong></div>
           <div><span>Morale</span><strong>${p.morale}</strong></div>
@@ -268,12 +272,17 @@ export class App {
 
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
-        <p class="muted">Szansa na występy zależy od OVR, reputacji, morale i wieku. Od ~30. roku życia tempo i kondycja naturalnie spadają.</p>
+        <p class="muted">Szansa na grę zależy od Twojego OVR względem siły klubu — w silniejszej drużynie trudniej o „11”.</p>
         <div class="actions">
           ${
             s.preseasonDone
               ? ''
-              : `<button class="btn ghost" id="btn-pre">Decyzja przed sezonem</button>`
+              : `<button class="btn ghost" id="btn-pre">Wiadomość (decyzja)</button>`
+          }
+          ${
+            midOffers
+              ? `<button class="btn ghost" id="btn-mid-tr">Okno transferowe</button>`
+              : ''
           }
           <button class="btn primary" id="btn-season">Dalej — rozegraj sezon</button>
         </div>
@@ -293,6 +302,9 @@ export class App {
     this.root.querySelector('#btn-pre')?.addEventListener('click', () => {
       this.go(() => openPreseasonDecision(this.state))
     })
+    this.root.querySelector('#btn-mid-tr')?.addEventListener('click', () => {
+      this.go(() => openMidSeasonTransfers(this.state))
+    })
     this.root.querySelector('#btn-season')?.addEventListener('click', () => {
       this.go(() => runFullSeason(this.state))
     })
@@ -307,15 +319,31 @@ export class App {
 
   private decisionHtml(): string {
     const d = this.state.pendingDecision!
+    const initial = (d.speaker || '?').trim().charAt(0).toUpperCase()
+    const bubbles = (d.messages?.length ? d.messages : [d.description])
+      .map((m) => `<div class="chat-bubble">${m}</div>`)
+      .join('')
     const choices = d.choices
       .map(
         (c) =>
-          `<button class="choice" data-choice="${c.id}"><strong>${c.label}</strong><span>${c.hint}</span></button>`,
+          `<button class="chat-reply" data-choice="${c.id}"><span class="chat-reply-text">${c.label}</span><span class="chat-reply-hint">${c.hint}</span></button>`,
       )
       .join('')
     return this.shell(
-      `<section class="panel"><h2>${d.title}</h2><p>${d.description}</p><div class="choices">${choices}</div></section>`,
-      'Przed sezonem',
+      `
+      <section class="chat-panel">
+        <div class="chat-header">
+          <div class="chat-avatar">${initial}</div>
+          <div>
+            <strong>${d.speaker}</strong>
+            <p class="muted">${d.speakerRole} · ${d.title}</p>
+          </div>
+        </div>
+        <div class="chat-thread">${bubbles}</div>
+        <p class="chat-prompt muted">Twoja odpowiedź:</p>
+        <div class="chat-replies">${choices}</div>
+      </section>`,
+      'Czat',
     )
   }
 
@@ -515,15 +543,17 @@ export class App {
 
   private transferChoiceHtml(): string {
     const offers = this.state.transferOffers
+    const midSeason = Boolean(this.state.season && !this.state.seasonReport)
     const forced = this.state.seasonReport && !this.state.seasonReport.contractRenewed
     const cards = offers
       .map((o) => {
         const c = getClub(o.clubId)
         const l = getLeague(o.leagueId)
+        const play = o.playChance != null ? ` · gra ≈ ${o.playChance}%` : ''
         return `
           <button class="choice" data-offer="${o.clubId}">
             <strong>${c.name}</strong>
-            <span>${l.name} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł</span>
+            <span>${l.name} · pensja ~${o.wage} zł · premia ${o.signingBonus} zł${play}</span>
             <span>${o.message}</span>
           </button>`
       })
@@ -531,10 +561,22 @@ export class App {
     return this.shell(
       `
       <section class="panel">
-        <h2>Oferty transferowe</h2>
-        <p class="muted">${forced ? 'Kontrakt nieprzedłużony — wybierz nowy klub.' : 'Wybierz klub albo wróć i zostań.'}</p>
+        <h2>${midSeason ? 'Okno transferowe' : 'Oferty transferowe'}</h2>
+        <p class="muted">${
+          midSeason
+            ? 'W trakcie sezonu — wyższe ligi przy wysokim OVR. Szansa na grę różni się per klub.'
+            : forced
+              ? 'Kontrakt nieprzedłużony — wybierz nowy klub.'
+              : 'Wybierz klub albo wróć i zostań.'
+        }</p>
         <div class="choices">${cards}</div>
-        ${forced ? '' : `<div class="actions"><button class="btn ghost" id="btn-back-stay">Zostań jednak</button></div>`}
+        ${
+          forced
+            ? ''
+            : midSeason
+              ? `<div class="actions"><button class="btn ghost" id="btn-skip-mid">Zostaję w klubie</button></div>`
+              : `<div class="actions"><button class="btn ghost" id="btn-back-stay">Zostań jednak</button></div>`
+        }
       </section>`,
       'Transfer',
     )
@@ -548,6 +590,9 @@ export class App {
     })
     this.root.querySelector('#btn-back-stay')?.addEventListener('click', () => {
       this.go(() => stayAtClub(this.state))
+    })
+    this.root.querySelector('#btn-skip-mid')?.addEventListener('click', () => {
+      this.go(() => declineMidSeasonTransfers(this.state))
     })
   }
 }

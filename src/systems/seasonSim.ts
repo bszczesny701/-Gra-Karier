@@ -156,21 +156,30 @@ function scoreline(att: number, def: number): number {
   return Math.min(g, 4)
 }
 
-/** Szansa na występ — z OVR / reputacji / morale / wieku (forma nie jest stałą statystyką). */
-export function appearanceChance(player: Player): number {
-  const ovrPart = player.overall / 140
-  const repPart = player.reputation / 220
-  const moralePart = player.morale / 280
+/** Szansa na występ — OVR vs siła klubu + reputacja / morale / wiek. */
+export function appearanceChance(player: Player, clubId?: string): number {
+  const ovrPart = player.overall / 145
+  const repPart = player.reputation / 240
+  const moralePart = player.morale / 300
   const agePart =
     player.age >= 36 ? -0.14 : player.age >= 33 ? -0.08 : player.age >= 30 ? -0.04 : 0
-  return Math.max(0.12, Math.min(0.9, 0.22 + ovrPart + repPart + moralePart + agePart))
+
+  let clubBit = 0
+  if (clubId) {
+    const club = getClub(clubId)
+    // Silniejszy klub → trudniej o „11”; słabszy → łatwiej
+    const gap = player.overall - club.strength
+    clubBit = gap / 48
+  }
+
+  return Math.max(0.1, Math.min(0.92, 0.28 + ovrPart + repPart + moralePart + agePart + clubBit))
 }
 
 /** Szansa w trakcie sezonu — chwilowy humor meczowy, nie zapisana forma. */
-function matchAppearanceChance(player: Player, matchMood: number): number {
-  const base = appearanceChance(player)
-  const moodBit = (matchMood - 50) / 200
-  return Math.max(0.12, Math.min(0.92, base + moodBit))
+function matchAppearanceChance(player: Player, matchMood: number, clubId: string): number {
+  const base = appearanceChance(player, clubId)
+  const moodBit = (matchMood - 50) / 220
+  return Math.max(0.1, Math.min(0.94, base + moodBit))
 }
 
 /**
@@ -237,7 +246,7 @@ function simulatePolishCup(
   for (const round of rounds) {
     const rivalId = rivalsPool[rngInt(rivalsPool.length)]!
     const rival = getClub(rivalId)
-    const played = chance(appearanceChance(player))
+    const played = chance(appearanceChance(player, playerClubId))
     if (played) {
       playerApps++
       const goalP =
@@ -329,7 +338,7 @@ function buildKeyMatches(
   }
 
   const relegationZone = league.tier === 1 ? clubCount - 2 : clubCount - 1
-  if (league.tier < 3 && place >= relegationZone) {
+  if (league.tier < 4 && place >= relegationZone) {
     push(
       'relegation',
       'Walka o utrzymanie',
@@ -404,7 +413,7 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
       if (chance(0.04)) matchMood = clamp(matchMood + (4 + Math.random() * 8), 28, 88)
       if (chance(0.03)) matchMood = clamp(matchMood - (3 + Math.random() * 6), 28, 88)
 
-      starts = chance(matchAppearanceChance(player, matchMood))
+      starts = chance(matchAppearanceChance(player, matchMood, season.clubId))
 
       if (starts) {
         appearances++
@@ -605,8 +614,8 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   const relegation =
     league.tier === 1
       ? place >= clubCount - 1
-      : league.tier === 2
-        ? place >= clubCount - 1
+      : league.tier < 4
+        ? place >= clubCount
         : false
   const title = league.tier === 1 && place === 1
 

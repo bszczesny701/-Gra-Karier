@@ -79,6 +79,8 @@ export interface SeasonState {
   standings: ClubStanding[]
   /** Czy decyzja przed sezonem już podjęta */
   preseasonDone: boolean
+  /** Czy wykorzystano okno transferowe w trakcie sezonu */
+  midTransferDone: boolean
 }
 
 export interface PendingKeyMatch {
@@ -110,6 +112,9 @@ export interface TransferOffer {
 export interface PendingDecision {
   eventId: string
   title: string
+  speaker: string
+  speakerRole: string
+  messages: string[]
   description: string
   choices: Array<{
     id: string
@@ -165,8 +170,8 @@ export interface GameState {
   log: string[]
 }
 
-export const SAVE_KEY = 'gra-karier-save-v7'
-export const SAVE_VERSION = 7
+export const SAVE_KEY = 'gra-karier-save-v8'
+export const SAVE_VERSION = 8
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
