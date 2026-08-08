@@ -108,3 +108,25 @@ export function leagueByTier(tier: number): League | undefined {
 
 export const STARTER_CLUB_ID = 'wisla-mala'
 export const STARTER_LEAGUE_ID = 'liga-3'
+
+export function getLeagueForClub(clubId: string): League {
+  for (const league of LEAGUES) {
+    if (league.clubIds.includes(clubId)) return league
+  }
+  return getLeague(STARTER_LEAGUE_ID)
+}
+
+/** Kluby dostępne na starcie kariery (III + część II ligi). */
+export function starterClubOptions(): Array<{ clubId: string; label: string; minOverall: number }> {
+  const liga3 = getLeague('liga-3').clubIds.map((clubId) => ({
+    clubId,
+    label: `${getClub(clubId).name} · III liga`,
+    minOverall: 45,
+  }))
+  const liga2 = getLeague('liga-2').clubIds.slice(0, 4).map((clubId) => ({
+    clubId,
+    label: `${getClub(clubId).name} · II liga`,
+    minOverall: 58,
+  }))
+  return [...liga3, ...liga2]
+}

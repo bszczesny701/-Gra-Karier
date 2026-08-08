@@ -1,4 +1,5 @@
 export type Position = 'NP' | 'POM' | 'ŚO' | 'OB'
+export type PreferredFoot = 'left' | 'right' | 'both'
 
 export type Screen =
   | 'home'
@@ -8,6 +9,7 @@ export type Screen =
   | 'match'
   | 'transfer'
   | 'seasonEnd'
+  | 'ballTrain'
 
 export interface Attributes {
   pace: number
@@ -21,11 +23,22 @@ export interface Player {
   name: string
   age: number
   position: Position
+  preferredFoot: PreferredFoot
+  overall: number
   attrs: Attributes
   morale: number
   form: number
   reputation: number
   money: number
+}
+
+export interface CreateCareerOptions {
+  name: string
+  position: Position
+  preferredFoot: PreferredFoot
+  age: number
+  overall: number
+  clubId: string
 }
 
 export interface ClubStanding {
@@ -51,6 +64,7 @@ export interface SeasonState {
   playerAssists: number
   avgRating: number
   ratingSum: number
+  ballTrainedWeek: number
 }
 
 export interface MatchResult {
@@ -83,6 +97,12 @@ export interface PendingDecision {
   }>
 }
 
+export interface BallTrainResult {
+  attempts: number
+  bestScore: number
+  avgScore: number
+}
+
 export interface GameState {
   version: number
   screen: Screen
@@ -95,13 +115,19 @@ export interface GameState {
   log: string[]
 }
 
-export const SAVE_KEY = 'gra-karier-save-v1'
-export const SAVE_VERSION = 1
+export const SAVE_KEY = 'gra-karier-save-v2'
+export const SAVE_VERSION = 2
 
 export const WEEKS_PER_SEASON = 12
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
+}
+
+export function footLabel(foot: PreferredFoot): string {
+  if (foot === 'left') return 'Lewa'
+  if (foot === 'right') return 'Prawa'
+  return 'Obunożny'
 }
 
 export function createEmptyState(): GameState {

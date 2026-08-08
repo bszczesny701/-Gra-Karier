@@ -1,6 +1,7 @@
-import { getClub, getLeague } from './data/clubs'
+import { getClub, getLeague, starterClubOptions } from './data/clubs'
 import {
   acceptTransfer,
+  applyBallTrainResult,
   applyDecision,
   continueAfterMatch,
   openWeekDecision,
@@ -10,9 +11,10 @@ import {
   startNewCareer,
   startNextSeason,
 } from './systems/career'
+import { mountBallTrain } from './systems/ballTrain'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
-import type { GameState, Position } from './state/types'
-import { createEmptyState } from './state/types'
+import type { GameState, Position, PreferredFoot } from './state/types'
+import { createEmptyState, footLabel } from './state/types'
 
 const POSITIONS: { id: Position; label: string }[] = [
   { id: 'NP', label: 'Napastnik' },
@@ -24,6 +26,7 @@ const POSITIONS: { id: Position; label: string }[] = [
 export class App {
   private root: HTMLElement
   private state: GameState
+  private cleanupBall: (() => void) | null = null
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -42,6 +45,8 @@ export class App {
   }
 
   private go(mutate: () => void): void {
+    this.cleanupBall?.()
+    this.cleanupBall = null
     mutate()
     this.persist()
     this.render()
@@ -78,6 +83,10 @@ export class App {
         this.root.innerHTML = this.seasonEndHtml()
         this.bindSeasonEnd()
         break
+      case 'ballTrain':
+        this.root.innerHTML = this.ballTrainHtml()
+        this.bindBallTrain()
+        break
     }
   }
 
@@ -99,7 +108,7 @@ export class App {
       <section class="hero-panel">
         <p class="eyebrow">Symulator piłkarza</p>
         <h1>Twoja kariera zaczyna się tu</h1>
-        <p class="lead">Decyzje tygodniowe, mecze, kontrakty. Buduj formę i przebijaj się przez ligi.</p>
+        <p class="lead">Decyzje tygodniowe, trening z piłką, mecze i kontrakty.</p>
         <div class="actions">
           ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
           <button class="btn ${canContinue ? 'ghost' : 'primary'}" id="btn-new">Nowa gra</button>
@@ -127,19 +136,54 @@ export class App {
     const options = POSITIONS.map(
       (p) => `<option value="${p.id}">${p.label}</option>`,
     ).join('')
+    const clubs = starterClubOptions()
+      .map(
+        (c) =>
+          `<option value="${c.clubId}" data-min="${c.minOverall}">${c.label} (min OVR ${c.minOverall})</option>`,
+      )
+      .join('')
+
     return this.shell(
       `
       <section class="panel">
         <h2>Nowy zawodnik</h2>
-        <p class="muted">Zaczynasz w III lidze regionalnej. Wybierz pozycję i ruszaj.</p>
+        <p class="muted">Ustaw profil startowy. Wyższy overall otwiera lepsze kluby.</p>
+
         <label class="field">
           <span>Imię i nazwisko</span>
           <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" />
         </label>
+
         <label class="field">
           <span>Pozycja</span>
           <select id="player-pos">${options}</select>
         </label>
+
+        <label class="field">
+          <span>Noga dominująca</span>
+          <select id="player-foot">
+            <option value="right">Prawa</option>
+            <option value="left">Lewa</option>
+            <option value="both">Obunożny</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Wiek: <strong id="age-val">17</strong></span>
+          <input id="player-age" type="range" min="16" max="22" value="17" />
+        </label>
+
+        <label class="field">
+          <span>Overall startowy: <strong id="ovr-val">52</strong></span>
+          <input id="player-ovr" type="range" min="45" max="68" value="52" />
+        </label>
+
+        <label class="field">
+          <span>Klub startowy</span>
+          <select id="player-club">${clubs}</select>
+        </label>
+        <p class="hint" id="club-hint"></p>
+
         <div class="actions">
           <button class="btn primary" id="btn-start">Rozpocznij karierę</button>
           <button class="btn ghost" id="btn-back">Wróć</button>
@@ -151,6 +195,43 @@ export class App {
   }
 
   private bindCreate(): void {
+    const ageInput = this.root.querySelector('#player-age') as HTMLInputElement
+    const ovrInput = this.root.querySelector('#player-ovr') as HTMLInputElement
+    const clubSelect = this.root.querySelector('#player-club') as HTMLSelectElement
+    const ageVal = this.root.querySelector('#age-val')!
+    const ovrVal = this.root.querySelector('#ovr-val')!
+    const clubHint = this.root.querySelector('#club-hint')!
+
+    const syncClubAvailability = () => {
+      const ovr = Number(ovrInput.value)
+      ovrVal.textContent = String(ovr)
+      let firstValid: string | null = null
+      for (const opt of Array.from(clubSelect.options)) {
+        const min = Number(opt.dataset.min || 45)
+        const ok = ovr >= min
+        opt.disabled = !ok
+        if (ok && !firstValid) firstValid = opt.value
+      }
+      if (clubSelect.selectedOptions[0]?.disabled && firstValid) {
+        clubSelect.value = firstValid
+      }
+      const selected = clubSelect.selectedOptions[0]
+      const min = Number(selected?.dataset.min || 45)
+      clubHint.textContent =
+        ovr < min
+          ? 'Podnieś overall, żeby wybrać ten klub.'
+          : min >= 58
+            ? 'Start w II lidze — trudniejszy początek, lepsze zarobki.'
+            : 'Klasyczny start w III lidze regionalnej.'
+    }
+
+    ageInput.addEventListener('input', () => {
+      ageVal.textContent = ageInput.value
+    })
+    ovrInput.addEventListener('input', syncClubAvailability)
+    clubSelect.addEventListener('change', syncClubAvailability)
+    syncClubAvailability()
+
     this.root.querySelector('#btn-back')?.addEventListener('click', () => {
       this.go(() => {
         this.state.screen = 'home'
@@ -160,7 +241,26 @@ export class App {
       const name = (this.root.querySelector('#player-name') as HTMLInputElement).value
       const position = (this.root.querySelector('#player-pos') as HTMLSelectElement)
         .value as Position
-      this.go(() => startNewCareer(this.state, name, position))
+      const preferredFoot = (this.root.querySelector('#player-foot') as HTMLSelectElement)
+        .value as PreferredFoot
+      const age = Number(ageInput.value)
+      const overall = Number(ovrInput.value)
+      const clubId = clubSelect.value
+      const min = Number(clubSelect.selectedOptions[0]?.dataset.min || 45)
+      if (overall < min) {
+        clubHint.textContent = 'Ten klub wymaga wyższego overall.'
+        return
+      }
+      this.go(() =>
+        startNewCareer(this.state, {
+          name,
+          position,
+          preferredFoot,
+          age,
+          overall,
+          clubId,
+        }),
+      )
     })
   }
 
@@ -170,6 +270,7 @@ export class App {
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
     const place = playerTablePosition(s)
+    const trained = s.ballTrainedWeek === s.week
     const table = sortedStandings(s)
       .slice(0, 8)
       .map((row, i) => {
@@ -181,6 +282,7 @@ export class App {
 
     const attrs = `
       <div class="stat-grid">
+        <div><span>OVR</span><strong>${p.overall}</strong></div>
         <div><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
         <div><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
         <div><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
@@ -188,7 +290,6 @@ export class App {
         <div><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
         <div><span>Forma</span><strong>${p.form}</strong></div>
         <div><span>Morale</span><strong>${p.morale}</strong></div>
-        <div><span>Reputacja</span><strong>${p.reputation}</strong></div>
       </div>
     `
 
@@ -203,18 +304,21 @@ export class App {
         <div class="player-head">
           <div>
             <h2>${p.name}</h2>
-            <p class="muted">${p.position} · ${p.age} lat · ${club.name}</p>
+            <p class="muted">${p.position} · ${footLabel(p.preferredFoot)} · ${p.age} lat · ${club.name}</p>
           </div>
           <div class="money">${p.money} zł</div>
         </div>
-        <p class="meta">${league.name} · kolejka ${s.week}/${s.maxWeeks} · miejsce ${place}</p>
+        <p class="meta">${league.name} · kolejka ${s.week}/${s.maxWeeks} · miejsce ${place} · reputacja ${p.reputation}</p>
         ${attrs}
       </section>
 
       <section class="panel">
         <h3>Tydzień ${s.week}</h3>
-        <p class="muted">Wybierz decyzję tygodnia, potem rozegramy mecz kolejki.</p>
+        <p class="muted">Trening z piłką raz na kolejkę, potem decyzja i mecz.</p>
         <div class="actions">
+          <button class="btn ghost" id="btn-ball" ${trained ? 'disabled' : ''}>
+            ${trained ? 'Trening z piłką zrobiony' : 'Trening z piłką'}
+          </button>
           <button class="btn primary" id="btn-week">Przejdź do decyzji</button>
         </div>
       </section>
@@ -243,12 +347,53 @@ export class App {
     this.root.querySelector('#btn-week')?.addEventListener('click', () => {
       this.go(() => openWeekDecision(this.state))
     })
+    this.root.querySelector('#btn-ball')?.addEventListener('click', () => {
+      this.go(() => {
+        this.state.screen = 'ballTrain'
+      })
+    })
     this.root.querySelector('#btn-reset')?.addEventListener('click', () => {
       if (!confirm('Na pewno zacząć od nowa? Zapis zostanie usunięty.')) return
       clearSave()
       this.state = createEmptyState()
       this.state.screen = 'home'
       this.render()
+    })
+  }
+
+  private ballTrainHtml(): string {
+    return this.shell(
+      `
+      <section class="panel">
+        <h2>Trening z piłką</h2>
+        <p class="muted">Naciągnij piłkę i puść w kierunku zielonej strzałki. 3 próby.</p>
+        <div class="ball-wrap">
+          <canvas id="ball-canvas"></canvas>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="btn-skip-ball">Pomiń</button>
+        </div>
+      </section>
+    `,
+      'Mini-gra',
+    )
+  }
+
+  private bindBallTrain(): void {
+    const canvas = this.root.querySelector('#ball-canvas') as HTMLCanvasElement
+    this.cleanupBall = mountBallTrain(canvas, (avg, best, attempts) => {
+      this.go(() =>
+        applyBallTrainResult(this.state, {
+          avgScore: avg,
+          bestScore: best,
+          attempts,
+        }),
+      )
+    })
+    this.root.querySelector('#btn-skip-ball')?.addEventListener('click', () => {
+      this.go(() => {
+        this.state.screen = 'hub'
+      })
     })
   }
 

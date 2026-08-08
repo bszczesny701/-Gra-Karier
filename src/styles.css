@@ -368,6 +368,41 @@ h3 {
   margin: 6px 0;
 }
 
+.hint {
+  margin: -6px 0 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.field input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.ball-wrap {
+  margin: 12px 0 4px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  touch-action: none;
+}
+
+.ball-wrap canvas {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  touch-action: none;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @media (max-width: 420px) {
   .stat-grid {
     grid-template-columns: repeat(2, 1fr);

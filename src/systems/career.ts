@@ -1,20 +1,20 @@
 import {
   CLUBS,
-  STARTER_CLUB_ID,
-  STARTER_LEAGUE_ID,
   getClub,
   getLeague,
+  getLeagueForClub,
   leagueByTier,
 } from '../data/clubs'
 import { CAREER_EVENTS, pickEvent, type ChoiceEffect } from '../data/events'
 import {
   WEEKS_PER_SEASON,
   clamp,
+  type BallTrainResult,
   type ClubStanding,
+  type CreateCareerOptions,
   type GameState,
   type PendingDecision,
   type Player,
-  type Position,
   type SeasonState,
   type TransferOffer,
 } from '../state/types'
@@ -24,31 +24,30 @@ import {
   pickOpponent,
   simulateMatch,
 } from './matchSim'
+import {
+  applyBallTrainRewards,
+  attrsFromOverall,
+  calcOverall,
+  moneyFromStart,
+  reputationFromStart,
+} from './playerFactory'
 
-function baseAttrs(position: Position): Player['attrs'] {
-  const base = { pace: 48, shooting: 45, passing: 46, defending: 44, stamina: 50 }
-  switch (position) {
-    case 'NP':
-      return { ...base, shooting: 52, pace: 52, defending: 30 }
-    case 'POM':
-      return { ...base, passing: 52, shooting: 48, defending: 40 }
-    case 'ŚO':
-      return { ...base, passing: 50, defending: 50, shooting: 40 }
-    case 'OB':
-      return { ...base, defending: 54, pace: 50, shooting: 28 }
-  }
-}
-
-export function createPlayer(name: string, position: Position): Player {
+export function createPlayer(options: CreateCareerOptions): Player {
+  const overall = clamp(options.overall, 45, 70)
+  const attrs = attrsFromOverall(options.position, overall)
+  const league = getLeagueForClub(options.clubId)
+  const club = getClub(options.clubId)
   return {
-    name: name.trim() || 'Zawodnik',
-    age: 17,
-    position,
-    attrs: baseAttrs(position),
+    name: options.name.trim() || 'Zawodnik',
+    age: clamp(options.age, 16, 22),
+    position: options.position,
+    preferredFoot: options.preferredFoot,
+    overall: calcOverall(attrs, options.position),
+    attrs,
     morale: 70,
     form: 65,
-    reputation: 10,
-    money: 500,
+    reputation: reputationFromStart(overall, league.tier),
+    money: moneyFromStart(overall, club.wage),
   }
 }
 
@@ -77,18 +76,43 @@ export function createSeason(clubId: string, leagueId: string, year: number): Se
     playerAssists: 0,
     avgRating: 0,
     ratingSum: 0,
+    ballTrainedWeek: 0,
   }
 }
 
-export function startNewCareer(state: GameState, name: string, position: Position): void {
-  state.player = createPlayer(name, position)
-  state.season = createSeason(STARTER_CLUB_ID, STARTER_LEAGUE_ID, 2026)
+export function startNewCareer(state: GameState, options: CreateCareerOptions): void {
+  const clubId = options.clubId
+  const league = getLeagueForClub(clubId)
+  state.player = createPlayer({ ...options, clubId })
+  state.season = createSeason(clubId, league.id, 2026)
   state.lastMatch = null
   state.pendingDecision = null
   state.pendingTransfer = null
   state.seasonSummary = null
   state.log = []
-  pushLog(state, `Start kariery w ${getClub(STARTER_CLUB_ID).name}. Powodzenia!`)
+  pushLog(
+    state,
+    `Start kariery w ${getClub(clubId).name} (OVR ${state.player.overall}). Powodzenia!`,
+  )
+  state.screen = 'hub'
+}
+
+export function applyBallTrainResult(state: GameState, result: BallTrainResult): void {
+  const player = state.player!
+  const season = state.season!
+  const rewarded = applyBallTrainRewards(
+    player.attrs,
+    player.form,
+    player.morale,
+    result,
+    player.preferredFoot,
+  )
+  player.attrs = rewarded.attrs
+  player.form = rewarded.form
+  player.morale = rewarded.morale
+  player.overall = calcOverall(player.attrs, player.position)
+  season.ballTrainedWeek = season.week
+  pushLog(state, rewarded.summary)
   state.screen = 'hub'
 }
 
@@ -318,14 +342,6 @@ export function continueAfterMatch(state: GameState): void {
   state.screen = 'hub'
 }
 
-function getLeagueForClub(clubId: string) {
-  for (const id of ['liga-3', 'liga-2', 'liga-1'] as const) {
-    const league = getLeague(id)
-    if (league.clubIds.includes(clubId)) return league
-  }
-  return getLeague(STARTER_LEAGUE_ID)
-}
-
 export function acceptTransfer(state: GameState): void {
   const offer = state.pendingTransfer
   const player = state.player!
@@ -347,6 +363,7 @@ export function acceptTransfer(state: GameState): void {
     rebuilt.playerAssists = season.playerAssists
     rebuilt.avgRating = season.avgRating
     rebuilt.ratingSum = season.ratingSum
+    rebuilt.ballTrainedWeek = season.ballTrainedWeek
     state.season = rebuilt
   } else {
     season.clubId = offer.clubId
