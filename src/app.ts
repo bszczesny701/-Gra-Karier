@@ -1,19 +1,19 @@
 import { getClub, getLeague, starterClubOptions } from './data/clubs'
 import {
   acceptTransfer,
-  applyBallTrainResult,
   applyDecision,
   continueAfterMatch,
   openWeekDecision,
   playerTablePosition,
   rejectTransfer,
+  resolveKeyMatch,
   sortedStandings,
   startNewCareer,
   startNextSeason,
 } from './systems/career'
-import { mountBallTrain } from './systems/ballTrain'
+import { mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
-import type { GameState, Position, PreferredFoot } from './state/types'
+import type { GameState, MatchAction, Position, PreferredFoot } from './state/types'
 import { createEmptyState, footLabel } from './state/types'
 
 const POSITIONS: { id: Position; label: string }[] = [
@@ -26,7 +26,8 @@ const POSITIONS: { id: Position; label: string }[] = [
 export class App {
   private root: HTMLElement
   private state: GameState
-  private cleanupBall: (() => void) | null = null
+  private cleanupMoment: (() => void) | null = null
+  private selectedAction: MatchAction | null = null
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -45,16 +46,15 @@ export class App {
   }
 
   private go(mutate: () => void): void {
-    this.cleanupBall?.()
-    this.cleanupBall = null
+    this.cleanupMoment?.()
+    this.cleanupMoment = null
     mutate()
     this.persist()
     this.render()
   }
 
   private render(): void {
-    const { screen } = this.state
-    switch (screen) {
+    switch (this.state.screen) {
       case 'home':
         this.root.innerHTML = this.homeHtml()
         this.bindHome()
@@ -71,6 +71,10 @@ export class App {
         this.root.innerHTML = this.decisionHtml()
         this.bindDecision()
         break
+      case 'keyMatch':
+        this.root.innerHTML = this.keyMatchHtml()
+        this.bindKeyMatch()
+        break
       case 'match':
         this.root.innerHTML = this.matchHtml()
         this.bindMatch()
@@ -82,10 +86,6 @@ export class App {
       case 'seasonEnd':
         this.root.innerHTML = this.seasonEndHtml()
         this.bindSeasonEnd()
-        break
-      case 'ballTrain':
-        this.root.innerHTML = this.ballTrainHtml()
-        this.bindBallTrain()
         break
     }
   }
@@ -108,7 +108,7 @@ export class App {
       <section class="hero-panel">
         <p class="eyebrow">Symulator piłkarza</p>
         <h1>Twoja kariera zaczyna się tu</h1>
-        <p class="lead">Decyzje tygodniowe, trening z piłką, mecze i kontrakty.</p>
+        <p class="lead">Zwykłe kolejki lecą auto. Derby, puchar i walka o tytuł — rozgrywasz kluczową akcję.</p>
         <div class="actions">
           ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
           <button class="btn ${canContinue ? 'ghost' : 'primary'}" id="btn-new">Nowa gra</button>
@@ -148,42 +148,21 @@ export class App {
       <section class="panel">
         <h2>Nowy zawodnik</h2>
         <p class="muted">Ustaw profil startowy. Wyższy overall otwiera lepsze kluby.</p>
-
-        <label class="field">
-          <span>Imię i nazwisko</span>
-          <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" />
-        </label>
-
-        <label class="field">
-          <span>Pozycja</span>
-          <select id="player-pos">${options}</select>
-        </label>
-
-        <label class="field">
-          <span>Noga dominująca</span>
+        <label class="field"><span>Imię i nazwisko</span>
+          <input id="player-name" maxlength="24" placeholder="np. Jan Kowalski" autocomplete="off" /></label>
+        <label class="field"><span>Pozycja</span><select id="player-pos">${options}</select></label>
+        <label class="field"><span>Noga dominująca</span>
           <select id="player-foot">
             <option value="right">Prawa</option>
             <option value="left">Lewa</option>
             <option value="both">Obunożny</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Wiek: <strong id="age-val">17</strong></span>
-          <input id="player-age" type="range" min="16" max="22" value="17" />
-        </label>
-
-        <label class="field">
-          <span>Overall startowy: <strong id="ovr-val">52</strong></span>
-          <input id="player-ovr" type="range" min="45" max="68" value="52" />
-        </label>
-
-        <label class="field">
-          <span>Klub startowy</span>
-          <select id="player-club">${clubs}</select>
-        </label>
+          </select></label>
+        <label class="field"><span>Wiek: <strong id="age-val">17</strong></span>
+          <input id="player-age" type="range" min="16" max="22" value="17" /></label>
+        <label class="field"><span>Overall startowy: <strong id="ovr-val">52</strong></span>
+          <input id="player-ovr" type="range" min="45" max="68" value="52" /></label>
+        <label class="field"><span>Klub startowy</span><select id="player-club">${clubs}</select></label>
         <p class="hint" id="club-hint"></p>
-
         <div class="actions">
           <button class="btn primary" id="btn-start">Rozpocznij karierę</button>
           <button class="btn ghost" id="btn-back">Wróć</button>
@@ -212,11 +191,8 @@ export class App {
         opt.disabled = !ok
         if (ok && !firstValid) firstValid = opt.value
       }
-      if (clubSelect.selectedOptions[0]?.disabled && firstValid) {
-        clubSelect.value = firstValid
-      }
-      const selected = clubSelect.selectedOptions[0]
-      const min = Number(selected?.dataset.min || 45)
+      if (clubSelect.selectedOptions[0]?.disabled && firstValid) clubSelect.value = firstValid
+      const min = Number(clubSelect.selectedOptions[0]?.dataset.min || 45)
       clubHint.textContent =
         ovr < min
           ? 'Podnieś overall, żeby wybrać ten klub.'
@@ -252,14 +228,7 @@ export class App {
         return
       }
       this.go(() =>
-        startNewCareer(this.state, {
-          name,
-          position,
-          preferredFoot,
-          age,
-          overall,
-          clubId,
-        }),
+        startNewCareer(this.state, { name, position, preferredFoot, age, overall, clubId }),
       )
     })
   }
@@ -270,7 +239,7 @@ export class App {
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
     const place = playerTablePosition(s)
-    const trained = s.ballTrainedWeek === s.week
+    const avgForm = s.formSamples ? Math.round(s.formSum / s.formSamples) : p.form
     const table = sortedStandings(s)
       .slice(0, 8)
       .map((row, i) => {
@@ -279,19 +248,6 @@ export class App {
         return `<tr class="${mine}"><td>${i + 1}</td><td>${c.short}</td><td>${row.played}</td><td>${row.points}</td></tr>`
       })
       .join('')
-
-    const attrs = `
-      <div class="stat-grid">
-        <div><span>OVR</span><strong>${p.overall}</strong></div>
-        <div><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
-        <div><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
-        <div><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
-        <div><span>Obrona</span><strong>${p.attrs.defending}</strong></div>
-        <div><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
-        <div><span>Forma</span><strong>${p.form}</strong></div>
-        <div><span>Morale</span><strong>${p.morale}</strong></div>
-      </div>
-    `
 
     const log = this.state.log
       .slice(0, 5)
@@ -308,17 +264,23 @@ export class App {
           </div>
           <div class="money">${p.money} zł</div>
         </div>
-        <p class="meta">${league.name} · kolejka ${s.week}/${s.maxWeeks} · miejsce ${place} · reputacja ${p.reputation}</p>
-        ${attrs}
+        <p class="meta">${league.name} · kolejka ${s.week}/${s.maxWeeks} · miejsce ${place} · śr. forma ${avgForm}</p>
+        <div class="stat-grid">
+          <div><span>OVR</span><strong>${p.overall}</strong></div>
+          <div><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
+          <div><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
+          <div><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
+          <div><span>Obrona</span><strong>${p.attrs.defending}</strong></div>
+          <div><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
+          <div><span>Forma</span><strong>${p.form}</strong></div>
+          <div><span>Morale</span><strong>${p.morale}</strong></div>
+        </div>
       </section>
 
       <section class="panel">
         <h3>Tydzień ${s.week}</h3>
-        <p class="muted">Trening z piłką raz na kolejkę, potem decyzja i mecz.</p>
+        <p class="muted">Decyzja, potem mecz. Interaktywnie tylko derby, puchar i walka o stawkę.</p>
         <div class="actions">
-          <button class="btn ghost" id="btn-ball" ${trained ? 'disabled' : ''}>
-            ${trained ? 'Trening z piłką zrobiony' : 'Trening z piłką'}
-          </button>
           <button class="btn primary" id="btn-week">Przejdź do decyzji</button>
         </div>
       </section>
@@ -347,11 +309,6 @@ export class App {
     this.root.querySelector('#btn-week')?.addEventListener('click', () => {
       this.go(() => openWeekDecision(this.state))
     })
-    this.root.querySelector('#btn-ball')?.addEventListener('click', () => {
-      this.go(() => {
-        this.state.screen = 'ballTrain'
-      })
-    })
     this.root.querySelector('#btn-reset')?.addEventListener('click', () => {
       if (!confirm('Na pewno zacząć od nowa? Zapis zostanie usunięty.')) return
       clearSave()
@@ -361,39 +318,60 @@ export class App {
     })
   }
 
-  private ballTrainHtml(): string {
+  private keyMatchHtml(): string {
+    const k = this.state.pendingKeyMatch!
+    const home = getClub(k.homeId)
+    const away = getClub(k.awayId)
+    if (!this.selectedAction) {
+      return this.shell(
+        `
+        <section class="panel">
+          <p class="eyebrow">${k.label}</p>
+          <h2>${home.name} vs ${away.name}</h2>
+          <p>${k.description}</p>
+          <p class="muted">Wybierz kluczową akcję:</p>
+          <div class="actions">
+            <button class="btn primary" id="btn-shoot">Strzał na bramkę</button>
+            <button class="btn ghost" id="btn-pass">Podanie do kolegi</button>
+          </div>
+        </section>
+      `,
+        'Kluczowy mecz',
+      )
+    }
+
     return this.shell(
       `
       <section class="panel">
-        <h2>Trening z piłką</h2>
-        <p class="muted">Naciągnij piłkę i puść w kierunku zielonej strzałki. 3 próby.</p>
-        <div class="ball-wrap">
-          <canvas id="ball-canvas"></canvas>
-        </div>
-        <div class="actions">
-          <button class="btn ghost" id="btn-skip-ball">Pomiń</button>
-        </div>
+        <p class="eyebrow">${k.label} · ${this.selectedAction === 'shoot' ? 'Strzał' : 'Podanie'}</p>
+        <h2>Twoja akcja</h2>
+        <p class="muted">Naciągnij piłkę i puść w stronę celu.</p>
+        <div class="ball-wrap"><canvas id="moment-canvas"></canvas></div>
       </section>
     `,
-      'Mini-gra',
+      'Akcja',
     )
   }
 
-  private bindBallTrain(): void {
-    const canvas = this.root.querySelector('#ball-canvas') as HTMLCanvasElement
-    this.cleanupBall = mountBallTrain(canvas, (avg, best, attempts) => {
-      this.go(() =>
-        applyBallTrainResult(this.state, {
-          avgScore: avg,
-          bestScore: best,
-          attempts,
-        }),
-      )
-    })
-    this.root.querySelector('#btn-skip-ball')?.addEventListener('click', () => {
-      this.go(() => {
-        this.state.screen = 'hub'
+  private bindKeyMatch(): void {
+    if (!this.selectedAction) {
+      this.root.querySelector('#btn-shoot')?.addEventListener('click', () => {
+        this.selectedAction = 'shoot'
+        this.render()
       })
+      this.root.querySelector('#btn-pass')?.addEventListener('click', () => {
+        this.selectedAction = 'pass'
+        this.render()
+      })
+      return
+    }
+
+    const action = this.selectedAction
+    const canvas = this.root.querySelector('#moment-canvas') as HTMLCanvasElement
+    this.cleanupMoment = mountMatchMoment(canvas, action, (score) => {
+      const chosen = action
+      this.selectedAction = null
+      this.go(() => resolveKeyMatch(this.state, { action: chosen, score }))
     })
   }
 
@@ -408,15 +386,8 @@ export class App {
         </button>`,
       )
       .join('')
-
     return this.shell(
-      `
-      <section class="panel">
-        <h2>${d.title}</h2>
-        <p>${d.description}</p>
-        <div class="choices">${choices}</div>
-      </section>
-    `,
+      `<section class="panel"><h2>${d.title}</h2><p>${d.description}</p><div class="choices">${choices}</div></section>`,
       'Decyzja',
     )
   }
@@ -424,8 +395,7 @@ export class App {
   private bindDecision(): void {
     this.root.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const id = btn.dataset.choice!
-        this.go(() => applyDecision(this.state, id))
+        this.go(() => applyDecision(this.state, btn.dataset.choice!))
       })
     })
   }
@@ -435,21 +405,19 @@ export class App {
     const home = getClub(m.homeId)
     const away = getClub(m.awayId)
     const s = this.state.season!
+    const badge = m.interactive
+      ? `<p class="eyebrow">${m.keyLabel ?? 'Kluczowy mecz'}</p>`
+      : `<p class="eyebrow">Mecz automatyczny</p>`
 
     return this.shell(
       `
       <section class="panel match-panel">
-        <p class="eyebrow">Kolejka ${s.week}</p>
+        ${badge}
+        <p class="meta">Kolejka ${s.week}</p>
         <div class="scoreboard">
-          <div class="side">
-            <span class="club">${home.name}</span>
-            <strong>${m.homeGoals}</strong>
-          </div>
+          <div class="side"><span class="club">${home.name}</span><strong>${m.homeGoals}</strong></div>
           <div class="vs">:</div>
-          <div class="side">
-            <strong>${m.awayGoals}</strong>
-            <span class="club">${away.name}</span>
-          </div>
+          <div class="side"><strong>${m.awayGoals}</strong><span class="club">${away.name}</span></div>
         </div>
         <p class="narrative">${m.narrative}</p>
         <div class="stat-grid compact">
@@ -457,10 +425,10 @@ export class App {
           <div><span>Ocena</span><strong>${m.playerStarted ? m.playerRating.toFixed(1) : '—'}</strong></div>
           <div><span>Gole</span><strong>${m.playerGoals}</strong></div>
           <div><span>Asysty</span><strong>${m.playerAssists}</strong></div>
+          <div><span>Forma</span><strong>${this.state.player!.form}</strong></div>
+          <div><span>OVR</span><strong>${this.state.player!.overall}</strong></div>
         </div>
-        <div class="actions">
-          <button class="btn primary" id="btn-after-match">Dalej</button>
-        </div>
+        <div class="actions"><button class="btn primary" id="btn-after-match">Dalej</button></div>
       </section>
     `,
       'Mecz',

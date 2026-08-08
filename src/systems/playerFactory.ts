@@ -1,4 +1,4 @@
-import type { Attributes, BallTrainResult, Position, PreferredFoot } from '../state/types'
+import type { Attributes, Position } from '../state/types'
 import { clamp } from '../state/types'
 
 const PROFILES: Record<Position, Attributes> = {
@@ -50,39 +50,4 @@ export function moneyFromStart(overall: number, clubWage: number): number {
 export function reputationFromStart(overall: number, leagueTier: number): number {
   const tierBonus = leagueTier === 2 ? 8 : leagueTier === 1 ? 15 : 0
   return clamp(5 + (overall - 45) + tierBonus, 0, 40)
-}
-
-export function applyBallTrainRewards(
-  attrs: Attributes,
-  form: number,
-  morale: number,
-  result: BallTrainResult,
-  foot: PreferredFoot,
-): { attrs: Attributes; form: number; morale: number; summary: string } {
-  const quality = result.avgScore
-  let formGain = quality >= 80 ? 4 : quality >= 60 ? 2 : quality >= 40 ? 1 : -1
-  let moraleGain = quality >= 70 ? 2 : quality >= 40 ? 1 : -1
-  const skillGain = quality >= 75 ? 1 : 0
-
-  const next = { ...attrs }
-  if (skillGain) {
-    if (foot === 'left' || foot === 'both') next.passing = clamp(next.passing + 1)
-    if (foot === 'right' || foot === 'both') next.shooting = clamp(next.shooting + 1)
-    if (foot === 'both') next.pace = clamp(next.pace + 1)
-    else next.stamina = clamp(next.stamina + 1)
-  }
-
-  const summary =
-    quality >= 80
-      ? `Świetny trening z piłką (${Math.round(quality)}%). Forma w górę.`
-      : quality >= 50
-        ? `Solidny trening (${Math.round(quality)}%).`
-        : `Słaby trening (${Math.round(quality)}%). Trzeba poprawić kontrolę.`
-
-  return {
-    attrs: next,
-    form: clamp(form + formGain, 1, 100),
-    morale: clamp(morale + moraleGain, 1, 100),
-    summary,
-  }
 }

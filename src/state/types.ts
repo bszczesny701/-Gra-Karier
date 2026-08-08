@@ -1,15 +1,17 @@
 export type Position = 'NP' | 'POM' | 'ŚO' | 'OB'
 export type PreferredFoot = 'left' | 'right' | 'both'
+export type KeyMatchReason = 'derby' | 'title' | 'relegation' | 'cup' | 'finale'
+export type MatchAction = 'shoot' | 'pass'
 
 export type Screen =
   | 'home'
   | 'create'
   | 'hub'
   | 'decision'
+  | 'keyMatch'
   | 'match'
   | 'transfer'
   | 'seasonEnd'
-  | 'ballTrain'
 
 export interface Attributes {
   pace: number
@@ -64,7 +66,8 @@ export interface SeasonState {
   playerAssists: number
   avgRating: number
   ratingSum: number
-  ballTrainedWeek: number
+  formSum: number
+  formSamples: number
 }
 
 export interface MatchResult {
@@ -77,6 +80,24 @@ export interface MatchResult {
   playerGoals: number
   playerAssists: number
   narrative: string
+  interactive: boolean
+  keyReason: KeyMatchReason | null
+  keyLabel: string | null
+  autoBasedOnForm: boolean
+}
+
+export interface PendingKeyMatch {
+  homeId: string
+  awayId: string
+  opponentId: string
+  reason: KeyMatchReason
+  label: string
+  description: string
+}
+
+export interface MatchMomentResult {
+  action: MatchAction
+  score: number
 }
 
 export interface TransferOffer {
@@ -97,12 +118,6 @@ export interface PendingDecision {
   }>
 }
 
-export interface BallTrainResult {
-  attempts: number
-  bestScore: number
-  avgScore: number
-}
-
 export interface GameState {
   version: number
   screen: Screen
@@ -110,13 +125,14 @@ export interface GameState {
   season: SeasonState | null
   lastMatch: MatchResult | null
   pendingDecision: PendingDecision | null
+  pendingKeyMatch: PendingKeyMatch | null
   pendingTransfer: TransferOffer | null
   seasonSummary: string | null
   log: string[]
 }
 
-export const SAVE_KEY = 'gra-karier-save-v2'
-export const SAVE_VERSION = 2
+export const SAVE_KEY = 'gra-karier-save-v3'
+export const SAVE_VERSION = 3
 
 export const WEEKS_PER_SEASON = 12
 
@@ -138,6 +154,7 @@ export function createEmptyState(): GameState {
     season: null,
     lastMatch: null,
     pendingDecision: null,
+    pendingKeyMatch: null,
     pendingTransfer: null,
     seasonSummary: null,
     log: [],
