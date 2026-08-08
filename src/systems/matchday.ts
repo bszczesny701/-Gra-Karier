@@ -1,9 +1,11 @@
 import { getClub, getEffectiveStrength } from '../data/clubs'
 import type {
   LiveSeasonStats,
+  MatchAction,
   MatchDayResult,
   PendingGoalMoment,
   Player,
+  Position,
   ScorerEntry,
   SeasonReport,
   SeasonState,
@@ -152,10 +154,59 @@ function simulateNpcFixture(
 }
 
 function goalMomentChance(player: Player, matchMood: number): number {
-  const base = player.position === 'NP' ? 0.36 : player.position === 'POM' ? 0.28 : 0.2
+  const base =
+    player.position === 'NP'
+      ? 0.36
+      : player.position === 'POM'
+        ? 0.32
+        : player.position === 'ŚO'
+          ? 0.3
+          : 0.28
   const ovrBit = (player.overall - 48) / 220
   const moodBit = (matchMood - 50) / 280
   return Math.max(0.18, Math.min(0.42, base + ovrBit + moodBit))
+}
+
+export function momentForPosition(position: Position): {
+  action: MatchAction
+  reward: PendingGoalMoment['reward']
+  label: string
+  description: (oppName: string) => string
+} {
+  if (position === 'NP') {
+    return {
+      action: 'shoot',
+      reward: 'goal',
+      label: 'Okazja bramkowa!',
+      description: (opp) =>
+        `Kluczowa okazja przeciwko ${opp}. Strzał — wynik akcji decyduje o golu.`,
+    }
+  }
+  if (position === 'POM') {
+    return {
+      action: 'pass',
+      reward: 'assist',
+      label: 'Kluczowe podanie!',
+      description: (opp) =>
+        `Przełamanie linii przeciwko ${opp}. Dokładne podanie może dać asystę.`,
+    }
+  }
+  if (position === 'ŚO') {
+    return {
+      action: 'tackle',
+      reward: 'stop',
+      label: 'Walka o środek!',
+      description: (opp) =>
+        `${opp} prowadzi akcję przez środek. Odbierz piłkę — zatrzymaj atak.`,
+    }
+  }
+  return {
+    action: 'clear',
+    reward: 'stop',
+    label: 'Groźna wrzutka!',
+    description: (opp) =>
+      `Chaos w polu karnym vs ${opp}. Wybij piłkę w bezpieczną strefę.`,
+  }
 }
 
 function finishPlayerMatchCore(
@@ -496,6 +547,7 @@ export function playNextMatchday(
 
   if (starts && chance(goalMomentChance(player, season.matchMood))) {
     const opponentId = homeId === season.clubId ? awayId : homeId
+    const spec = momentForPosition(player.position)
     const pending: PendingGoalMoment = {
       fixtureIndex: next.index,
       homeId,
@@ -506,8 +558,10 @@ export function playNextMatchday(
       moodBefore,
       baseHomeGoals: baseHg,
       baseAwayGoals: baseAg,
-      label: 'Okazja bramkowa!',
-      description: `Kluczowa okazja przeciwko ${getClub(opponentId).name}. Tylko strzał — wynik akcji decyduje o golu.`,
+      label: spec.label,
+      description: spec.description(getClub(opponentId).name),
+      action: spec.action,
+      reward: spec.reward,
     }
     season.pendingGoalMoment = pending
     persistScorers(season, scorerMap)
@@ -543,19 +597,64 @@ export function resolveGoalMoment(
 
   const success = momentScore >= 65
   let matchGoals = 0
+  let matchAssists = pending.matchAssists
   let narrativeExtra = ''
   let hg = pending.baseHomeGoals
   let ag = pending.baseAwayGoals
+  const reward = pending.reward ?? 'goal'
+  const action = pending.action ?? 'shoot'
 
-  if (success) {
-    matchGoals = momentScore >= 88 ? 2 : 1
-    narrativeExtra = `Okazja wykorzystana (${Math.round(momentScore)}%).`
+  if (reward === 'goal') {
+    if (success) {
+      matchGoals = momentScore >= 88 ? 2 : 1
+      narrativeExtra = `Okazja bramkowa wykorzystana (${Math.round(momentScore)}%).`
+    } else {
+      narrativeExtra = `Okazja zmarnowana (${Math.round(momentScore)}%).`
+      if (chance(0.45)) {
+        if (pending.homeId === season.clubId) ag += 1
+        else hg += 1
+        narrativeExtra += ' Rywal domknął kontrę.'
+      }
+    }
+  } else if (reward === 'assist') {
+    if (success) {
+      matchAssists = Math.max(1, matchAssists)
+      if (momentScore >= 78) {
+        if (pending.homeId === season.clubId) hg = Math.max(hg, 1)
+        else ag = Math.max(ag, 1)
+      }
+      narrativeExtra = `Kluczowe podanie (${Math.round(momentScore)}%)${
+        momentScore >= 78 ? ' — gol z asysty!' : ' — asysta.'
+      }`
+    } else {
+      narrativeExtra = `Podanie nie wyszło (${Math.round(momentScore)}%).`
+      if (chance(0.35)) {
+        if (pending.homeId === season.clubId) ag += 1
+        else hg += 1
+        narrativeExtra += ' Strata i kontra rywala.'
+      }
+    }
   } else {
-    narrativeExtra = `Okazja zmarnowana (${Math.round(momentScore)}%).`
-    if (chance(0.45)) {
-      if (pending.homeId === season.clubId) ag += 1
-      else hg += 1
-      narrativeExtra += ' Rywal domknął kontrę.'
+    // stop — odbiór / wybicie
+    if (success) {
+      narrativeExtra =
+        action === 'tackle'
+          ? `Czysty odbiór (${Math.round(momentScore)}%) — atak przerwany.`
+          : `Pewne wybicie (${Math.round(momentScore)}%) — pole karne wyczyszczone.`
+      // Lekko utrudnij wynik rywalowi
+      if (pending.homeId === season.clubId && ag > 0 && chance(0.4)) ag -= 1
+      if (pending.awayId === season.clubId && hg > 0 && chance(0.4)) hg -= 1
+      season.matchMood = clamp(season.matchMood + 2, 28, 88)
+    } else {
+      narrativeExtra =
+        action === 'tackle'
+          ? `Odbiór nieudany (${Math.round(momentScore)}%).`
+          : `Wybicie nieudane (${Math.round(momentScore)}%).`
+      if (chance(0.55)) {
+        if (pending.homeId === season.clubId) ag += 1
+        else hg += 1
+        narrativeExtra += ' Rywal wykorzystał chaos.'
+      }
     }
   }
 
@@ -565,12 +664,18 @@ export function resolveGoalMoment(
     awayId: pending.awayId,
     starts: true,
     matchGoals,
-    matchAssists: pending.matchAssists,
+    matchAssists,
     moodBefore: pending.moodBefore,
     homeGoals: hg,
     awayGoals: ag,
     narrativeExtra,
   })
+
+  // Defensywny sukces: lekki boost oceny w narracji (rating już policzony)
+  if (reward === 'stop' && success && match.rating != null) {
+    match.rating = Math.min(9.6, match.rating + 0.35)
+    season.liveStats.ratingSum += 0.35
+  }
 
   season.pendingGoalMoment = null
   season.fixtureIndex = pending.fixtureIndex + 1

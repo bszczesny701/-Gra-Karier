@@ -21,7 +21,7 @@ import {
 } from './systems/career'
 import { appearanceChance, describeRival } from './systems/seasonSim'
 import { nextPlayerFixture } from './systems/matchday'
-import { mountMatchMoment } from './systems/matchMoment'
+import { actionLabel, mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type { GameState, MatchAction, Position, PreferredFoot } from './state/types'
 import { createEmptyState, footLabel } from './state/types'
@@ -406,29 +406,17 @@ export class App {
     const home = getClub(k.homeId)
     const away = getClub(k.awayId)
     if (goalMoment) {
-      if (!this.selectedAction) {
-        return this.shell(
-          `
-          <section class="panel">
-            <p class="eyebrow">${goalMoment.label}</p>
-            <h2>${home.name} vs ${away.name}</h2>
-            <p>${goalMoment.description}</p>
-            <p class="muted">Przeciwnik: ${getClub(goalMoment.opponentId).name}. Tylko strzał decyduje o golu.</p>
-            <div class="actions">
-              <button class="btn primary" id="btn-shoot">Strzał na bramkę</button>
-            </div>
-          </section>`,
-          'Okazja',
-        )
-      }
+      const action = goalMoment.action ?? 'shoot'
       return this.shell(
         `
         <section class="panel">
           <p class="eyebrow">${goalMoment.label}</p>
-          <h2>Strzał</h2>
+          <h2>${home.name} vs ${away.name}</h2>
+          <p>${goalMoment.description}</p>
+          <p class="muted">${actionLabel(action)} — przeciągnij i puść.</p>
           <div class="ball-wrap"><canvas id="moment-canvas"></canvas></div>
         </section>`,
-        'Akcja',
+        'Okazja',
       )
     }
     if (!this.selectedAction) {
@@ -452,7 +440,7 @@ export class App {
       `
       <section class="panel">
         <p class="eyebrow">${k.label}</p>
-        <h2>${this.selectedAction === 'shoot' ? 'Strzał' : 'Podanie'}</h2>
+        <h2>${actionLabel(this.selectedAction)}</h2>
         <div class="ball-wrap"><canvas id="moment-canvas"></canvas></div>
       </section>`,
       'Akcja',
@@ -460,22 +448,22 @@ export class App {
   }
 
   private bindKeyMatch(): void {
-    const goalMoment = Boolean(this.state.season?.pendingGoalMoment)
-    if (!this.selectedAction) {
+    const goalMoment = this.state.season?.pendingGoalMoment
+    if (!goalMoment && !this.selectedAction) {
       this.root.querySelector('#btn-shoot')?.addEventListener('click', () => {
         this.selectedAction = 'shoot'
         this.render()
       })
-      if (!goalMoment) {
-        this.root.querySelector('#btn-pass')?.addEventListener('click', () => {
-          this.selectedAction = 'pass'
-          this.render()
-        })
-      }
+      this.root.querySelector('#btn-pass')?.addEventListener('click', () => {
+        this.selectedAction = 'pass'
+        this.render()
+      })
       return
     }
-    const action = this.selectedAction
+    const action = goalMoment?.action ?? this.selectedAction
+    if (!action) return
     const canvas = this.root.querySelector('#moment-canvas') as HTMLCanvasElement
+    if (!canvas) return
     const opp = getClub(this.state.pendingKeyMatch!.opponentId)
     const difficulty = Math.min(1, Math.max(0, (opp.strength - 38) / 42))
     this.cleanupMoment = mountMatchMoment(

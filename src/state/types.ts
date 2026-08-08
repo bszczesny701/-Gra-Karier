@@ -1,7 +1,7 @@
 export type Position = 'NP' | 'POM' | 'ŚO' | 'OB'
 export type PreferredFoot = 'left' | 'right' | 'both'
 export type KeyMatchReason = 'promotion' | 'title' | 'relegation' | 'cup' | 'finale'
-export type MatchAction = 'shoot' | 'pass'
+export type MatchAction = 'shoot' | 'pass' | 'tackle' | 'clear'
 export type FormLabel = 'świetna' | 'dobra' | 'przyzwoita' | 'słaba' | 'fatalna'
 export type CupStage =
   | 'out'
@@ -61,6 +61,10 @@ export interface PendingGoalMoment {
   baseAwayGoals: number
   label: string
   description: string
+  /** Akcja minigierki zależna od pozycji */
+  action: MatchAction
+  /** Co daje sukces: gol / asysta / zatrzymanie akcji rywala */
+  reward: 'goal' | 'assist' | 'stop'
 }
 
 export interface LiveSeasonStats {

@@ -4,6 +4,7 @@ import type {
   ClubStanding,
   CupStage,
   FormLabel,
+  MatchAction,
   PendingKeyMatch,
   Player,
   PositionalRival,
@@ -1196,7 +1197,7 @@ export function applyKeyMatchToReport(
   report: SeasonReport,
   player: Player,
   momentScore: number,
-  action: 'shoot' | 'pass',
+  action: MatchAction,
   match: PendingKeyMatch,
 ): void {
   const success = momentScore >= 65
@@ -1219,6 +1220,9 @@ export function applyKeyMatchToReport(
       report.playerScorerRank = report.scorers.findIndex((s) => s.isPlayer) + 1
     }
     if (action === 'pass' && momentScore >= 70) report.assists += 1
+    if ((action === 'tackle' || action === 'clear') && momentScore >= 70) {
+      player.morale = clamp(player.morale + 2, 1, 100)
+    }
 
     if (match.stake === 'leaguePoints') {
       const row = report.standings.find((s) => s.clubId === report.clubId)
