@@ -36,8 +36,8 @@ export function createPlayer(options: CreateCareerOptions): Player {
     preferredFoot: options.preferredFoot,
     overall: calcOverall(attrs, options.position),
     attrs,
-    morale: 70,
-    form: 65,
+    morale: 62,
+    form: 52,
     reputation: reputationFromStart(overall, league.tier),
     money: moneyFromStart(overall, club.wage),
   }
@@ -208,35 +208,52 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
   const currentLeague = getLeague(report.leagueId)
   const offers: TransferOffer[] = []
   const used = new Set<string>([report.clubId])
+  const form = report.formLabel
 
-  const addFromLeague = (leagueId: string, count: number, msg: string) => {
+  const addFromLeague = (
+    leagueId: string,
+    count: number,
+    msg: string,
+    preferWeak = false,
+  ) => {
     const league = getLeague(leagueId)
-    const candidates = [...league.clubIds]
-      .filter((id) => !used.has(id))
-      .sort(() => Math.random() - 0.5)
+    let candidates = [...league.clubIds].filter((id) => !used.has(id))
+    if (preferWeak) {
+      candidates.sort((a, b) => CLUBS[a]!.strength - CLUBS[b]!.strength)
+    } else {
+      candidates.sort(() => Math.random() - 0.5)
+    }
+
     for (const clubId of candidates.slice(0, count)) {
       used.add(clubId)
       const club = getClub(clubId)
-      const wage = Math.round(club.wage * (1 + player.reputation / 180 + report.goals / 40))
+      const formPenalty =
+        form === 'fatalna' ? 0.55 : form === 'słaba' ? 0.75 : form === 'świetna' ? 1.15 : 1
+      const wage = Math.round(
+        club.wage * (0.85 + player.reputation / 220 + report.goals / 50) * formPenalty,
+      )
       offers.push({
         clubId,
-        wage,
-        signingBonus: Math.round(wage * 2.5 + player.overall * 30),
+        wage: Math.max(400, wage),
+        signingBonus: Math.round(wage * (form === 'fatalna' ? 1.2 : 2.2) + player.overall * 20),
         message: msg,
         leagueId,
       })
     }
   }
 
-  // minimum 2 oferty
-  if (report.place <= 3 || report.goals >= 10 || report.cupStage === 'winner') {
+  if (form === 'fatalna' || form === 'słaba') {
+    const lower = leagueByTier(currentLeague.tier + 1)
+    if (lower) addFromLeague(lower.id, 2, 'Słabszy klub daje szansę na odbudowę.', true)
+    addFromLeague(currentLeague.id, 2, 'Oferta z dołu tabeli / mniejszy projekt.', true)
+  } else if (report.place <= 3 || report.goals >= 10 || report.cupStage === 'winner') {
     const better = leagueByTier(currentLeague.tier - 1)
     if (better) addFromLeague(better.id, 1, 'Awans sportowy — lepsza liga interesuje się Tobą.')
     addFromLeague(currentLeague.id, 2, 'Klub z Twojej ligi chce Cię wzmocnić.')
-  } else if (report.place >= getLeague(report.leagueId).clubIds.length - 2) {
+  } else if (report.place >= currentLeague.clubIds.length - 2) {
     const lower = leagueByTier(currentLeague.tier + 1)
     addFromLeague(currentLeague.id, 1, 'Oferta z ligi — nowy start.')
-    if (lower) addFromLeague(lower.id, 1, 'Bezpieczny projekt w niższej lidze.')
+    if (lower) addFromLeague(lower.id, 1, 'Bezpieczny projekt w niższej lidze.', true)
     addFromLeague(currentLeague.id, 1, 'Druga oferta z ligi.')
   } else {
     addFromLeague(currentLeague.id, 2, 'Solidny sezon — kluby składają oferty.')
@@ -247,10 +264,16 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
   }
 
   while (offers.length < 2) {
-    const anyLeague = LEAGUES_SAFE()
-    for (const l of anyLeague) {
+    for (const l of LEAGUES_SAFE()) {
       if (offers.length >= 2) break
-      addFromLeague(l.id, 1, 'Dodatkowa oferta rynkowa.')
+      addFromLeague(
+        l.id,
+        1,
+        form === 'fatalna' || form === 'słaba'
+          ? 'Jedyna realna oferta po słabym sezonie.'
+          : 'Dodatkowa oferta rynkowa.',
+        form === 'fatalna' || form === 'słaba',
+      )
     }
     break
   }
@@ -270,10 +293,20 @@ export function openTransferChoice(state: GameState): void {
 export function stayAtClub(state: GameState): void {
   const report = state.seasonReport!
   const player = state.player!
+
+  if (!report.contractRenewed) {
+    pushLog(
+      state,
+      `${getClub(report.clubId).name} nie przedłuża kontraktu. Musisz szukać nowego klubu.`,
+    )
+    player.age += 1
+    openTransferChoice(state)
+    return
+  }
+
   player.age += 1
   player.money += getClub(report.clubId).wage * 3
   pushLog(state, `Zostajesz w ${getClub(report.clubId).name} na kolejny sezon.`)
-  // Zawsze ten sam klub — awans/spadek przenosi klub, nie zawodnika do obcego zespołu
   beginNextSeason(state, report.clubId, report.leagueId, true)
 }
 

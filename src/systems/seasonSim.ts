@@ -329,7 +329,38 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   let ratingSum = 0
   let formSum = 0
   let formSamples = 0
-  let workingForm = player.form
+
+  // Losowy „sezon formy” — rzadko świetny, często przeciętny/słaby
+  const seasonRoll = Math.random()
+  let formBias = 0
+  let volatility = 14
+  if (seasonRoll < 0.15) {
+    // kryzys
+    formBias = -28
+    volatility = 20
+  } else if (seasonRoll < 0.38) {
+    // chłodny
+    formBias = -14
+    volatility = 17
+  } else if (seasonRoll < 0.72) {
+    // normalny
+    formBias = -2
+    volatility = 15
+  } else if (seasonRoll < 0.9) {
+    // dobry
+    formBias = 6
+    volatility = 12
+  } else {
+    // gorący — rzadki
+    formBias = 12
+    volatility = 10
+  }
+
+  let workingForm = clamp(
+    player.form + formBias + (Math.random() * 24 - 12),
+    8,
+    92,
+  )
 
   for (const fixture of allFixtures) {
     const { homeId, awayId } = fixture
@@ -341,7 +372,14 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     let matchAssists = 0
 
     if (involvesPlayer) {
-      workingForm = clamp(workingForm + (Math.random() * 10 - 5), 20, 95)
+      // duży losowy szok formy między meczami
+      const shock = (Math.random() * 2 - 1) * volatility
+      workingForm = clamp(workingForm + shock * 0.55 + formBias * 0.03, 5, 96)
+
+      // rzadki kryzys / kontuzja mentalna w trakcie sezonu
+      if (chance(0.06)) workingForm = clamp(workingForm - (8 + Math.random() * 18), 5, 96)
+      if (chance(0.04)) workingForm = clamp(workingForm + (5 + Math.random() * 10), 5, 96)
+
       formSum += workingForm
       formSamples++
       const tempPlayer = { ...player, form: workingForm }
@@ -352,38 +390,37 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
         boost = (player.overall - 50) * 0.1 + (workingForm - 50) * 0.08
         const goalChance =
           (player.position === 'NP' ? 0.22 : player.position === 'POM' ? 0.1 : 0.04) *
-          (workingForm / 65) *
+          (workingForm / 75) *
           (player.attrs.shooting / 75)
-        if (chance(Math.min(0.48, goalChance))) {
+        if (chance(Math.min(0.45, goalChance))) {
           matchGoals = chance(0.12) ? 2 : 1
           goals += matchGoals
         }
         const assistChance =
           (player.position === 'POM' || player.position === 'NP' ? 0.16 : 0.07) *
           (player.attrs.passing / 80) *
-          (workingForm / 70)
-        if (chance(Math.min(0.4, assistChance))) {
+          (workingForm / 75)
+        if (chance(Math.min(0.38, assistChance))) {
           matchAssists = 1
           assists++
         }
         const rating = clamp(
-          5.2 +
-            workingForm / 55 +
-            (player.overall - 45) / 40 +
+          4.8 +
+            workingForm / 60 +
+            (player.overall - 45) / 42 +
             matchGoals * 0.85 +
             matchAssists * 0.45 +
-            (Math.random() * 1.2 - 0.4),
-          3,
+            (Math.random() * 1.6 - 0.8),
+          2.8,
           9.7,
         )
         ratingSum += rating
-        workingForm = clamp(
-          workingForm + (rating >= 7 ? 2 : rating < 5.5 ? -3 : 0),
-          20,
-          95,
-        )
+        if (rating >= 7.5) workingForm = clamp(workingForm + Math.random() * 2.5, 5, 96)
+        else if (rating < 5.2) workingForm = clamp(workingForm - (2 + Math.random() * 5), 5, 96)
+        else workingForm = clamp(workingForm + (Math.random() * 5 - 2.5), 5, 96)
       } else {
-        workingForm = clamp(workingForm + 1, 20, 95)
+        // ławka / pominięcie — zwykle zjada formę
+        workingForm = clamp(workingForm - (1 + Math.random() * 4), 5, 96)
       }
     }
 
@@ -458,21 +495,34 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
   }
 
   const avgForm = formSamples ? formSum / formSamples : player.form
+  const formLabel = formLabelFromAvg(avgForm)
 
   let ovrTarget = 0
-  if (leagueApps >= fixturesForPlayer * 0.55 && avgForm >= 60) ovrTarget += 1
+  if (leagueApps >= fixturesForPlayer * 0.55 && avgForm >= 62) ovrTarget += 1
   if (leagueApps >= fixturesForPlayer * 0.7 && leagueAvgRating >= 7) ovrTarget += 1
   if (goals >= 8) ovrTarget += 1
   if (cup.stage === 'winner' || cup.stage === 'final') ovrTarget += 1
+  if (formLabel === 'słaba') ovrTarget -= 1
+  if (formLabel === 'fatalna') ovrTarget -= 2
   if (avgForm < 40 || leagueApps < fixturesForPlayer * 0.25) ovrTarget -= 1
-  ovrTarget = clamp(ovrTarget, -1, 3)
+  if (leagueAvgRating > 0 && leagueAvgRating < 5.4) ovrTarget -= 1
+  ovrTarget = clamp(ovrTarget, -3, 3)
 
   applyOverallChange(player, ovrTarget)
 
   player.form = clamp(Math.round(avgForm), 1, 100)
   player.overall = calcOverall(player.attrs, player.position)
   player.morale = clamp(
-    player.morale + (leagueAvgRating >= 7 ? 5 : avgForm < 40 ? -5 : 2),
+    player.morale +
+      (formLabel === 'świetna'
+        ? 4
+        : formLabel === 'fatalna'
+          ? -8
+          : formLabel === 'słaba'
+            ? -4
+            : leagueAvgRating >= 7
+              ? 3
+              : 0),
     1,
     100,
   )
@@ -480,7 +530,8 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     player.reputation +
       Math.floor(goals / 3) +
       (cup.stage === 'winner' ? 5 : cup.stage === 'final' ? 3 : 0) +
-      (leagueApps > fixturesForPlayer * 0.6 ? 2 : 0),
+      (leagueApps > fixturesForPlayer * 0.6 ? 2 : 0) +
+      (formLabel === 'fatalna' ? -3 : formLabel === 'słaba' ? -1 : 0),
     0,
     100,
   )
@@ -511,15 +562,31 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
         : false
   const title = league.tier === 1 && place === 1
 
+  // Przedłużenie kontraktu — mała baza, mocno rośnie przy słabej formie
+  let refuseChance = 0.035
+  if (formLabel === 'fatalna') refuseChance += 0.22
+  else if (formLabel === 'słaba') refuseChance += 0.1
+  if (leagueApps < fixturesForPlayer * 0.28) refuseChance += 0.08
+  if (leagueAvgRating > 0 && leagueAvgRating < 5.3) refuseChance += 0.08
+  if (place >= clubCount - 1) refuseChance += 0.04
+  if (formLabel === 'świetna' || goals >= 10 || cup.stage === 'winner') refuseChance *= 0.25
+  if (formLabel === 'dobra' && leagueAvgRating >= 6.8) refuseChance *= 0.5
+  const contractRenewed = Math.random() >= refuseChance
+  const contractNote = contractRenewed
+    ? 'Klub chce przedłużyć kontrakt.'
+    : formLabel === 'fatalna' || formLabel === 'słaba'
+      ? 'Klub nie przedłuża kontraktu — słaba forma i brak zaufania.'
+      : 'Klub nie przedłuża kontraktu — szuka innego kierunku.'
+
   let narrative = `${getClub(season.clubId).name} kończy sezon na ${place}. miejscu (${myRow.points} pkt, ${myRow.played} meczów). `
-  narrative += `Zagrałeś ${leagueApps}/${fixturesForPlayer} meczów ligowych (+ puchar). Forma: ${formLabelFromAvg(avgForm)}. `
+  narrative += `Zagrałeś ${leagueApps}/${fixturesForPlayer} meczów ligowych (+ puchar). Forma: ${formLabel}. `
   if (finalDelta > 0) narrative += `Overall ↑ +${finalDelta} (${overallBefore} → ${finalOverall}). `
   else if (finalDelta < 0) narrative += `Overall ↓ ${finalDelta} (${overallBefore} → ${finalOverall}). `
   else narrative += `Overall bez zmian (${finalOverall}). `
   if (promotion) narrative += 'Awans klubu! '
   if (relegation) narrative += 'Spadek klubu. '
   if (title) narrative += 'Mistrzostwo Polski! '
-  narrative += cupStageLabel(cup.stage) + '.'
+  narrative += cupStageLabel(cup.stage) + '. ' + contractNote
 
   return {
     year: season.year,
@@ -534,7 +601,7 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     assists,
     avgRating: leagueApps ? Math.round(leagueAvgRating * 10) / 10 : 0,
     avgForm: Math.round(avgForm),
-    formLabel: formLabelFromAvg(avgForm),
+    formLabel,
     overallBefore,
     overallAfter: finalOverall,
     overallDelta: finalDelta,
@@ -549,6 +616,8 @@ export function simulateFullSeason(player: Player, season: SeasonState): SeasonR
     promotion,
     relegation,
     title,
+    contractRenewed,
+    contractNote,
   }
 }
 

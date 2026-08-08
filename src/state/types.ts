@@ -142,6 +142,9 @@ export interface SeasonReport {
   promotion: boolean
   relegation: boolean
   title: boolean
+  /** Czy klub chce przedłużyć kontrakt */
+  contractRenewed: boolean
+  contractNote: string
 }
 
 export interface GameState {
@@ -158,8 +161,8 @@ export interface GameState {
   log: string[]
 }
 
-export const SAVE_KEY = 'gra-karier-save-v5'
-export const SAVE_VERSION = 5
+export const SAVE_KEY = 'gra-karier-save-v6'
+export const SAVE_VERSION = 6
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -172,10 +175,10 @@ export function footLabel(foot: PreferredFoot): string {
 }
 
 export function formLabelFromAvg(avg: number): FormLabel {
-  if (avg >= 80) return 'świetna'
-  if (avg >= 65) return 'dobra'
-  if (avg >= 50) return 'przyzwoita'
-  if (avg >= 35) return 'słaba'
+  if (avg >= 78) return 'świetna'
+  if (avg >= 62) return 'dobra'
+  if (avg >= 48) return 'przyzwoita'
+  if (avg >= 32) return 'słaba'
   return 'fatalna'
 }
 

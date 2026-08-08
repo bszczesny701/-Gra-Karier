@@ -423,7 +423,7 @@ export class App {
             </tr>
             <tr>
               <td>Forma</td>
-              <td><strong>${r.formLabel}</strong> <span class="muted">(${r.avgForm})</span></td>
+              <td class="${r.formLabel === 'fatalna' || r.formLabel === 'słaba' ? 'down' : r.formLabel === 'świetna' ? 'up' : ''}"><strong>${r.formLabel}</strong> <span class="muted">(${r.avgForm})</span></td>
             </tr>
             <tr>
               <td>Występy</td>
@@ -448,6 +448,10 @@ export class App {
             <tr>
               <td>Los klubu</td>
               <td><strong>${fate}</strong></td>
+            </tr>
+            <tr>
+              <td>Kontrakt</td>
+              <td class="${r.contractRenewed ? 'up' : 'down'}"><strong>${r.contractRenewed ? 'Przedłużenie OK' : 'Bez przedłużenia'}</strong><br/><span class="muted">${r.contractNote}</span></td>
             </tr>
           </tbody>
         </table>
@@ -475,11 +479,18 @@ export class App {
 
       <section class="panel">
         <h3>Co dalej?</h3>
-        <p class="muted">„Zostań” = ten sam klub${r.promotion ? ' (awansuje z Tobą)' : r.relegation ? ' (spada z Tobą)' : ''}.</p>
+        ${
+          r.contractRenewed
+            ? `<p class="muted">„Zostań” = ten sam klub${r.promotion ? ' (awansuje z Tobą)' : r.relegation ? ' (spada z Tobą)' : ''}.</p>
         <div class="actions">
           <button class="btn primary" id="btn-stay">Zostań w ${club.name}</button>
           <button class="btn ghost" id="btn-leave">Szukaj transferu</button>
-        </div>
+        </div>`
+            : `<p class="muted">Klub nie przedłuża kontraktu — musisz wybrać ofertę (przy słabej formie często słabsze kluby).</p>
+        <div class="actions">
+          <button class="btn primary" id="btn-leave">Zobacz oferty</button>
+        </div>`
+        }
       </section>
     `,
       'Sezon',
@@ -497,6 +508,7 @@ export class App {
 
   private transferChoiceHtml(): string {
     const offers = this.state.transferOffers
+    const forced = this.state.seasonReport && !this.state.seasonReport.contractRenewed
     const cards = offers
       .map((o) => {
         const c = getClub(o.clubId)
@@ -513,9 +525,9 @@ export class App {
       `
       <section class="panel">
         <h2>Oferty transferowe</h2>
-        <p class="muted">Wybierz klub albo wróć i zostań.</p>
+        <p class="muted">${forced ? 'Kontrakt nieprzedłużony — wybierz nowy klub.' : 'Wybierz klub albo wróć i zostań.'}</p>
         <div class="choices">${cards}</div>
-        <div class="actions"><button class="btn ghost" id="btn-back-stay">Zostań jednak</button></div>
+        ${forced ? '' : `<div class="actions"><button class="btn ghost" id="btn-back-stay">Zostań jednak</button></div>`}
       </section>`,
       'Transfer',
     )
