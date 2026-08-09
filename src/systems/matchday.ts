@@ -322,34 +322,32 @@ function finishPlayerMatchCore(
         matchGoals,
       )
     }
-    // Forma dnia = jakość meczu; gol/asysta tylko lekko pomagają (bywa słaby mecz z golem)
+    // Forma dnia ciągła → noty typu 6.1 / 6.4 / 6.8, nie same „6” i „7”
     const resultSwing =
       (homeId === season.clubId && hg > ag) || (awayId === season.clubId && ag > hg)
-        ? 0.2 + Math.random() * 0.25
+        ? 0.15 + Math.random() * 0.35
         : hg === ag
-          ? Math.random() * 0.12
-          : -(0.25 + Math.random() * 0.35)
+          ? Math.random() * 0.18 - 0.04
+          : -(0.2 + Math.random() * 0.4)
     const formRoll = Math.random()
     const dayForm =
       formRoll < 0.035
-        ? 1.9 + Math.random() * 1.15 // ~3.5%: elita → możliwa 9 bez G/A
+        ? 1.85 + Math.random() * 1.25
         : formRoll < 0.14
-          ? 0.85 + Math.random() * 0.55 // ~10%: dobry mecz → często ~7.5–8.2
-          : Math.random() * 1.85 - 0.85 // reszta: zwykle 5.8–7.2
-    // „Tani” gol vs kluczowy — statystyki nie gwarantują świetnej noty
+          ? 0.7 + Math.random() * 0.85
+          : -0.95 + Math.random() * 2.05
     const goalBump = matchGoals * (0.12 + Math.random() * 0.32)
     const assistBump = matchAssists * (0.08 + Math.random() * 0.22)
-    rating = clamp(
-      5.35 +
-        season.matchMood / 95 +
-        (player.overall - 45) / 60 +
-        goalBump +
-        assistBump +
-        resultSwing +
-        dayForm,
-      3.6,
-      9.8,
-    )
+    const raw =
+      5.25 +
+      season.matchMood / 95 +
+      (player.overall - 45) / 60 +
+      goalBump +
+      assistBump +
+      resultSwing +
+      dayForm +
+      (Math.random() * 0.18 - 0.09)
+    rating = Math.round(clamp(raw, 3.6, 9.8) * 10) / 10
     live.ratingSum += rating
     if (rating >= 7.2) season.matchMood = clamp(season.matchMood + 2 + Math.random() * 2, 28, 88)
     else if (rating < 5.2) season.matchMood = clamp(season.matchMood - (1 + Math.random() * 2), 28, 88)
@@ -398,7 +396,7 @@ function finishPlayerMatchCore(
   const draw = hg === ag
   let narrative = starts
     ? `Zagrałeś${matchGoals ? ` · ${matchGoals} G` : ''}${matchAssists ? ` · ${matchAssists} A` : ''}${
-        rating != null ? ` · ocena ${Math.round(rating * 10) / 10}` : ''
+        rating != null ? ` · ocena ${rating.toFixed(1)}` : ''
       }.`
     : player.injury
       ? `Nie zagrałeś (kontuzja).`
@@ -750,8 +748,9 @@ export function resolveGoalMoment(
 
   // Defensywny sukces: lekki boost oceny w narracji (rating już policzony)
   if (reward === 'stop' && success && match.rating != null) {
-    match.rating = Math.min(9.6, match.rating + 0.35)
-    season.liveStats.ratingSum += 0.35
+    const bump = Math.round((0.2 + Math.random() * 0.3) * 10) / 10
+    match.rating = Math.min(9.8, Math.round((match.rating + bump) * 10) / 10)
+    season.liveStats.ratingSum += bump
   }
 
   season.pendingGoalMoment = null

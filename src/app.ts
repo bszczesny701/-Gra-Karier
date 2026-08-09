@@ -505,7 +505,7 @@ export class App {
           <tbody>
             <tr><td>Występ</td><td><strong>${m.played ? 'Tak' : 'Nie'}</strong></td></tr>
             <tr><td>Gole / asysty</td><td><strong>${m.playerGoals}</strong> G · <strong>${m.playerAssists}</strong> A</td></tr>
-            <tr><td>Ocena</td><td><strong>${m.rating != null ? Math.round(m.rating * 10) / 10 : '—'}</strong></td></tr>
+            <tr><td>Ocena</td><td><strong>${m.rating != null ? m.rating.toFixed(1) : '—'}</strong></td></tr>
             <tr><td>Forma meczowa</td><td><strong>${Math.round(m.moodAfter)}</strong> (${moodArrow})</td></tr>
           </tbody>
         </table>
@@ -588,7 +588,7 @@ export class App {
             </tr>
             <tr>
               <td>Śr. ocena</td>
-              <td><strong>${r.avgRating || '—'}</strong></td>
+              <td><strong>${r.avgRating ? r.avgRating.toFixed(1) : '—'}</strong></td>
             </tr>
             <tr>
               <td>Puchar Polski</td>
@@ -777,7 +777,7 @@ export class App {
           <tbody>
             <tr><td>Występy</td><td><strong>${w.appearances}</strong></td></tr>
             <tr><td>Gole / asysty</td><td><strong>${w.goals}</strong> G · <strong>${w.assists}</strong> A</td></tr>
-            <tr><td>Śr. ocena</td><td><strong>${w.avgRating || '—'}</strong></td></tr>
+            <tr><td>Śr. ocena</td><td><strong>${w.avgRating ? Number(w.avgRating).toFixed(1) : '—'}</strong></td></tr>
             <tr><td>Szansa gry</td><td><strong>≈ ${playPct}%</strong></td></tr>
             <tr><td>Rywal</td><td>${w.rivalNote}</td></tr>
           </tbody>
