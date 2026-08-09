@@ -115,11 +115,11 @@ export function makeRival(
 }
 
 export function describeRival(player: Player, rival: PositionalRival): string {
-  const playerEdge = player.overall + (player.morale - 50) / 10
+  const playerEdge = player.overall + (player.morale - 50) / 10 + (player.form - 50) / 8
   const rivalEdge = rival.overall + (rival.form - 50) / 5
   const diff = playerEdge - rivalEdge
   if (diff > 3) {
-    return `Rywal ${rival.name} (OVR ${rival.overall}) — wygrywasz walkę o skład.`
+    return `Rywal ${rival.name} (OVR ${rival.overall}) — wygrywasz walkę o skład (wyższa szansa gry).`
   }
   if (diff < -3) {
     return `Rywal ${rival.name} (OVR ${rival.overall}) — mocniejszy od Ciebie o miejsce w „11”.`
@@ -235,15 +235,21 @@ export function appearanceChance(
 
   playChance += (player.reputation - 20) / 700
   playChance += (player.morale - 55) / 800
+  // Dobra forma = więcej minut; słaba = ławka
+  playChance += (player.form - 50) / 220
   if (player.age >= 34) playChance -= 0.08
   else if (player.age >= 30) playChance -= 0.04
   else if (player.age <= 18) playChance += 0.02
 
   if (rival) {
     const rivalEdge = rival.overall + (rival.form - 50) / 5
-    const playerEdge = player.overall + (player.morale - 50) / 10
-    if (rivalEdge > playerEdge) {
-      const edgeGap = rivalEdge - playerEdge
+    const playerEdge = player.overall + (player.morale - 50) / 10 + (player.form - 50) / 8
+    const diff = playerEdge - rivalEdge
+    if (diff > 1.2) {
+      // Wygrywasz z rywalem na pozycji → wyraźnie więcej gry
+      playChance += Math.min(0.16, 0.045 + diff * 0.014)
+    } else if (diff < -1.2) {
+      const edgeGap = -diff
       playChance -= Math.min(0.2, Math.max(0.05, 0.05 + edgeGap * 0.014))
     }
   }
@@ -292,7 +298,7 @@ export function appearanceChance(
   return Math.max(0.03, Math.min(0.88, playChance))
 }
 
-/** Szansa w trakcie sezonu — chwilowy humor meczowy + rywal. */
+/** Szansa w trakcie sezonu — forma meczowa mocniej waży + rywal. */
 export function matchAppearanceChance(
   player: Player,
   matchMood: number,
@@ -302,8 +308,28 @@ export function matchAppearanceChance(
   rivalPressure = 0,
 ): number {
   const base = appearanceChance(player, clubId, strengthMods, rival, rivalPressure)
-  const moodBit = (matchMood - 50) / 320
-  return Math.max(0.03, Math.min(0.8, base + moodBit))
+  // Forma meczowa: 40 → −0.07, 70 → +0.14
+  const moodBit = (matchMood - 50) / 140
+  return Math.max(0.03, Math.min(0.88, base + moodBit))
+}
+
+/** Po meczu: dobra nota osłabia rywala; ławka / słaba forma go wzmacnia. */
+export function updateRivalAfterMatch(
+  rival: PositionalRival,
+  player: Player,
+  starts: boolean,
+  rating: number | null,
+  matchMood: number,
+): void {
+  if (starts && rating != null) {
+    if (rating >= 7.0) rival.form = clamp(rival.form - (2 + rngInt(2)), 26, 82)
+    else if (rating >= 6.5) rival.form = clamp(rival.form - 1, 26, 82)
+    else if (rating < 5.4) rival.form = clamp(rival.form + (1 + rngInt(2)), 26, 84)
+  } else if (!starts) {
+    rival.form = clamp(rival.form + (chance(0.55) ? 1 + rngInt(2) : 0), 26, 84)
+  }
+  // Forma zawodnika dogania formę meczową — wpływa na % gry
+  player.form = clamp(Math.round(player.form * 0.55 + matchMood * 0.45), 22, 88)
 }
 
 /**
@@ -531,6 +557,7 @@ function runFixtureBatch(
           else if (rating < 5.2) {
             state.matchMood = clamp(state.matchMood - (1 + Math.random() * 2), 28, 88)
           }
+          if (rival) updateRivalAfterMatch(rival, player, true, rating, state.matchMood)
 
           state.appsThisSeason++
           if (state.appsThisSeason === state.injuryAtApp && !player.injury) {
@@ -565,6 +592,7 @@ function runFixtureBatch(
           }
         } else {
           state.matchMood = clamp(state.matchMood * 0.9 + 48 * 0.1, 28, 88)
+          if (rival) updateRivalAfterMatch(rival, player, false, null, state.matchMood)
         }
       }
     }

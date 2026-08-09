@@ -26,6 +26,7 @@ import {
   appearanceChance,
   describeRival,
   makeRival,
+  matchAppearanceChance,
 } from './seasonSim'
 import {
   buildWinterSnapshotFromLive,
@@ -157,14 +158,20 @@ export function estimatePlayChance(
   strengthMods: Record<string, number> = {},
   season?: SeasonState | null,
 ): number {
+  if (season) {
+    return Math.round(
+      matchAppearanceChance(
+        player,
+        season.matchMood,
+        clubId,
+        strengthMods,
+        season.rival,
+        season.rivalPressure ?? 0,
+      ) * 100,
+    )
+  }
   return Math.round(
-    appearanceChance(
-      player,
-      clubId,
-      strengthMods,
-      season?.rival,
-      season?.rivalPressure ?? 0,
-    ) * 100,
+    appearanceChance(player, clubId, strengthMods, null, 0) * 100,
   )
 }
 

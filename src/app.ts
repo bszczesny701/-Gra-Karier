@@ -19,7 +19,7 @@ import {
   sortedStandings,
   stayAtClub,
 } from './systems/career'
-import { appearanceChance, describeRival } from './systems/seasonSim'
+import { describeRival, matchAppearanceChance } from './systems/seasonSim'
 import { nextPlayerFixture } from './systems/matchday'
 import { actionLabel, mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
@@ -262,7 +262,7 @@ export class App {
     const league = getLeague(s.leagueId)
     const mods = this.state.clubStrengthMods ?? {}
     const chance = Math.round(
-      appearanceChance(p, s.clubId, mods, s.rival, s.rivalPressure ?? 0) * 100,
+      matchAppearanceChance(p, s.matchMood, s.clubId, mods, s.rival, s.rivalPressure ?? 0) * 100,
     )
     const clubPower = getEffectiveStrength(s.clubId, mods)
     const midOffers = hasMidSeasonOffers(this.state)
@@ -317,9 +317,9 @@ export class App {
             <li><strong>Morale</strong> — nastrój. Wysokie = łatwiej o grę; niskie po kłótniach / ławce.</li>
             <li><strong>Rep.</strong> — reputacja. Pomaga w ofertach i mediach.</li>
             <li><strong>Tempo / Strzał / Podanie / Obrona / Kondycja</strong> — atrybuty budujące OVR wg pozycji.</li>
-            <li><strong>Forma meczowa</strong> — krótki humor pod dany mecz (nie mylić z OVR).</li>
-            <li><strong>Rywal</strong> — konkurent o miejsce w „11”; decyzje mogą go wzmocnić lub osłabić.</li>
-            <li><strong>Gra ≈ %</strong> — szansa, że trener Cię wystawi w następnym meczu.</li>
+            <li><strong>Forma meczowa</strong> — krótki humor pod mecz; dobra forma wyraźnie podnosi szansę gry.</li>
+            <li><strong>Rywal</strong> — konkurent o „11”; gdy wygrywasz z nim walkę (+ forma), dostajesz więcej minut.</li>
+            <li><strong>Gra ≈ %</strong> — szansa wystawienia w następnym meczu (forma + rywal + OVR).</li>
           </ul>
         </details>
       </section>

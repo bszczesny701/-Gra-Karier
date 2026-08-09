@@ -26,6 +26,7 @@ import {
   scoreline,
   scorerMapFromEntries,
   tweakRivalForm,
+  updateRivalAfterMatch,
   updateStanding,
   type FixtureBatchState,
 } from './seasonSim'
@@ -405,6 +406,8 @@ function finishPlayerMatchCore(
   else if (draw) narrative += ' Remis.'
   else narrative += ' Porażka.'
   if (args.narrativeExtra) narrative += ` ${args.narrativeExtra}`
+
+  updateRivalAfterMatch(season.rival, player, starts, rating, season.matchMood)
 
   return {
     homeId,
