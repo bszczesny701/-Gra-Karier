@@ -322,23 +322,26 @@ function finishPlayerMatchCore(
         matchGoals,
       )
     }
-    // Szersza skala: 1 gol często 7.5–8.5; bez gola też bywa 6.5–7.8 przy dobrym dniu
+    // Forma dnia: bez G/A też da się wbić ~9 (MOTM); gol/asysta nadal pomagają
     const resultSwing =
       (homeId === season.clubId && hg > ag) || (awayId === season.clubId && ag > hg)
-        ? 0.45 + Math.random() * 0.35
+        ? 0.35 + Math.random() * 0.4
         : hg === ag
-          ? 0.1 + Math.random() * 0.2
-          : -(0.25 + Math.random() * 0.35)
+          ? 0.05 + Math.random() * 0.25
+          : -(0.2 + Math.random() * 0.4)
+    const dayForm = Math.random() * 3.8 - 1.1 // -1.1 … +2.7
+    const motmSpark = Math.random() < 0.12 ? 0.7 + Math.random() * 0.9 : 0
     rating = clamp(
-      5.55 +
-        season.matchMood / 72 +
-        (player.overall - 45) / 48 +
-        matchGoals * 1.05 +
-        matchAssists * 0.65 +
+      5.15 +
+        season.matchMood / 85 +
+        (player.overall - 45) / 55 +
+        matchGoals * 0.85 +
+        matchAssists * 0.5 +
         resultSwing +
-        (Math.random() * 2.4 - 0.9),
-      3.8,
-      9.8,
+        dayForm +
+        motmSpark,
+      3.6,
+      9.9,
     )
     live.ratingSum += rating
     if (rating >= 7.2) season.matchMood = clamp(season.matchMood + 2 + Math.random() * 2, 28, 88)
