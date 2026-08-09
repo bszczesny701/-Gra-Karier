@@ -44,7 +44,7 @@ export function calcOverall(attrs: Attributes, position: Position): number {
 }
 
 export function moneyFromStart(overall: number, clubWage: number): number {
-  return Math.round(300 + overall * 8 + clubWage * 0.4)
+  return Math.round(900 + overall * 14 + clubWage * 0.8)
 }
 
 export function reputationFromStart(overall: number, leagueTier: number): number {

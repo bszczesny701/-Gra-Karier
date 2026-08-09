@@ -97,7 +97,7 @@ export function resolveSeasonForm(input: SeasonDevInput): { avgForm: number; for
 
 /**
  * Rozwój OVR — deterministyczny.
- * Tor startowy: 45→60 w ok. 3–4 sezony przy regularnych minutach (młody).
+ * Tor: ~45→60 w 3–4 sezony, potem 60→70 w kolejnych 2–3 przy minutach (młody).
  */
 export function resolveSeasonOvrDelta(
   input: SeasonDevInput,
@@ -111,9 +111,9 @@ export function resolveSeasonOvrDelta(
   const rating = leagueApps > 0 ? avgRating : 0
   const young = age <= 25
   const veryYoung = age <= 21
-  /** Szybki tor do Ekstraklasy / I ligi */
-  const fastTrack = overallBefore < 60
+  const climbing = overallBefore < 70
   const early = overallBefore <= 55
+  const midClimb = overallBefore >= 55 && overallBefore < 70
 
   let delta = 0
   if (formLabel === 'świetna') delta = young ? 3 : 1
@@ -122,10 +122,10 @@ export function resolveSeasonOvrDelta(
   else if (formLabel === 'słaba') delta = young ? 0 : -1
   else delta = -2
 
-  // Minuty = główny motor 45→60
+  // Minuty = główny motor wzrostu
   if (young && delta >= 0) {
-    if (appRate >= 0.65) delta += early ? 2 : fastTrack ? 1 : veryYoung ? 1 : 0
-    else if (appRate >= 0.5) delta += early ? 1 : fastTrack && veryYoung ? 1 : 0
+    if (appRate >= 0.65) delta += early ? 2 : midClimb ? 2 : climbing ? 1 : veryYoung ? 1 : 0
+    else if (appRate >= 0.5) delta += early || midClimb ? 1 : 0
     else if (appRate < 0.25) {
       delta = Math.min(delta, 0)
       if (appRate < 0.15) delta -= 1
@@ -134,7 +134,12 @@ export function resolveSeasonOvrDelta(
     delta = Math.min(delta, 0)
   }
 
-  // Lepszy klub: stały +1 (nie los), przy minutach
+  // Dobre oceny przyspieszają drogę do 70
+  if (young && climbing && rating >= 6.8 && appRate >= 0.4 && delta >= 0) delta += 1
+  if (young && climbing && rating >= 7.2 && appRate >= 0.5 && delta >= 0) delta += 1
+  if (young && midClimb && formLabel === 'świetna' && appRate >= 0.55) delta += 1
+
+  // Lepszy klub: stały +1 przy minutach
   if (young && formLabel !== 'fatalna' && formLabel !== 'słaba' && appRate >= 0.4) {
     if (clubStrength >= 78) delta += 1
     else if (clubStrength >= 68 && (early || appRate >= 0.55)) delta += 1
@@ -144,15 +149,22 @@ export function resolveSeasonOvrDelta(
   if (rating > 0 && rating < 6.3 && delta > 0) delta -= 1
   if (seriousInjury || matchesMissedInjury >= fixtures * 0.45) delta -= 1
 
-  // Po 60 wzrost zwalnia (nie chcemy od razu 75)
-  if (overallBefore >= 60 && overallBefore < 70) delta = Math.min(delta, young ? 3 : 2)
-  if (overallBefore >= 70 && overallBefore < 78) delta = Math.min(delta, young ? 2 : 1)
-  if (overallBefore >= 78 && overallBefore < 85) delta = Math.min(delta, 1)
-  if (overallBefore >= 85) delta = Math.min(delta, 0)
+  // Sufity — do 70 wciąż realny wzrost; potem zwalnia
+  if (overallBefore >= 60 && overallBefore < 70) delta = Math.min(delta, young ? 4 : 2)
+  if (overallBefore >= 70 && overallBefore < 78) delta = Math.min(delta, young ? 3 : 1)
+  if (overallBefore >= 78 && overallBefore < 85) delta = Math.min(delta, young ? 2 : 1)
+  if (overallBefore >= 85) delta = Math.min(delta, 1)
 
-  // Sufity: młody na starcie może +5 (45+5+5+5 = 60 w 3 sezony)
   const maxUp =
-    veryYoung && early ? 5 : young && fastTrack ? 4 : young ? 3 : age <= 28 ? 2 : 1
+    veryYoung && early
+      ? 5
+      : young && climbing
+        ? 4
+        : young
+          ? 3
+          : age <= 28
+            ? 2
+            : 1
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
 
   return Math.max(maxDown, Math.min(maxUp, Math.round(delta)))

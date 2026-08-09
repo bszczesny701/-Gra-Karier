@@ -222,6 +222,10 @@ export interface SeasonState {
   winterDecisionDone: boolean
   /** Ostatni komentarz rywala o skład (hub / narracja) */
   rivalLastComment: string | null
+  /** Chemia szatni 0–100 — wpływa na morale i % gry */
+  teamChemistry: number
+  /** Po ilu występach kolejna rozmowa w szatni */
+  nextSquadChatAt: number
 }
 
 export interface PendingKeyMatch {
@@ -261,7 +265,7 @@ export interface PendingDecision {
   speakerRole: string
   messages: string[]
   description: string
-  source?: 'preseason' | 'winter'
+  source?: 'preseason' | 'winter' | 'squad'
   choices: Array<{
     id: string
     label: string
@@ -349,7 +353,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-save-v11'
-export const SAVE_VERSION = 13
+export const SAVE_VERSION = 15
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -360,11 +364,19 @@ export function clampFloat(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
 
-/** Limity zmiany OVR po sezonie (kotwica ±5 na starcie kariery). */
+/** Limity zmiany OVR po sezonie — droga do ~70 przy minutach. */
 export function clampSeasonOvrDelta(age: number, raw: number, overall = 55): number {
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
   const maxUp =
-    age <= 21 && overall <= 55 ? 5 : age <= 25 && overall < 60 ? 4 : age <= 25 ? 3 : age <= 28 ? 2 : 1
+    age <= 21 && overall <= 55
+      ? 5
+      : age <= 25 && overall < 70
+        ? 4
+        : age <= 25
+          ? 3
+          : age <= 28
+            ? 2
+            : 1
   return Math.max(maxDown, Math.min(maxUp, Math.round(raw)))
 }
 
@@ -374,15 +386,11 @@ export function footLabel(foot: PreferredFoot): string {
   return 'Obunożny'
 }
 
-export function formLabelFromAvg(avg: number, overall = 55): FormLabel {
-  const świetnaMin = clamp(Math.round(70 + (overall - 45) * 0.4), 68, 86)
-  const dobraMin = clamp(Math.round(56 + (overall - 45) * 0.25), 52, 70)
-  const przyzwoitaMin = clamp(Math.round(44 + (overall - 45) * 0.12), 40, 52)
-  const slabaMin = clamp(Math.round(32 + (overall - 45) * 0.08), 28, 40)
-  if (avg >= świetnaMin) return 'świetna'
-  if (avg >= dobraMin) return 'dobra'
-  if (avg >= przyzwoitaMin) return 'przyzwoita'
-  if (avg >= slabaMin) return 'słaba'
+export function formLabelFromAvg(avg: number, _overall = 55): FormLabel {
+  if (avg >= 72) return 'świetna'
+  if (avg >= 58) return 'dobra'
+  if (avg >= 45) return 'przyzwoita'
+  if (avg >= 32) return 'słaba'
   return 'fatalna'
 }
 

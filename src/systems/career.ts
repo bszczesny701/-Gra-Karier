@@ -10,6 +10,7 @@ import {
   STARTER_CLUB_ID,
 } from '../data/clubs'
 import { CAREER_EVENTS, pickEvent, type ChoiceEffect } from '../data/events'
+import { SQUAD_EVENTS } from '../data/squadEvents'
 import {
   clamp,
   shouldRetire,
@@ -37,7 +38,7 @@ import {
   resolveGoalMoment,
   startSeasonCalendar,
 } from './matchday'
-import { playerTablePosition, sortedStandings } from './standings'
+import { playerTablePosition, sortedStandings, standingsAroundPlayer } from './standings'
 import {
   applyAgingDecline,
   attrsFromOverall,
@@ -46,7 +47,7 @@ import {
   reputationFromStart,
 } from './playerFactory'
 
-export { playerTablePosition, sortedStandings }
+export { playerTablePosition, sortedStandings, standingsAroundPlayer }
 
 function trackClub(player: Player, clubId: string): void {
   if (!player.clubsPlayed.includes(clubId)) player.clubsPlayed.push(clubId)
@@ -155,6 +156,8 @@ export function createSeason(
     cupPlayedLive: false,
     winterDecisionDone: false,
     rivalLastComment: null,
+    teamChemistry: 52,
+    nextSquadChatAt: 4,
   }
   initSeasonMatchdayFields(season, playerOverall)
   return season
@@ -175,6 +178,7 @@ export function estimatePlayChance(
         strengthMods,
         season.rival,
         season.rivalPressure ?? 0,
+        season.teamChemistry ?? 50,
       ) * 100,
     )
   }
@@ -342,6 +346,7 @@ function applyEffect(player: Player, effect: ChoiceEffect): void {
       break
     case 'injuryCare':
     case 'rivalPressure':
+    case 'teamChemistry':
       break
   }
   player.overall = calcOverall(player.attrs, player.position)
@@ -411,11 +416,82 @@ export function openWinterDecision(state: GameState): void {
   state.screen = 'decision'
 }
 
+export function openSquadChat(state: GameState): void {
+  if (!state.season) return
+  const player = state.player!
+  const event = pickEvent(SQUAD_EVENTS, player.position, player.reputation)
+  state.pendingDecision = {
+    eventId: event.id,
+    title: event.title,
+    speaker: event.speaker,
+    speakerRole: event.speakerRole,
+    messages: event.messages,
+    description: event.messages.join(' '),
+    source: 'squad',
+    choices: event.choices.map((c) => ({
+      id: c.id,
+      label: c.label,
+      hint: c.hint,
+    })),
+  }
+  state.screen = 'decision'
+}
+
+export type MoneySpendId = 'training' | 'agent' | 'physio' | 'night'
+
+export function spendMoney(state: GameState, spendId: MoneySpendId): void {
+  const player = state.player!
+  const season = state.season
+  if (!season) return
+
+  const costs: Record<MoneySpendId, number> = {
+    training: 1200,
+    agent: 1500,
+    physio: 650,
+    night: 500,
+  }
+  const cost = costs[spendId]
+  if (player.money < cost) {
+    pushLog(state, `Za mało kasy (trzeba ${cost} zł).`)
+    return
+  }
+  player.money -= cost
+
+  if (spendId === 'training') {
+    player.form = clamp(player.form + 7, 22, 88)
+    season.matchMood = clamp(season.matchMood + 5, 28, 88)
+    const attrs = ['pace', 'shooting', 'passing', 'defending', 'stamina'] as const
+    const key = attrs[Math.floor(Math.random() * attrs.length)]!
+    player.attrs[key] = clamp(player.attrs[key] + 1, 1, 99)
+    player.overall = calcOverall(player.attrs, player.position)
+    bumpPeak(player)
+    pushLog(state, `Prywatny trening (−${cost} zł): forma↑, ${key}+1.`)
+  } else if (spendId === 'agent') {
+    player.reputation = clamp(player.reputation + 3, 0, 100)
+    player.morale = clamp(player.morale + 2, 1, 100)
+    season.rivalPressure = clamp((season.rivalPressure ?? 0) - 1, -3, 3)
+    pushLog(state, `Agent robi szum (−${cost} zł): reputacja↑, rywal pod presją.`)
+  } else if (spendId === 'physio') {
+    season.injuryCare = clamp((season.injuryCare ?? 0) + 1, 0, 5)
+    season.matchMood = clamp(season.matchMood + 3, 28, 88)
+    player.attrs.stamina = clamp(player.attrs.stamina + 1, 1, 99)
+    player.overall = calcOverall(player.attrs, player.position)
+    bumpPeak(player)
+    pushLog(state, `Sesja fizjo (−${cost} zł): ochrona urazu ${season.injuryCare}/5.`)
+  } else {
+    player.morale = clamp(player.morale + 4, 1, 100)
+    season.teamChemistry = clamp((season.teamChemistry ?? 50) + 6, 0, 100)
+    season.rivalPressure = clamp((season.rivalPressure ?? 0) - 1, -3, 3)
+    pushLog(state, `Wyjście z szatnią (−${cost} zł): chemia↑.`)
+  }
+}
+
 export function applyPreseasonDecision(state: GameState, choiceId: string): void {
   const player = state.player!
   const pending = state.pendingDecision
   if (!pending || !state.season) return
-  const event = CAREER_EVENTS.find((e) => e.id === pending.eventId)
+  const pool = pending.source === 'squad' ? SQUAD_EVENTS : CAREER_EVENTS
+  const event = pool.find((e) => e.id === pending.eventId)
   const choice = event?.choices.find((c) => c.id === choiceId)
   if (!choice) return
   for (const effect of choice.effects) {
@@ -427,21 +503,55 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
         -3,
         3,
       )
+      if (effect.delta < 0) {
+        state.season.teamChemistry = clamp(
+          (state.season.teamChemistry ?? 50) + Math.abs(effect.delta) * 2,
+          0,
+          100,
+        )
+      } else if (effect.delta > 0) {
+        state.season.teamChemistry = clamp((state.season.teamChemistry ?? 50) - 1, 0, 100)
+      }
+    } else if (effect.key === 'teamChemistry') {
+      state.season.teamChemistry = clamp(
+        (state.season.teamChemistry ?? 50) + effect.delta,
+        0,
+        100,
+      )
     } else {
       applyEffect(player, effect)
     }
   }
+  // Szatnia: konkretne wybory bez osobnego klucza
+  if (pending.source === 'squad') {
+    if (choice.id === 'go' || choice.id === 'pay' || choice.id === 'mentor' || choice.id === 'players') {
+      state.season.teamChemistry = clamp(
+        (state.season.teamChemistry ?? 50) + (choice.id === 'pay' ? 5 : 3),
+        0,
+        100,
+      )
+    } else if (choice.id === 'skip' || choice.id === 'busy' || choice.id === 'coach_side') {
+      state.season.teamChemistry = clamp((state.season.teamChemistry ?? 50) - 3, 0, 100)
+    }
+  }
   const care = state.season.injuryCare ?? 0
+  const chem = Math.round(state.season.teamChemistry ?? 50)
   pushLog(
     state,
     `${pending.speaker}: „${choice.label}”${care > 0 ? ` · ochrona urazu ${care}/5` : ''}${
-      state.season.rivalPressure ? ` · rywal ${state.season.rivalPressure > 0 ? '+' : ''}${state.season.rivalPressure}` : ''
-    }`,
+      state.season.rivalPressure
+        ? ` · rywal ${state.season.rivalPressure > 0 ? '+' : ''}${state.season.rivalPressure}`
+        : ''
+    } · chemia ${chem}`,
   )
   state.pendingDecision = null
   if (pending.source === 'winter') {
     state.season.winterDecisionDone = true
     state.screen = 'winterBreak'
+    return
+  }
+  if (pending.source === 'squad') {
+    state.screen = 'hub'
     return
   }
   state.season.preseasonDone = true
@@ -537,9 +647,19 @@ export function dismissMatchResult(state: GameState): void {
     )
     return
   }
-  if (!nextPlayerFixture(season) && season.phase !== 'winterDone') {
+  if (!nextPlayerFixture(season) && season.phase !== 'winterDone' && !season.cupAlive) {
     const report = finalizeMatchdaySeason(player, season, state.clubStrengthMods ?? {})
     applyMatchdayOutcome(state, { kind: 'seasonDone', report })
+    return
+  }
+  const apps = season.liveStats?.appearances ?? 0
+  if (
+    season.preseasonDone &&
+    apps >= (season.nextSquadChatAt ?? 99) &&
+    !player.injury
+  ) {
+    season.nextSquadChatAt = apps + 4 + Math.floor(Math.random() * 5)
+    openSquadChat(state)
     return
   }
   state.screen = 'hub'

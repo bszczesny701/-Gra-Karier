@@ -628,6 +628,62 @@ h3 {
   font-weight: 700;
 }
 
+.mini-table tr.ellipsis td {
+  color: var(--muted);
+  text-align: center;
+  border-bottom: none;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+}
+
+.hub-sub {
+  margin: 14px 0 4px;
+  font-size: 0.95rem;
+}
+
+.spend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.spend-row .btn {
+  font-size: 0.82rem;
+  padding: 8px 10px;
+}
+
+.spend-row .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rival-block {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.meta .up,
+.stat-grid .up {
+  color: var(--accent);
+}
+
+.meta .down,
+.stat-grid .down,
+.muted.down {
+  color: #ff8f7a;
+}
+
+@media (min-width: 720px) {
+  .hub-split {
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: start;
+  }
+}
+
 .cup-ladder {
   display: flex;
   flex-wrap: nowrap;

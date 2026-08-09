@@ -207,10 +207,12 @@ export function mountMatchMoment(
     else if (action === 'pass') raw = scorePass()
     else if (action === 'tackle') raw = scoreTackle()
     else raw = scoreClear()
-    const score = Math.max(3, Math.min(100, raw))
-    message = `Wynik akcji: ${Math.round(score)}%`
+    const score = Math.max(3, Math.min(100, Math.round(raw)))
+    const verdict =
+      score >= 80 ? 'Świetnie!' : score >= 60 ? 'Dobrze' : score >= 40 ? 'Na styk' : 'Słabo'
+    message = `${verdict} · ${score}%`
     flying = null
-    window.setTimeout(() => onFinished(score), 500)
+    window.setTimeout(() => onFinished(score), 520)
   }
 
   function onDown(e: PointerEvent): void {
@@ -537,13 +539,25 @@ export function mountMatchMoment(
 
     if (dragging) {
       const from = action === 'clear' ? { x: threat.x, y: threat.y } : origin
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+      const aimX = from.x + (from.x - ball.x) * 1.35
+      const aimY = from.y + (from.y - ball.y) * 1.35
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'
       ctx.setLineDash([6, 6])
       ctx.beginPath()
       ctx.moveTo(from.x, from.y)
       ctx.lineTo(ball.x, ball.y)
       ctx.stroke()
+      ctx.strokeStyle = 'rgba(200,245,96,0.55)'
+      ctx.setLineDash([4, 8])
+      ctx.beginPath()
+      ctx.moveTo(from.x, from.y)
+      ctx.lineTo(aimX, aimY)
+      ctx.stroke()
       ctx.setLineDash([])
+      ctx.beginPath()
+      ctx.arc(aimX, aimY, 5, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(200,245,96,0.7)'
+      ctx.fill()
     }
 
     // W clear piłka jest przy threat — rysuj zawsze; w tackle tylko gdy lecisz / ciągniesz

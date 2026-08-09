@@ -308,8 +308,8 @@ export function scoreline(att: number, def: number): number {
 }
 
 /**
- * Szansa na występ — OVR vs siła klubu + wyraźna kara wyższej ligi.
- * Ten sam OVR w Ekstraklasie ≪ I liga.
+ * Szansa na występ — OVR vs siła klubu.
+ * Gdy jesteś wyraźnie lepszy od rywala i blisko siły składu → powinieneś być filarem „11”.
  */
 export function appearanceChance(
   player: Player,
@@ -317,6 +317,7 @@ export function appearanceChance(
   strengthMods: Record<string, number> = {},
   rival?: PositionalRival | null,
   rivalPressure = 0,
+  teamChemistry = 50,
 ): number {
   if (!clubId) {
     return Math.max(0.2, Math.min(0.55, 0.3 + player.overall / 200))
@@ -326,87 +327,94 @@ export function appearanceChance(
   const strength = getEffectiveStrength(clubId, strengthMods)
   const gap = player.overall - strength
 
-  // Baza ligowa: wyższa liga = trudniej o „11” przy tym samym gap
   const tierBase =
     league.tier === 4
-      ? 0.44 // III
+      ? 0.48
       : league.tier === 3
-        ? 0.4 // II
+        ? 0.44
         : league.tier === 2
-          ? 0.36 // I liga
+          ? 0.4
           : league.tier === 1
-            ? 0.24 // Ekstraklasa
-            : 0.16 // Top Europa
+            ? 0.3
+            : 0.2
 
-  const gapSlope = gap < 0 ? 0.024 : 0.013
+  const gapSlope = gap < 0 ? 0.028 : 0.018
   let playChance = tierBase + gap * gapSlope
 
-  playChance += (player.reputation - 20) / 700
-  playChance += (player.morale - 55) / 800
-  // Dobra forma = więcej minut; słaba = ławka
-  playChance += (player.form - 50) / 220
+  playChance += (player.reputation - 20) / 650
+  playChance += (player.morale - 55) / 700
+  playChance += (player.form - 50) / 180
+  playChance += (teamChemistry - 50) / 400
   if (player.age >= 34) playChance -= 0.08
   else if (player.age >= 30) playChance -= 0.04
   else if (player.age <= 18) playChance += 0.02
 
+  let beatsRival = false
   if (rival) {
     const rivalEdge = rival.overall + (rival.form - 50) / 5
     const playerEdge = player.overall + (player.morale - 50) / 10 + (player.form - 50) / 8
     const diff = playerEdge - rivalEdge
-    if (diff > 1.2) {
-      // Wygrywasz z rywalem na pozycji → wyraźnie więcej gry
-      playChance += Math.min(0.16, 0.045 + diff * 0.014)
+    if (diff > 0.4) {
+      beatsRival = true
+      playChance += Math.min(0.28, 0.08 + diff * 0.022)
     } else if (diff < -1.2) {
       const edgeGap = -diff
-      playChance -= Math.min(0.2, Math.max(0.05, 0.05 + edgeGap * 0.014))
+      playChance -= Math.min(0.22, Math.max(0.05, 0.05 + edgeGap * 0.016))
+    }
+    // Lepszy od rywala = filar „11”, nie ławka
+    if (player.overall > rival.overall) {
+      beatsRival = true
+      playChance = Math.max(playChance, player.overall >= rival.overall + 3 ? 0.9 : 0.82)
+    } else if (player.overall >= rival.overall) {
+      beatsRival = true
+      playChance = Math.max(playChance, 0.74)
     }
   }
-  playChance -= rivalPressure * 0.03
+  playChance -= rivalPressure * 0.035
 
-  // Sufity — Ekstraklasa wyraźnie niżej niż I liga
-  const tierCap =
+  // Najlepszy / blisko siły klubu → nie siedzisz na ławce „bo tak”
+  if (gap >= 0) playChance = Math.max(playChance, beatsRival ? 0.88 : 0.78)
+  else if (gap >= -3 && beatsRival) playChance = Math.max(playChance, 0.8)
+  else if (gap >= -5 && player.overall >= (rival?.overall ?? strength)) {
+    playChance = Math.max(playChance, 0.62)
+  }
+
+  let tierCap =
     league.tier === 4
-      ? 0.88
+      ? 0.92
       : league.tier === 3
-        ? 0.8
+        ? 0.86
         : league.tier === 2
-          ? 0.74 // I liga
+          ? 0.82
           : league.tier === 1
-            ? 0.56 // Ekstraklasa
-            : 0.45 // Europa
+            ? 0.78
+            : 0.62
 
-  // W Ekstraklasie / Europie: bycie poniżej siły składu boli mocniej
-  if (league.tier === 1 && gap < 0) playChance *= 0.82
-  if (league.tier === 1 && gap < -4) playChance = Math.min(playChance, 0.28)
-  if (league.tier <= 0 && gap < 2) playChance = Math.min(playChance, 0.32)
-  if (league.tier <= 0 && gap < -4) playChance = Math.min(playChance, 0.14)
+  if (gap >= 2) tierCap = Math.min(0.92, tierCap + 0.08)
+  if (beatsRival && gap >= -2) tierCap = Math.min(0.94, tierCap + 0.06)
 
-  if (league.tier >= 1 && league.tier <= 3 && gap < 2) {
-    playChance = Math.min(playChance, tierCap - 0.08)
-  }
-  if (league.tier === 3 && player.overall < 52) {
-    playChance = Math.min(playChance, 0.48)
-  }
-  if (league.tier === 2 && player.overall < 58) {
-    playChance = Math.min(playChance, 0.4)
-  }
-  if (league.tier === 1 && player.overall < 64) {
-    playChance = Math.min(playChance, 0.3)
-  }
-  if (league.tier <= 1 && gap < -8) {
-    playChance = Math.min(playChance, 0.18)
-  }
-  if (gap <= -18) playChance = Math.min(playChance, 0.04)
-  else if (gap <= -12) playChance = Math.min(playChance, 0.12)
+  if (league.tier === 1 && gap < -2) playChance *= 0.9
+  if (league.tier === 1 && gap < -6) playChance = Math.min(playChance, 0.32)
+  if (league.tier <= 0 && gap < 0) playChance = Math.min(playChance, 0.4)
+  if (league.tier <= 0 && gap < -4) playChance = Math.min(playChance, 0.18)
 
-  if (gap >= 12) playChance += 0.06
-  else if (gap >= 8) playChance += 0.03
+  if (league.tier === 3 && player.overall < 50) playChance = Math.min(playChance, 0.52)
+  if (league.tier === 2 && player.overall < 55) playChance = Math.min(playChance, 0.48)
+  if (league.tier === 1 && player.overall < 60 && gap < -4) {
+    playChance = Math.min(playChance, 0.36)
+  }
+  if (league.tier <= 1 && gap < -10) playChance = Math.min(playChance, 0.2)
+  if (gap <= -18) playChance = Math.min(playChance, 0.05)
+  else if (gap <= -14) playChance = Math.min(playChance, 0.14)
+
+  if (gap >= 10) playChance += 0.08
+  else if (gap >= 6) playChance += 0.04
 
   playChance = Math.min(playChance, tierCap)
-  return Math.max(0.03, Math.min(0.88, playChance))
+  return Math.max(0.04, Math.min(0.94, playChance))
 }
 
-/** Szansa w trakcie sezonu — forma meczowa mocniej waży + rywal. */
+/** Szansa w trakcie sezonu — forma meczowa + chemia. */
 export function matchAppearanceChance(
   player: Player,
   matchMood: number,
@@ -414,11 +422,18 @@ export function matchAppearanceChance(
   strengthMods: Record<string, number>,
   rival?: PositionalRival | null,
   rivalPressure = 0,
+  teamChemistry = 50,
 ): number {
-  const base = appearanceChance(player, clubId, strengthMods, rival, rivalPressure)
-  // Forma meczowa: 40 → −0.07, 70 → +0.14
-  const moodBit = (matchMood - 50) / 140
-  return Math.max(0.03, Math.min(0.88, base + moodBit))
+  const base = appearanceChance(
+    player,
+    clubId,
+    strengthMods,
+    rival,
+    rivalPressure,
+    teamChemistry,
+  )
+  const moodBit = (matchMood - 50) / 120
+  return Math.max(0.04, Math.min(0.94, base + moodBit))
 }
 
 /** Po meczu: dobra nota osłabia rywala; ławka / słaba forma go wzmacnia. */
@@ -434,7 +449,7 @@ export function updateRivalAfterMatch(
     else if (rating >= 6.5) rival.form = clamp(rival.form - 1, 26, 82)
     else if (rating < 5.4) rival.form = clamp(rival.form + (1 + rngInt(2)), 26, 84)
   } else if (!starts) {
-    rival.form = clamp(rival.form + (chance(0.55) ? 1 + rngInt(2) : 0), 26, 84)
+    rival.form = clamp(rival.form + (1 + rngInt(3)), 28, 88)
   }
   // Forma zawodnika dogania formę meczową — wpływa na % gry
   player.form = clamp(Math.round(player.form * 0.55 + matchMood * 0.45), 22, 88)
@@ -509,6 +524,8 @@ export function initCupState(season: SeasonState): void {
   season.cupPlayedLive = false
   season.winterDecisionDone = false
   season.rivalLastComment = null
+  season.teamChemistry = 52
+  season.nextSquadChatAt = 4 + rngInt(4)
 }
 
 export function pickCupOpponent(playerClubId: string): string {
@@ -564,7 +581,7 @@ function simulatePolishCup(
     const rivalId = pickCupOpponent(playerClubId)
     const cupRival = getClub(rivalId)
     const played = chance(
-      appearanceChance(player, playerClubId, strengthMods, rival, rivalPressure),
+      appearanceChance(player, playerClubId, strengthMods, rival, rivalPressure, 50),
     )
     if (played) {
       playerApps++
@@ -660,6 +677,7 @@ function runFixtureBatch(
             strengthMods,
             rival,
             rivalPressure,
+            season.teamChemistry ?? 50,
           ),
         )
 

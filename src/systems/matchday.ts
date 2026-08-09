@@ -372,6 +372,19 @@ function finishPlayerMatchCore(
     if (rating >= 7.2) season.matchMood = clamp(season.matchMood + 2 + Math.random() * 2, 28, 88)
     else if (rating < 5.2) season.matchMood = clamp(season.matchMood - (1 + Math.random() * 2), 28, 88)
 
+    // Chemia szatni + premia za występ
+    if (rating >= 7.2) {
+      season.teamChemistry = clamp((season.teamChemistry ?? 50) + 2, 0, 100)
+      player.money += 180
+    } else if (rating >= 6.5) {
+      season.teamChemistry = clamp((season.teamChemistry ?? 50) + 1, 0, 100)
+      player.money += 80
+    } else if (rating < 5.4) {
+      season.teamChemistry = clamp((season.teamChemistry ?? 50) - 2, 0, 100)
+    } else {
+      player.money += 40
+    }
+
     live.appsThisSeason++
     if (live.appsThisSeason === live.injuryAtApp && !player.injury) {
       const roll = Math.random()
@@ -406,6 +419,11 @@ function finishPlayerMatchCore(
     }
   } else if (!player.injury) {
     season.matchMood = clamp(season.matchMood * 0.9 + 48 * 0.1, 28, 88)
+    season.teamChemistry = clamp((season.teamChemistry ?? 50) - 1, 0, 100)
+    if (season.rival) {
+      season.rival.form = clamp(season.rival.form + 1 + rngInt(2), 26, 82)
+      season.rivalPressure = clamp((season.rivalPressure ?? 0) + 1, -3, 3)
+    }
   }
 
   persistScorers(season, scorerMap)
@@ -687,6 +705,7 @@ export function playNextMatchday(
         strengthMods,
         season.rival,
         season.rivalPressure ?? 0,
+        season.teamChemistry ?? 50,
       ),
     )
     if (starts) {
@@ -792,6 +811,7 @@ function playCupMatchday(
           strengthMods,
           season.rival,
           season.rivalPressure ?? 0,
+          season.teamChemistry ?? 50,
         ) + 0.12,
       ),
     )

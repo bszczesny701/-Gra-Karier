@@ -11,12 +11,15 @@ import {
   hasMidSeasonOffers,
   openMidSeasonTransfers,
   openPreseasonDecision,
+  openSquadChat,
   openTransferChoice,
   openWinterDecision,
   openWinterLoans,
   openWinterTransfers,
   playCareerMatchday,
   resolveKeyMatch,
+  spendMoney,
+  standingsAroundPlayer,
   sortedStandings,
   playerTablePosition,
   stayAtClub,
@@ -264,7 +267,8 @@ export class App {
     const league = getLeague(s.leagueId)
     const mods = this.state.clubStrengthMods ?? {}
     const chance = Math.round(
-      matchAppearanceChance(p, s.matchMood, s.clubId, mods, s.rival, s.rivalPressure ?? 0) * 100,
+      matchAppearanceChance(p, s.matchMood, s.clubId, mods, s.rival, s.rivalPressure ?? 0, s.teamChemistry ?? 50) *
+        100,
     )
     const clubPower = getEffectiveStrength(s.clubId, mods)
     const midOffers = hasMidSeasonOffers(this.state)
@@ -298,38 +302,48 @@ export class App {
       ? `<p class="muted">Wypożyczenie z ${getClub(p.loan.parentClubId).name}</p>`
       : ''
     const contractLine = `<p class="meta">Kontrakt: ${p.contract.yearsLeft} lat · pensja ~${p.contract.wage} zł</p>`
-    const rivalLine = `<p class="meta">Rywal: <strong>${s.rival.name}</strong> · OVR ${s.rival.overall} · forma ${s.rival.form}<br/>${describeRival(p, s.rival)}</p>${
+    const chem = Math.round(s.teamChemistry ?? 50)
+    const chemClass = chem >= 65 ? 'up' : chem <= 40 ? 'down' : ''
+    const teamLine = `<p class="meta">Chemia szatni: <strong class="${chemClass}">${chem}</strong> · forma dnia <strong>${Math.round(s.matchMood)}</strong> · gra ≈ <strong>${chance}%</strong></p>`
+    const rivalBeat =
+      p.overall > s.rival.overall
+        ? 'Jesteś faworytem do „11”.'
+        : p.overall >= s.rival.overall
+          ? 'Walka o skład 1:1.'
+          : 'Rywal ma przewagę o miejsce.'
+    const rivalLine = `<div class="rival-block"><p class="meta">Rywal: <strong>${s.rival.name}</strong> · OVR ${s.rival.overall} (Ty ${p.overall}) · forma ${s.rival.form}<br/>${describeRival(p, s.rival)} · ${rivalBeat}</p>${
       s.rivalLastComment ? `<p class="rival-quote">${s.rivalLastComment}</p>` : ''
-    }`
+    }${(s.rivalPressure ?? 0) !== 0 ? `<p class="meta">Presja o skład: <strong>${(s.rivalPressure ?? 0) > 0 ? '+' : ''}${s.rivalPressure}</strong></p>` : ''}</div>`
 
-    const standings = sortedStandings(s)
     const place = playerTablePosition(s)
-    const myRow = standings.find((r) => r.clubId === s.clubId)
-    const tableSlice = standings.slice(0, 5)
-    if (place > 5 && myRow) {
-      tableSlice.push(myRow)
-    }
+    const myRow = sortedStandings(s).find((r) => r.clubId === s.clubId)
+    const around = standingsAroundPlayer(s, 3)
+    const tableRows = [
+      around.showTopEllipsis
+        ? `<tr class="ellipsis"><td colspan="3">…</td></tr>`
+        : '',
+      ...around.rows.map((row, i) => {
+        const pos = around.from + i + 1
+        const you = row.clubId === s.clubId
+        return `<tr class="${you ? 'you' : ''}"><td>${pos}</td><td>${getClub(row.clubId).short}${you ? ' · Ty' : ''}</td><td>${row.points}</td></tr>`
+      }),
+      around.showBottomEllipsis
+        ? `<tr class="ellipsis"><td colspan="3">…</td></tr>`
+        : '',
+    ].join('')
     const tableHtml = `
-      <div>
+      <div class="hub-table">
         <h3 style="margin-bottom:6px">${league.name}</h3>
-        <p class="meta">Twoje miejsce: <strong>${place}.</strong> · ${myRow?.points ?? 0} pkt · bilans ${myRow?.goalsFor ?? 0}:${myRow?.goalsAgainst ?? 0}</p>
+        <p class="meta"><strong>${place}.</strong> miejsce · ${myRow?.points ?? 0} pkt · ${myRow?.goalsFor ?? 0}:${myRow?.goalsAgainst ?? 0}</p>
         <table class="mini-table">
           <thead><tr><th>#</th><th>Klub</th><th>Pkt</th></tr></thead>
-          <tbody>
-            ${tableSlice
-              .map((row) => {
-                const pos = standings.findIndex((r) => r.clubId === row.clubId) + 1
-                const you = row.clubId === s.clubId
-                return `<tr class="${you ? 'you' : ''}"><td>${pos}</td><td>${getClub(row.clubId).short}${you ? ' (Ty)' : ''}</td><td>${row.points}</td></tr>`
-              })
-              .join('')}
-          </tbody>
+          <tbody>${tableRows}</tbody>
         </table>
       </div>`
 
     const ladder = cupLadderSteps(s)
     const cupHtml = `
-      <div>
+      <div class="hub-cup">
         <h3 style="margin-bottom:6px">${cupCompetitionName(cupCountry)}</h3>
         <p class="meta">${cupStatusLine(s)}</p>
         <div class="cup-ladder" aria-label="Drabinka pucharu">
@@ -342,6 +356,14 @@ export class App {
         </div>
       </div>`
 
+    const spendHtml = `
+      <div class="spend-row">
+        <button class="btn ghost spend" data-spend="training" ${p.money < 1200 ? 'disabled' : ''}>Trening (−1200)</button>
+        <button class="btn ghost spend" data-spend="physio" ${p.money < 650 ? 'disabled' : ''}>Fizjo (−650)</button>
+        <button class="btn ghost spend" data-spend="night" ${p.money < 500 ? 'disabled' : ''}>Szatnia (−500)</button>
+        <button class="btn ghost spend" data-spend="agent" ${p.money < 1500 ? 'disabled' : ''}>Agent (−1500)</button>
+      </div>`
+
     return this.shell(
       `
       <section class="panel player-card">
@@ -352,31 +374,30 @@ export class App {
           </div>
           <div class="money">${p.money} zł</div>
         </div>
-        <p class="meta">${league.name} · ${formatStars(club.stars)} (${starsLabel(club.stars)}) · sezon ${s.year} · siła ${clubPower} · gra ≈ ${chance}%</p>
+        <p class="meta">${league.name} · ${formatStars(club.stars)} (${starsLabel(club.stars)}) · sezon ${s.year} · siła klubu ${clubPower}</p>
         ${contractLine}
+        ${teamLine}
         ${rivalLine}
         ${loanLine}
         ${injuryLine}
         <div class="stat-grid">
-          <div title="Klasa zawodnika (1–99). Rośnie głównie po sezonie z minutami."><span>OVR</span><strong>${p.overall}</strong></div>
-          <div title="Samopoczucie w klubie. Wpływa na % gry i decyzje. Niskie = trudniej o skład."><span>Morale</span><strong>${p.morale}</strong></div>
-          <div title="Rozpoznawalność / status. Odblokowuje oferty i wydarzenia. Rośnie z golami i sukcesami."><span>Rep.</span><strong>${p.reputation}</strong></div>
-          <div title="Kondycja fizyczna. Część OVR; spada przy ciężkich treningach i urazach."><span>Kondycja</span><strong>${p.attrs.stamina}</strong></div>
-          <div title="Szybkość. Ważna dla napastników i skrzydeł; buduje OVR."><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
-          <div title="Skuteczność strzału. Kluczowa dla NP; wpływa na OVR i gole."><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
-          <div title="Jakość podań. Kluczowa dla pomocników; asysty i OVR."><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
-          <div title="Gra w obronie. Kluczowa dla OB/ŚO; OVR i zatrzymywanie akcji."><span>Obrona</span><strong>${p.attrs.defending}</strong></div>
+          <div title="Klasa zawodnika (1–99). Rośnie po sezonie z minutami — tor do ~70 przy grze."><span>OVR</span><strong>${p.overall}</strong></div>
+          <div title="Samopoczucie w klubie. Wpływa na % gry."><span>Morale</span><strong>${p.morale}</strong></div>
+          <div title="Reputacja — oferty i media."><span>Rep.</span><strong>${p.reputation}</strong></div>
+          <div title="Chemia szatni — interakcje i wspólne wyjścia."><span>Chemia</span><strong class="${chemClass}">${chem}</strong></div>
+          <div title="Tempo"><span>Tempo</span><strong>${p.attrs.pace}</strong></div>
+          <div title="Strzał"><span>Strzał</span><strong>${p.attrs.shooting}</strong></div>
+          <div title="Podanie"><span>Podanie</span><strong>${p.attrs.passing}</strong></div>
+          <div title="Obrona"><span>Obrona</span><strong>${p.attrs.defending}</strong></div>
         </div>
         <details class="stats-help">
           <summary>Co oznaczają statystyki?</summary>
           <ul class="muted">
-            <li><strong>OVR</strong> — ogólna klasa. Na koniec sezonu rośnie/spada (młody z minutami: szybki tor 45→60).</li>
-            <li><strong>Morale</strong> — nastrój. Wysokie = łatwiej o grę; niskie po kłótniach / ławce.</li>
-            <li><strong>Rep.</strong> — reputacja. Pomaga w ofertach i mediach.</li>
-            <li><strong>Tempo / Strzał / Podanie / Obrona / Kondycja</strong> — atrybuty budujące OVR wg pozycji.</li>
-            <li><strong>Forma meczowa</strong> — krótki humor pod mecz; dobra forma wyraźnie podnosi szansę gry.</li>
-            <li><strong>Rywal</strong> — konkurent o „11”; komentuje Twoje mecze i walkę o skład.</li>
-            <li><strong>Gra ≈ %</strong> — szansa wystawienia w następnym meczu (forma + rywal + OVR).</li>
+            <li><strong>OVR</strong> — klasa. Młody z minutami: 45→60→70 w kilku sezonach.</li>
+            <li><strong>Chemia</strong> — szatnia. Rośnie po dobrych meczach i rozmowach.</li>
+            <li><strong>Pieniądze</strong> — trening, fizjo, agent, wyjścia z ekipą.</li>
+            <li><strong>Rywal</strong> — walka o „11”; ławka wzmacnia rywala.</li>
+            <li><strong>Gra ≈ %</strong> — szansa wystawienia (OVR vs rywal + forma + chemia).</li>
           </ul>
         </details>
       </section>
@@ -385,11 +406,13 @@ export class App {
         <h3>Sezon ${s.year}</h3>
         ${nextLine}
         <div class="hub-split">${tableHtml}${cupHtml}</div>
-        <p class="muted" style="margin-top:12px">Liga + puchar. Oferty zależą od formy i miejsca w tabeli. W połowie — zima.</p>
+        <h4 class="hub-sub">Inwestycje</h4>
+        <p class="muted">Kasa wpływa na formę, chemię i reputację.</p>
+        ${spendHtml}
         <div class="actions">
           ${
             s.preseasonDone
-              ? ''
+              ? `<button class="btn ghost" id="btn-squad">Rozmowa w szatni</button>`
               : `<button class="btn ghost" id="btn-pre">Wiadomość (decyzja)</button>`
           }
           ${
@@ -423,11 +446,20 @@ export class App {
     this.root.querySelector('#btn-pre')?.addEventListener('click', () => {
       this.go(() => openPreseasonDecision(this.state))
     })
+    this.root.querySelector('#btn-squad')?.addEventListener('click', () => {
+      this.go(() => openSquadChat(this.state))
+    })
     this.root.querySelector('#btn-mid-tr')?.addEventListener('click', () => {
       this.go(() => openMidSeasonTransfers(this.state))
     })
     this.root.querySelector('#btn-season')?.addEventListener('click', () => {
       this.go(() => playCareerMatchday(this.state))
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-spend]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.spend as 'training' | 'agent' | 'physio' | 'night'
+        this.go(() => spendMoney(this.state, id))
+      })
     })
     this.root.querySelector('#btn-reset')?.addEventListener('click', () => {
       if (!confirm('Na pewno zacząć od nowa?')) return

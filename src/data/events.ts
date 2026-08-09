@@ -10,6 +10,8 @@ export type EffectKey =
   | 'injuryCare'
   /** Wpływ na rywalizację o skład w tym sezonie (ujemne = łatwiej grać) */
   | 'rivalPressure'
+  /** Chemia szatni (0–100) */
+  | 'teamChemistry'
 
 export interface ChoiceEffect {
   key: EffectKey
