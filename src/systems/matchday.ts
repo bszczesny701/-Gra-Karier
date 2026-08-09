@@ -11,7 +11,7 @@ import type {
   SeasonState,
   WinterBreakSnapshot,
 } from '../state/types'
-import { clamp } from '../state/types'
+import { clamp, clampFloat } from '../state/types'
 import { playerTablePosition, sortedStandings } from './standings'
 import {
   bumpScorer,
@@ -347,7 +347,7 @@ function finishPlayerMatchCore(
       resultSwing +
       dayForm +
       (Math.random() * 0.18 - 0.09)
-    rating = Math.round(clamp(raw, 3.6, 9.8) * 10) / 10
+    rating = Math.round(clampFloat(raw, 3.6, 9.8) * 10) / 10
     live.ratingSum += rating
     if (rating >= 7.2) season.matchMood = clamp(season.matchMood + 2 + Math.random() * 2, 28, 88)
     else if (rating < 5.2) season.matchMood = clamp(season.matchMood - (1 + Math.random() * 2), 28, 88)

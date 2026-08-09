@@ -15,6 +15,7 @@ import type {
 } from '../state/types'
 import {
   clamp,
+  clampFloat,
   clampSeasonOvrDelta,
   cupStageLabel,
 } from '../state/types'
@@ -512,19 +513,22 @@ function runFixtureBatch(
             matchAssists = 1
             state.assists++
           }
-          const rating = clamp(
-            5.4 +
-              state.matchMood / 85 +
-              (player.overall - 45) / 40 +
-              matchGoals * 0.8 +
-              matchAssists * 0.4 +
-              (Math.random() * 1.4 - 0.6),
-            3.5,
-            9.6,
-          )
+          const rating =
+            Math.round(
+              clampFloat(
+                5.25 +
+                  state.matchMood / 95 +
+                  (player.overall - 45) / 60 +
+                  matchGoals * (0.12 + Math.random() * 0.32) +
+                  matchAssists * (0.08 + Math.random() * 0.22) +
+                  (Math.random() * 2.2 - 0.85),
+                3.6,
+                9.8,
+              ) * 10,
+            ) / 10
           state.ratingSum += rating
-          if (rating >= 7.4) state.matchMood = clamp(state.matchMood + 2 + Math.random() * 2, 28, 88)
-          else if (rating < 5.0) {
+          if (rating >= 7.2) state.matchMood = clamp(state.matchMood + 2 + Math.random() * 2, 28, 88)
+          else if (rating < 5.2) {
             state.matchMood = clamp(state.matchMood - (1 + Math.random() * 2), 28, 88)
           }
 

@@ -328,6 +328,11 @@ export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
 }
 
+/** Bez zaokrąglania — do ocen meczowych (6.1, 6.4…). */
+export function clampFloat(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n))
+}
+
 /** Limity zmiany OVR po sezonie (kotwica ±5 na starcie kariery). */
 export function clampSeasonOvrDelta(age: number, raw: number, overall = 55): number {
   const maxDown = age <= 28 ? -2 : age <= 33 ? -3 : -4
