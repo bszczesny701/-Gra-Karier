@@ -213,10 +213,6 @@ export function mountMatchMoment(
     window.setTimeout(() => onFinished(score), 500)
   }
 
-  function dragTarget(): { x: number; y: number } {
-    return action === 'clear' ? ball : origin
-  }
-
   function onDown(e: PointerEvent): void {
     if (flying?.active || settled) return
     const p = pointerPos(e)
@@ -270,6 +266,17 @@ export function mountMatchMoment(
     grd.addColorStop(1, '#0b3d2e')
     ctx.fillStyle = grd
     ctx.fillRect(0, 0, w, h)
+    // Linie boiska — czytelniejszy kontekst
+    ctx.strokeStyle = 'rgba(244,247,245,0.18)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(10, 10, w - 20, h - 20)
+    ctx.beginPath()
+    ctx.moveTo(10, h * 0.5)
+    ctx.lineTo(w - 10, h * 0.5)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(w / 2, h * 0.5, Math.min(42, w * 0.12), 0, Math.PI * 2)
+    ctx.stroke()
   }
 
   function drawGoal(): void {
@@ -281,20 +288,143 @@ export function mountMatchMoment(
     ctx.strokeRect(g.x, g.y, g.w, g.h)
   }
 
+  /** Prosta sylwetka piłkarza (widok z góry): głowa + koszulka + nogi w biegu */
+  function drawFootballer(
+    x: number,
+    y: number,
+    opts: {
+      kit: string
+      shorts?: string
+      skin?: string
+      scale?: number
+      facing?: number
+      walk?: number
+      label?: string
+      gk?: boolean
+    },
+  ): void {
+    const scale = opts.scale ?? 1
+    const facing = opts.facing ?? 1
+    const walk = opts.walk ?? 0
+    const skin = opts.skin ?? '#e8c4a2'
+    const shorts = opts.shorts ?? '#1a2332'
+    const kit = opts.kit
+    const legSwing = Math.sin(walk) * 5 * scale
+
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.scale(facing < 0 ? -1 : 1, 1)
+
+    // Cień
+    ctx.beginPath()
+    ctx.ellipse(0, 10 * scale, 11 * scale, 4.5 * scale, 0, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'
+    ctx.fill()
+
+    // Nogi
+    ctx.fillStyle = shorts
+    ctx.fillRect(-7 * scale - legSwing * 0.15, 2 * scale, 5.5 * scale, 11 * scale)
+    ctx.fillRect(1.5 * scale + legSwing * 0.15, 2 * scale, 5.5 * scale, 11 * scale)
+    ctx.fillStyle = '#2a2a2a'
+    ctx.fillRect(-7 * scale - legSwing * 0.15, 11 * scale, 5.5 * scale, 3 * scale)
+    ctx.fillRect(1.5 * scale + legSwing * 0.15, 11 * scale, 5.5 * scale, 3 * scale)
+
+    // Tułów / koszulka
+    ctx.fillStyle = kit
+    roundRect(-9 * scale, -10 * scale, 18 * scale, 14 * scale, 4 * scale)
+    ctx.fill()
+    if (opts.gk) {
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'
+      ctx.fillRect(-9 * scale, -2 * scale, 18 * scale, 3 * scale)
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(0, -8 * scale)
+      ctx.lineTo(0, 2 * scale)
+      ctx.stroke()
+    }
+
+    // Ręce
+    ctx.fillStyle = kit
+    ctx.fillRect(-13 * scale, -6 * scale, 4 * scale, 8 * scale)
+    ctx.fillRect(9 * scale, -6 * scale, 4 * scale, 8 * scale)
+    ctx.fillStyle = skin
+    ctx.beginPath()
+    ctx.arc(-11 * scale, 3 * scale, 2.4 * scale, 0, Math.PI * 2)
+    ctx.arc(11 * scale, 3 * scale, 2.4 * scale, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Głowa
+    ctx.beginPath()
+    ctx.arc(0, -15 * scale, 6.2 * scale, 0, Math.PI * 2)
+    ctx.fillStyle = skin
+    ctx.fill()
+    ctx.fillStyle = '#2c2118'
+    ctx.beginPath()
+    ctx.ellipse(0, -17 * scale, 6 * scale, 3.2 * scale, 0, Math.PI, Math.PI * 2)
+    ctx.fill()
+
+    ctx.restore()
+
+    if (opts.label) {
+      ctx.fillStyle = 'rgba(242,246,243,0.92)'
+      ctx.font = '600 11px "Source Sans 3", sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(opts.label, x, y + 22 * scale)
+    }
+  }
+
+  function roundRect(x: number, y: number, w: number, h: number, r: number): void {
+    const rr = Math.min(r, w / 2, h / 2)
+    ctx.beginPath()
+    ctx.moveTo(x + rr, y)
+    ctx.arcTo(x + w, y, x + w, y + h, rr)
+    ctx.arcTo(x + w, y + h, x, y + h, rr)
+    ctx.arcTo(x, y + h, x, y, rr)
+    ctx.arcTo(x, y, x + w, y, rr)
+    ctx.closePath()
+  }
+
+  function drawBall(x: number, y: number, r = 11): void {
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fillStyle = '#f4f7f5'
+    ctx.fill()
+    ctx.strokeStyle = '#1a1a1a'
+    ctx.lineWidth = 1.4
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(x, y - r * 0.15, r * 0.28, 0, Math.PI * 2)
+    ctx.fillStyle = '#1a1a1a'
+    ctx.fill()
+    ctx.strokeStyle = '#1a1a1a'
+    ctx.lineWidth = 1
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2
+      ctx.beginPath()
+      ctx.moveTo(x, y - r * 0.15)
+      ctx.lineTo(x + Math.cos(a) * r * 0.85, y - r * 0.15 + Math.sin(a) * r * 0.85)
+      ctx.stroke()
+    }
+  }
+
   function draw(): void {
     const w = canvas.clientWidth
     const h = canvas.clientHeight
+    const t = performance.now() / 140
     ctx.clearRect(0, 0, w, h)
     drawPitch(w, h)
 
     for (const d of defenders) {
-      ctx.beginPath()
-      ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2)
-      ctx.fillStyle = '#3d5a80'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)'
-      ctx.lineWidth = 2
-      ctx.stroke()
+      const moving = Math.abs(d.vx) > 0.05 && !dragging
+      drawFootballer(d.x, d.y, {
+        kit: '#3d5a80',
+        shorts: '#243447',
+        scale: 0.95 + d.r / 40,
+        facing: d.vx >= 0 ? 1 : -1,
+        walk: moving ? t * Math.abs(d.vx) : 0,
+      })
     }
 
     if (action === 'shoot') {
@@ -309,44 +439,74 @@ export function mountMatchMoment(
         ctx.lineTo(x, g.y + g.h)
         ctx.stroke()
       }
-      ctx.fillStyle = '#ff7a6e'
-      const kw = 28 + difficulty * 10
-      ctx.fillRect(keeperX - kw / 2, g.y + g.h - 8, kw, 14)
-      ctx.beginPath()
-      ctx.arc(keeperX, g.y + g.h - 14, 10 + difficulty * 3, 0, Math.PI * 2)
-      ctx.fill()
+      drawFootballer(keeperX, g.y + g.h + 6, {
+        kit: '#ff9f43',
+        shorts: '#2a2a2a',
+        scale: 1 + difficulty * 0.15,
+        facing: keeperDir,
+        walk: t * keeperSpeed * 0.8,
+        gk: true,
+        label: 'BR',
+      })
+      // Ty — przy piłce (gdy nie leci jeszcze)
+      if (!flying?.active) {
+        drawFootballer(origin.x, origin.y + 18, {
+          kit: '#c8f560',
+          shorts: '#1a2332',
+          scale: 1.05,
+          facing: 1,
+          walk: dragging ? t * 2 : 0,
+          label: 'Ty',
+        })
+      }
     } else if (action === 'pass') {
-      const t = teammate()
+      const tm = teammate()
       ctx.beginPath()
-      ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(200,245,96,0.25)'
+      ctx.arc(tm.x, tm.y, tm.r, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(200,245,96,0.16)'
       ctx.fill()
-      ctx.strokeStyle = '#c8f560'
+      ctx.strokeStyle = 'rgba(200,245,96,0.55)'
       ctx.lineWidth = 2
       ctx.stroke()
-      ctx.fillStyle = '#c8f560'
-      ctx.font = '700 12px "Source Sans 3", sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('Kolega', t.x, t.y + 4)
+      drawFootballer(tm.x, tm.y, {
+        kit: '#c8f560',
+        shorts: '#1a2332',
+        scale: 1,
+        facing: -1,
+        walk: t * 0.6,
+        label: 'Kolega',
+      })
+      if (!flying?.active) {
+        drawFootballer(origin.x, origin.y + 18, {
+          kit: '#e8f5a0',
+          shorts: '#1a2332',
+          scale: 1.05,
+          facing: 1,
+          walk: dragging ? t * 2 : 0,
+          label: 'Ty',
+        })
+      }
     } else if (action === 'tackle') {
-      // Rywal z piłką
-      ctx.beginPath()
-      ctx.arc(threat.x, threat.y, 16, 0, Math.PI * 2)
-      ctx.fillStyle = '#ff7a6e'
-      ctx.fill()
-      ctx.beginPath()
-      ctx.arc(threat.x + 10, threat.y - 4, threat.r, 0, Math.PI * 2)
-      ctx.fillStyle = '#f4f7f5'
-      ctx.fill()
-      ctx.fillStyle = 'rgba(242,246,243,0.9)'
-      ctx.font = '600 12px "Source Sans 3", sans-serif'
-      ctx.textAlign = 'center'
-      ctx.fillText('Rywal', threat.x, threat.y + 28)
-      // Twój „tackle” = biała piłka / wślizg z origin
-      ctx.beginPath()
-      ctx.arc(origin.x, origin.y, 10, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(200,245,96,0.35)'
-      ctx.fill()
+      drawFootballer(threat.x, threat.y, {
+        kit: '#ff7a6e',
+        shorts: '#3a1f1c',
+        scale: 1.05,
+        facing: threat.vx >= 0 ? 1 : -1,
+        walk: t * Math.abs(threat.vx),
+        label: 'Rywal',
+      })
+      // Piłka przy rywalu (dopóki nie oddajesz wślizgu)
+      if (!flying?.active && !dragging) {
+        drawBall(threat.x + (threat.vx >= 0 ? 14 : -14), threat.y + 2, 8)
+      }
+      drawFootballer(origin.x, origin.y, {
+        kit: '#c8f560',
+        shorts: '#1a2332',
+        scale: 1.05,
+        facing: Math.sign(threat.x - origin.x) || 1,
+        walk: dragging ? t * 2.4 : 0,
+        label: 'Ty',
+      })
     } else if (action === 'clear') {
       drawGoal()
       ctx.fillStyle = 'rgba(255,122,110,0.15)'
@@ -365,10 +525,17 @@ export function mountMatchMoment(
         ctx.textAlign = 'center'
         ctx.fillText(z.label, z.x, z.y + 4)
       }
+      drawFootballer(origin.x, origin.y, {
+        kit: '#c8f560',
+        shorts: '#1a2332',
+        scale: 1.05,
+        facing: 1,
+        walk: dragging ? t * 2 : 0,
+        label: 'Ty',
+      })
     }
 
     if (dragging) {
-      const base = dragTarget()
       const from = action === 'clear' ? { x: threat.x, y: threat.y } : origin
       ctx.strokeStyle = 'rgba(255,255,255,0.45)'
       ctx.setLineDash([6, 6])
@@ -377,16 +544,12 @@ export function mountMatchMoment(
       ctx.lineTo(ball.x, ball.y)
       ctx.stroke()
       ctx.setLineDash([])
-      void base
     }
 
-    ctx.beginPath()
-    ctx.arc(ball.x, ball.y, 15, 0, Math.PI * 2)
-    ctx.fillStyle = '#f4f7f5'
-    ctx.fill()
-    ctx.strokeStyle = '#1a1a1a'
-    ctx.lineWidth = 1.5
-    ctx.stroke()
+    // W clear piłka jest przy threat — rysuj zawsze; w tackle tylko gdy lecisz / ciągniesz
+    if (action !== 'tackle' || flying?.active || dragging) {
+      drawBall(ball.x, ball.y, action === 'clear' && !flying?.active ? 9 : 11)
+    }
 
     ctx.fillStyle = 'rgba(242,246,243,0.95)'
     ctx.font = '600 13px "Source Sans 3", sans-serif'
