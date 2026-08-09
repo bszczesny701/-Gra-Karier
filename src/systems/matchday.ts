@@ -322,19 +322,27 @@ function finishPlayerMatchCore(
         matchGoals,
       )
     }
+    // Szersza skala: 1 gol często 7.5–8.5; bez gola też bywa 6.5–7.8 przy dobrym dniu
+    const resultSwing =
+      (homeId === season.clubId && hg > ag) || (awayId === season.clubId && ag > hg)
+        ? 0.45 + Math.random() * 0.35
+        : hg === ag
+          ? 0.1 + Math.random() * 0.2
+          : -(0.25 + Math.random() * 0.35)
     rating = clamp(
-      5.4 +
-        season.matchMood / 85 +
-        (player.overall - 45) / 40 +
-        matchGoals * 0.8 +
-        matchAssists * 0.4 +
-        (Math.random() * 1.4 - 0.6),
-      3.5,
-      9.6,
+      5.55 +
+        season.matchMood / 72 +
+        (player.overall - 45) / 48 +
+        matchGoals * 1.05 +
+        matchAssists * 0.65 +
+        resultSwing +
+        (Math.random() * 2.4 - 0.9),
+      3.8,
+      9.8,
     )
     live.ratingSum += rating
-    if (rating >= 7.4) season.matchMood = clamp(season.matchMood + 2 + Math.random() * 2, 28, 88)
-    else if (rating < 5.0) season.matchMood = clamp(season.matchMood - (1 + Math.random() * 2), 28, 88)
+    if (rating >= 7.2) season.matchMood = clamp(season.matchMood + 2 + Math.random() * 2, 28, 88)
+    else if (rating < 5.2) season.matchMood = clamp(season.matchMood - (1 + Math.random() * 2), 28, 88)
 
     live.appsThisSeason++
     if (live.appsThisSeason === live.injuryAtApp && !player.injury) {

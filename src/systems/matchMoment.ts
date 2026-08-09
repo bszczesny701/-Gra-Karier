@@ -250,11 +250,13 @@ export function mountMatchMoment(
     const pullX = base.x - ball.x
     const pullY = base.y - ball.y
     const power = Math.hypot(pullX, pullY)
-    if (power < 12) {
+    // Krótki tap = anuluj; wyraźne naciągnięcie zawsze odpala lot
+    if (power < 8) {
       ball = action === 'clear' ? { x: threat.x, y: threat.y } : { ...origin }
       return
     }
-    const speed = Math.min(18.5 - difficulty * 2, power / 4)
+    // Min. prędkość — bez tego miękki strzał „zamiera” w apogeum
+    const speed = Math.max(7.5, Math.min(19 - difficulty * 2, power / 3.4))
     flying = {
       vx: (pullX / power) * speed,
       vy: (pullY / power) * speed,
@@ -452,12 +454,9 @@ export function mountMatchMoment(
       const hitSafe =
         action === 'clear' && safeZones.some((z) => dist(ball, z) <= z.r + 10)
       const blocked = action !== 'tackle' && action !== 'clear' && hitDefender()
-      const out =
-        ball.x < 8 ||
-        ball.x > w - 8 ||
-        ball.y < 8 ||
-        ball.y > h - 8 ||
-        Math.hypot(flying.vx, flying.vy) < 0.65
+      // Nie kończ po „prawie zerowej” prędkości — przy strzale w górę apogeum
+      // chwilowo ma ~0 i piłka wyglądała jakby stała w miejscu.
+      const out = ball.x < 8 || ball.x > w - 8 || ball.y < 8 || ball.y > h - 8
       if (blocked) {
         message = 'Zablokowane przez obrońcę!'
         finish()
