@@ -1,9 +1,10 @@
-import { CLUBS, getClub, getEffectiveStrength, getLeague, getLeagueForClub } from '../data/clubs'
+import { CLUBS, getClub, getEffectiveStrength, getLeague, getLeagueForClub, leagueByTier } from '../data/clubs'
 import type {
   Attributes,
   ClubStanding,
   CupStage,
   MatchAction,
+  PendingCupMatch,
   PendingKeyMatch,
   Player,
   PositionalRival,
@@ -392,34 +393,78 @@ export function scorerMapFromEntries(entries: ScorerEntry[]): Map<string, Scorer
   return map
 }
 
+export const CUP_ROUNDS: Array<{ id: CupStage; difficulty: number }> = [
+  { id: 'r32', difficulty: 0.92 },
+  { id: 'r16', difficulty: 1.0 },
+  { id: 'qf', difficulty: 1.08 },
+  { id: 'sf', difficulty: 1.15 },
+  { id: 'final', difficulty: 1.22 },
+]
+
+/** Po ilu meczach ligowych (zawodnika) wstawić kolejną rundę pucharu */
+export const CUP_INSERT_AFTER_LEAGUE = [2, 7, 13, 19, 26]
+
+export function initCupState(season: SeasonState): void {
+  season.cupAlive = true
+  season.cupFurthest = 'out'
+  season.cupRoundIndex = 0
+  season.cupLeagueMatchesDone = 0
+  season.pendingCup = null
+  season.cupPlayedLive = false
+  season.winterDecisionDone = false
+}
+
+export function pickCupOpponent(playerClubId: string): string {
+  const own = getClub(playerClubId)
+  const ownLeague = getLeagueForClub(playerClubId)
+  const rivalsPool = Object.keys(CLUBS).filter((id) => {
+    if (id === playerClubId) return false
+    const c = getClub(id)
+    if (c.country === own.country) return true
+    return getLeagueForClub(id).tier <= ownLeague.tier + 1
+  })
+  const pool = rivalsPool.length ? rivalsPool : Object.keys(CLUBS).filter((id) => id !== playerClubId)
+  return pool[rngInt(pool.length)]!
+}
+
+export function scheduleNextCupMatch(season: SeasonState): PendingCupMatch | null {
+  if (!season.cupAlive || season.cupRoundIndex >= CUP_ROUNDS.length) return null
+  const round = CUP_ROUNDS[season.cupRoundIndex]!
+  const opponentId = pickCupOpponent(season.clubId)
+  const home = Math.random() < 0.55
+  const pending: PendingCupMatch = {
+    stage: round.id,
+    opponentId,
+    homeId: home ? season.clubId : opponentId,
+    awayId: home ? opponentId : season.clubId,
+  }
+  season.pendingCup = pending
+  return pending
+}
+
+export function shouldInsertCupRound(season: SeasonState): boolean {
+  if (!season.cupAlive || season.pendingCup || season.cupRoundIndex >= CUP_ROUNDS.length) {
+    return false
+  }
+  return CUP_INSERT_AFTER_LEAGUE.includes(season.cupLeagueMatchesDone)
+}
+
 function simulatePolishCup(
   playerClubId: string,
   player: Player,
   strengthMods: Record<string, number>,
   rival?: PositionalRival | null,
   rivalPressure = 0,
+  startRoundIndex = 0,
+  furthest: CupStage = 'out',
 ): { stage: CupStage; playerGoals: number; playerApps: number } {
-  const rounds: Array<{ id: CupStage; difficulty: number }> = [
-    { id: 'r32', difficulty: 0.92 },
-    { id: 'r16', difficulty: 1.0 },
-    { id: 'qf', difficulty: 1.08 },
-    { id: 'sf', difficulty: 1.15 },
-    { id: 'final', difficulty: 1.22 },
-  ]
-
-  let furthest: CupStage = 'out'
   let playerGoals = 0
   let playerApps = 0
-  const own = getClub(playerClubId)
-  const ownLeague = getLeagueForClub(playerClubId)
-  const rivalsPool = Object.keys(CLUBS).filter((id) => {
-    if (id === playerClubId) return false
-    return getClub(id).country === own.country || getLeagueForClub(id).tier <= ownLeague.tier + 1
-  })
-  const pool = rivalsPool.length ? rivalsPool : Object.keys(CLUBS).filter((id) => id !== playerClubId)
+  let currentFurthest = furthest
 
-  for (const round of rounds) {
-    const rivalId = pool[rngInt(pool.length)]!
+  for (let i = startRoundIndex; i < CUP_ROUNDS.length; i++) {
+    const round = CUP_ROUNDS[i]!
+    const rivalId = pickCupOpponent(playerClubId)
     const cupRival = getClub(rivalId)
     const played = chance(
       appearanceChance(player, playerClubId, strengthMods, rival, rivalPressure),
@@ -433,6 +478,7 @@ function simulatePolishCup(
       if (chance(Math.min(0.55, goalP))) playerGoals++
     }
 
+    const own = getClub(playerClubId)
     const boost = played
       ? (player.overall - 50) * 0.07 + (Math.random() * 6 - 2)
       : -2
@@ -441,14 +487,14 @@ function simulatePolishCup(
     const win = ownP >= rivP
 
     if (!win) {
-      return { stage: furthest === 'out' ? 'out' : furthest, playerGoals, playerApps }
+      return { stage: currentFurthest === 'out' ? 'out' : currentFurthest, playerGoals, playerApps }
     }
-    furthest = round.id
+    currentFurthest = round.id
     if (round.id === 'final') {
       return { stage: 'winner', playerGoals, playerApps }
     }
   }
-  return { stage: furthest, playerGoals, playerApps }
+  return { stage: currentFurthest, playerGoals, playerApps }
 }
 
 export interface FixtureBatchState {
@@ -825,13 +871,37 @@ export function finalizeSeasonReport(
     player.injury = null
   }
 
-  const cup = simulatePolishCup(
-    season.clubId,
-    { ...player, form: clamp(matchMood, 25, 80) },
-    strengthMods,
-    season.rival,
-    season.rivalPressure ?? 0,
-  )
+  const cupCountry = getClub(season.clubId).country
+  let cup: { stage: CupStage; playerGoals: number; playerApps: number }
+  if (season.cupPlayedLive) {
+    if (season.cupFurthest === 'winner') {
+      cup = { stage: 'winner', playerGoals: 0, playerApps: 0 }
+    } else if (season.cupAlive && season.cupRoundIndex < CUP_ROUNDS.length) {
+      cup = simulatePolishCup(
+        season.clubId,
+        { ...player, form: clamp(matchMood, 25, 80) },
+        strengthMods,
+        season.rival,
+        season.rivalPressure ?? 0,
+        season.cupRoundIndex,
+        season.cupFurthest,
+      )
+    } else {
+      cup = {
+        stage: season.cupFurthest === 'out' ? 'out' : season.cupFurthest,
+        playerGoals: 0,
+        playerApps: 0,
+      }
+    }
+  } else {
+    cup = simulatePolishCup(
+      season.clubId,
+      { ...player, form: clamp(matchMood, 25, 80) },
+      strengthMods,
+      season.rival,
+      season.rivalPressure ?? 0,
+    )
+  }
   goals += cup.playerGoals
   appearances += cup.playerApps
   if (cup.playerGoals > 0) {
@@ -927,15 +997,18 @@ export function finalizeSeasonReport(
   // Minigierka w trakcie sezonu zastępuje post-season key matches
   const keyMatchesPending: PendingKeyMatch[] = []
 
-  const promotion = league.country === 'PL' && league.tier > 1 && place <= 2
-  const relegation =
-    league.country !== 'PL' || league.tier <= 0
-      ? false
-      : league.tier === 1
+  const promotion =
+    place <= 2 && Boolean(leagueByTier(league.tier - 1, league.country))
+  const hasLower = Boolean(leagueByTier(league.tier + 1, league.country))
+  const relegation = !hasLower
+    ? false
+    : league.country === 'PL'
+      ? league.tier === 1
         ? place >= clubCount - 1
         : league.tier < 4
           ? place >= clubCount
           : false
+      : place >= clubCount - 1
   const title = place === 1 && league.tier <= 1
 
   const underContract = player.contract.yearsLeft > 1
@@ -992,7 +1065,7 @@ export function finalizeSeasonReport(
   if (title) narrative += 'Mistrzostwo Polski! '
   if (injuryNote) narrative += `Kontuzje: ${injuryNote} (opuszczone mecze: ${matchesMissedInjury}). `
   narrative += `${rivalNote} `
-  narrative += cupStageLabel(cup.stage) + '. ' + contractNote
+  narrative += cupStageLabel(cup.stage, cupCountry) + '. ' + contractNote
 
   return {
     year: season.year,
@@ -1012,7 +1085,7 @@ export function finalizeSeasonReport(
     overallAfter: finalOverall,
     overallDelta: finalDelta,
     cupStage: cup.stage,
-    cupLabel: cupStageLabel(cup.stage),
+    cupLabel: cupStageLabel(cup.stage, cupCountry),
     scorers,
     playerScorerRank: rank,
     standings,

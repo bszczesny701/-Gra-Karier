@@ -1,5 +1,6 @@
 import { getClub, getEffectiveStrength } from '../data/clubs'
 import type {
+  CupStage,
   LiveSeasonStats,
   MatchAction,
   MatchDayResult,
@@ -11,20 +12,24 @@ import type {
   SeasonState,
   WinterBreakSnapshot,
 } from '../state/types'
-import { clamp, clampFloat } from '../state/types'
+import { clamp, clampFloat, cupCompetitionName, cupStageLabel } from '../state/types'
 import { playerTablePosition, sortedStandings } from './standings'
 import {
   bumpScorer,
   buildSeasonFixtures,
   chance,
+  CUP_ROUNDS,
   describeRival,
   distributeClubGoals,
   ensureClubScorers,
   finalizeSeasonReport,
+  initCupState,
   matchAppearanceChance,
   rngInt,
+  scheduleNextCupMatch,
   scoreline,
   scorerMapFromEntries,
+  shouldInsertCupRound,
   tweakRivalForm,
   updateRivalAfterMatch,
   updateStanding,
@@ -80,6 +85,7 @@ export function initSeasonMatchdayFields(season: SeasonState, playerOverall: num
   season.liveStats = createEmptyLiveStats(playerOverall, fixturesForPlayer)
   season.liveStats.injuryAtApp = injuryAtApp
   season.liveStats.scorerEntries = [...scorerMap.values()].map((e) => ({ ...e }))
+  initCupState(season)
 }
 
 export function startSeasonCalendar(
@@ -283,9 +289,11 @@ function finishPlayerMatchCore(
     homeGoals: number
     awayGoals: number
     narrativeExtra?: string
+    isCup?: boolean
+    cupStage?: CupStage
   },
 ): MatchDayResult {
-  const { homeId, awayId, starts, matchGoals, matchAssists, moodBefore } = args
+  const { homeId, awayId, starts, matchGoals, matchAssists, moodBefore, isCup } = args
   let hg = args.homeGoals
   let ag = args.awayGoals
 
@@ -294,19 +302,29 @@ function finishPlayerMatchCore(
     else ag = Math.max(ag, matchGoals)
   }
 
-  updateStanding(season.standings.find((s) => s.clubId === homeId)!, hg, ag)
-  updateStanding(season.standings.find((s) => s.clubId === awayId)!, ag, hg)
+  // Puchar = bez punktów ligowych; wynik tylko narracja + postęp pucharu
+  if (!isCup) {
+    updateStanding(season.standings.find((s) => s.clubId === homeId)!, hg, ag)
+    updateStanding(season.standings.find((s) => s.clubId === awayId)!, ag, hg)
 
-  for (const [clubId, gFor] of [
-    [homeId, hg],
-    [awayId, ag],
-  ] as const) {
-    if (clubId === season.clubId) {
-      const teammates = Math.max(0, gFor - (starts ? matchGoals : 0))
-      distributeClubGoals(scorerMap, clubId, season.year, teammates)
-    } else {
-      distributeClubGoals(scorerMap, clubId, season.year, gFor)
+    for (const [clubId, gFor] of [
+      [homeId, hg],
+      [awayId, ag],
+    ] as const) {
+      if (clubId === season.clubId) {
+        const teammates = Math.max(0, gFor - (starts ? matchGoals : 0))
+        distributeClubGoals(scorerMap, clubId, season.year, teammates)
+      } else {
+        distributeClubGoals(scorerMap, clubId, season.year, gFor)
+      }
     }
+  } else if (starts && matchGoals > 0) {
+    bumpScorer(
+      scorerMap,
+      'player',
+      { name: player.name, clubId: season.clubId, goals: 0, isPlayer: true },
+      matchGoals,
+    )
   }
 
   const live = season.liveStats
@@ -315,7 +333,7 @@ function finishPlayerMatchCore(
     live.appearances++
     live.goals += matchGoals
     live.assists += matchAssists
-    if (matchGoals > 0) {
+    if (matchGoals > 0 && !isCup) {
       bumpScorer(
         scorerMap,
         'player',
@@ -395,6 +413,8 @@ function finishPlayerMatchCore(
   const won =
     (homeId === season.clubId && hg > ag) || (awayId === season.clubId && ag > hg)
   const draw = hg === ag
+  const cupCountry = getClub(season.clubId).country
+  const cupName = cupCompetitionName(cupCountry)
   let narrative = starts
     ? `Zagrałeś${matchGoals ? ` · ${matchGoals} G` : ''}${matchAssists ? ` · ${matchAssists} A` : ''}${
         rating != null ? ` · ocena ${rating.toFixed(1)}` : ''
@@ -402,10 +422,42 @@ function finishPlayerMatchCore(
     : player.injury
       ? `Nie zagrałeś (kontuzja).`
       : `Zostałeś na ławce.`
-  if (won) narrative += ' Zwycięstwo.'
-  else if (draw) narrative += ' Remis.'
-  else narrative += ' Porażka.'
+  if (isCup && args.cupStage) {
+    narrative = `[${cupName} · ${cupStageLabel(args.cupStage, cupCountry)}] ` + narrative
+  }
+  if (won) narrative += isCup ? ' Awans!' : ' Zwycięstwo.'
+  else if (draw) narrative += isCup ? ' Remis — dogrywka/rzuty (los).' : ' Remis.'
+  else narrative += isCup ? ' Odpadasz z pucharu.' : ' Porażka.'
   if (args.narrativeExtra) narrative += ` ${args.narrativeExtra}`
+
+  // W pucharze remis = rzut monetą kto awansuje
+  let cupWon = won
+  if (isCup && draw) cupWon = Math.random() < 0.5
+  if (isCup && !won && draw) {
+    narrative = narrative.replace(
+      ' Remis — dogrywka/rzuty (los).',
+      cupWon ? ' Remis — awans po rzutach!' : ' Remis — odpadnięcie po rzutach.',
+    )
+  }
+
+  if (isCup) {
+    season.cupPlayedLive = true
+    season.pendingCup = null
+    if (cupWon) {
+      season.cupFurthest = args.cupStage === 'final' ? 'winner' : (args.cupStage ?? season.cupFurthest)
+      season.cupRoundIndex++
+      if (args.cupStage === 'final' || season.cupFurthest === 'winner') {
+        season.cupAlive = false
+        season.cupFurthest = 'winner'
+        narrative += ` Zdobywasz ${cupName}!`
+      }
+    } else {
+      season.cupAlive = false
+      if (season.cupFurthest === 'out' && args.cupStage) {
+        // odpadnięcie w pierwszej rundzie — furthest zostaje out
+      }
+    }
+  }
 
   updateRivalAfterMatch(season.rival, player, starts, rating, season.matchMood)
 
@@ -430,8 +482,12 @@ function afterMatchProgress(
   season: SeasonState,
   strengthMods: Record<string, number>,
   match: MatchDayResult,
+  opts?: { isCup?: boolean },
 ): MatchdayOutcome {
   season.lastMatch = match
+  if (!opts?.isCup) {
+    season.cupLeagueMatchesDone++
+  }
   const mid = Math.ceil(season.fixtures.length / 2)
   if (!season.winterBreakTaken && season.fixtureIndex >= mid) {
     season.winterBreakTaken = true
@@ -444,7 +500,11 @@ function afterMatchProgress(
     )
   }
 
-  if (!nextPlayerFixture(season) && season.phase !== 'winterDone') {
+  const moreLeague = Boolean(nextPlayerFixture(season))
+  const moreCup =
+    Boolean(season.pendingCup) ||
+    (season.cupAlive && season.cupRoundIndex < CUP_ROUNDS.length)
+  if (!moreLeague && !moreCup && season.phase !== 'winterDone') {
     return { kind: 'seasonDone', report: finalizeMatchdaySeason(player, season, strengthMods) }
   }
   return { kind: 'matchResult', match }
@@ -548,6 +608,23 @@ export function playNextMatchday(
   if (season.pendingGoalMoment) return { kind: 'goalMoment' }
 
   const scorerMap = liveScorerMap(season)
+
+  if (!season.pendingCup && shouldInsertCupRound(season)) {
+    scheduleNextCupMatch(season)
+  }
+  if (
+    !season.pendingCup &&
+    !nextPlayerFixture(season) &&
+    season.cupAlive &&
+    season.cupRoundIndex < CUP_ROUNDS.length
+  ) {
+    scheduleNextCupMatch(season)
+  }
+
+  if (season.pendingCup) {
+    return playCupMatchday(player, season, strengthMods, scorerMap)
+  }
+
   const next = nextPlayerFixture(season)
 
   if (!next) {
@@ -660,6 +737,117 @@ export function playNextMatchday(
   return afterMatchProgress(player, season, strengthMods, match)
 }
 
+function playCupMatchday(
+  player: Player,
+  season: SeasonState,
+  strengthMods: Record<string, number>,
+  scorerMap: Map<string, ScorerEntry>,
+): MatchdayOutcome {
+  const cup = season.pendingCup!
+  const { homeId, awayId, stage, opponentId } = cup
+  const round = CUP_ROUNDS.find((r) => r.id === stage) ?? CUP_ROUNDS[0]!
+  const moodBefore = season.matchMood
+  season.matchMood = clamp(
+    season.matchMood * 0.82 + 50 * 0.18 + (Math.random() * 10 - 5),
+    28,
+    88,
+  )
+
+  const injuredOut =
+    player.injury != null && (player.injury.seasonEnding || player.injury.matchesLeft > 0)
+
+  let starts = false
+  let boost = 0
+  let matchAssists = 0
+
+  if (injuredOut) {
+    season.liveStats.matchesMissedInjury++
+    if (player.injury && !player.injury.seasonEnding) {
+      player.injury.matchesLeft = Math.max(0, player.injury.matchesLeft - 1)
+      if (player.injury.matchesLeft === 0) {
+        season.liveStats.injuryLabels.push(`Powrót po: ${player.injury.label}`)
+        player.injury = null
+      }
+    }
+  } else {
+    starts = chance(
+      Math.min(
+        0.92,
+        matchAppearanceChance(
+          player,
+          season.matchMood,
+          season.clubId,
+          strengthMods,
+          season.rival,
+          season.rivalPressure ?? 0,
+        ) + 0.12,
+      ),
+    )
+    if (starts) {
+      boost = (player.overall - 50) * 0.1 + (season.matchMood - 50) * 0.04
+      if (chance(0.12)) matchAssists = 1
+    }
+  }
+
+  const homePowFinal =
+    (homeId === season.clubId
+      ? getEffectiveStrength(homeId, strengthMods) + (starts ? boost : 0)
+      : getEffectiveStrength(homeId, strengthMods) *
+        (homeId === opponentId ? round.difficulty : 1)) +
+    Math.random() * 6 -
+    3
+  const awayPow =
+    (awayId === season.clubId
+      ? getEffectiveStrength(awayId, strengthMods) + (starts ? boost : 0)
+      : getEffectiveStrength(awayId, strengthMods) *
+        (awayId === opponentId ? round.difficulty : 1)) +
+    Math.random() * 6 -
+    3
+  const baseHg = scoreline(homePowFinal, awayPow * 0.9)
+  const baseAg = scoreline(awayPow, homePowFinal * 0.9)
+
+  const cupCountry = getClub(season.clubId).country
+  const cupTitle = cupCompetitionName(cupCountry)
+
+  if (starts && chance(goalMomentChance(player, season.matchMood) + 0.06)) {
+    const spec = momentForPosition(player.position)
+    season.pendingGoalMoment = {
+      fixtureIndex: -1,
+      homeId,
+      awayId,
+      opponentId,
+      boost,
+      matchAssists,
+      moodBefore,
+      baseHomeGoals: baseHg,
+      baseAwayGoals: baseAg,
+      label: `${cupTitle}: ${spec.label}`,
+      description: `${cupStageLabel(stage, cupCountry)} vs ${getClub(opponentId).name}. ${spec.description(getClub(opponentId).name)}`,
+      action: spec.action,
+      reward: spec.reward,
+      isCup: true,
+      cupStage: stage,
+    }
+    persistScorers(season, scorerMap)
+    return { kind: 'goalMoment' }
+  }
+
+  const match = finishPlayerMatchCore(player, season, scorerMap, {
+    homeId,
+    awayId,
+    starts,
+    matchGoals: 0,
+    matchAssists,
+    moodBefore,
+    homeGoals: baseHg,
+    awayGoals: baseAg,
+    isCup: true,
+    cupStage: stage,
+  })
+  persistScorers(season, scorerMap)
+  return afterMatchProgress(player, season, strengthMods, match, { isCup: true })
+}
+
 export function resolveGoalMoment(
   player: Player,
   season: SeasonState,
@@ -747,6 +935,8 @@ export function resolveGoalMoment(
     homeGoals: hg,
     awayGoals: ag,
     narrativeExtra,
+    isCup: pending.isCup,
+    cupStage: pending.cupStage,
   })
 
   // Defensywny sukces: lekki boost oceny w narracji (rating już policzony)
@@ -757,8 +947,10 @@ export function resolveGoalMoment(
   }
 
   season.pendingGoalMoment = null
-  season.fixtureIndex = pending.fixtureIndex + 1
-  return afterMatchProgress(player, season, strengthMods, match)
+  if (!pending.isCup && pending.fixtureIndex >= 0) {
+    season.fixtureIndex = pending.fixtureIndex + 1
+  }
+  return afterMatchProgress(player, season, strengthMods, match, { isCup: pending.isCup })
 }
 
 /** Re-export for callers that used standings helpers via season flow. */

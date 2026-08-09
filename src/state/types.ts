@@ -65,6 +65,16 @@ export interface PendingGoalMoment {
   action: MatchAction
   /** Co daje sukces: gol / asysta / zatrzymanie akcji rywala */
   reward: 'goal' | 'assist' | 'stop'
+  /** Mecz pucharowy — bez punktów ligowych */
+  isCup?: boolean
+  cupStage?: CupStage
+}
+
+export interface PendingCupMatch {
+  stage: CupStage
+  opponentId: string
+  homeId: string
+  awayId: string
 }
 
 export interface LiveSeasonStats {
@@ -199,6 +209,14 @@ export interface SeasonState {
   lastMatch: MatchDayResult | null
   pendingGoalMoment: PendingGoalMoment | null
   winterBreakTaken: boolean
+  /** Puchar krajowy — grany mecz po meczu */
+  cupAlive: boolean
+  cupFurthest: CupStage
+  cupRoundIndex: number
+  cupLeagueMatchesDone: number
+  pendingCup: PendingCupMatch | null
+  cupPlayedLive: boolean
+  winterDecisionDone: boolean
 }
 
 export interface PendingKeyMatch {
@@ -235,6 +253,7 @@ export interface PendingDecision {
   speakerRole: string
   messages: string[]
   description: string
+  source?: 'preseason' | 'winter'
   choices: Array<{
     id: string
     label: string
@@ -322,7 +341,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-save-v11'
-export const SAVE_VERSION = 11
+export const SAVE_VERSION = 12
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -426,24 +445,32 @@ export function performanceFormScore(
   return clamp(score, 20, 94)
 }
 
-export function cupStageLabel(stage: CupStage): string {
+export function cupCompetitionName(country: string): string {
+  if (country === 'ENG') return 'FA Cup'
+  if (country === 'ESP') return 'Copa del Rey'
+  if (country === 'ITA') return 'Coppa Italia'
+  return 'Puchar Polski'
+}
+
+export function cupStageLabel(stage: CupStage, country = 'PL'): string {
+  const cup = cupCompetitionName(country)
   switch (stage) {
     case 'winner':
-      return 'Zdobywca Pucharu Polski'
+      return `Zdobywca: ${cup}`
     case 'final':
-      return 'Finał Pucharu Polski'
+      return `Finał — ${cup}`
     case 'sf':
-      return 'Półfinał PP'
+      return `Półfinał — ${cup}`
     case 'qf':
-      return 'Ćwierćfinał PP'
+      return `Ćwierćfinał — ${cup}`
     case 'r16':
-      return '1/8 PP'
+      return `1/8 — ${cup}`
     case 'r32':
-      return '1/16 PP'
+      return `1/16 — ${cup}`
     case 'out':
-      return 'Odpadnięcie z PP'
+      return `Odpadnięcie — ${cup}`
     default:
-      return 'Puchar Polski'
+      return cup
   }
 }
 

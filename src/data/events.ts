@@ -1099,6 +1099,356 @@ export const CAREER_EVENTS: CareerEvent[] = [
       },
     ],
   },
+  {
+    id: 'derby_week',
+    title: 'Tydzień derbowy',
+    speaker: 'Kapitan',
+    speakerRole: 'Szatnia',
+    messages: [
+      'Derby za trzy dni. Kibice już gotują atmosferę.',
+      'Idziesz na mecz głową, czy dajesz się ponieść emocjom?',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'focus',
+        label: 'Cisza i koncentracja',
+        hint: '+podanie, +obrona',
+        effects: [
+          { key: 'passing', delta: 1 },
+          { key: 'defending', delta: 1 },
+        ],
+      },
+      {
+        id: 'fire',
+        label: 'Podkręcam szatnię',
+        hint: '+morale, +reputacja, −rywal',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'reputation', delta: 1 },
+          { key: 'rivalPressure', delta: -1 },
+        ],
+      },
+      {
+        id: 'media_derby',
+        label: 'Ostre słowa do mediów',
+        hint: '+reputacja, −morale sztabu',
+        effects: [
+          { key: 'reputation', delta: 2 },
+          { key: 'morale', delta: -2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'social_drama',
+    title: 'Burza w sieci',
+    speaker: 'Manager social media',
+    speakerRole: 'Klub',
+    messages: [
+      'Twój stary tweet wrócił. Kibice się gotują.',
+      'Kasujesz, tłumaczysz się, czy olewasz?',
+    ],
+    weight: 2,
+    minReputation: 12,
+    choices: [
+      {
+        id: 'delete',
+        label: 'Usuwam i przepraszam',
+        hint: '+morale, −reputacja lekko',
+        effects: [
+          { key: 'morale', delta: 2 },
+          { key: 'reputation', delta: -1 },
+        ],
+      },
+      {
+        id: 'explain',
+        label: 'Tłumaczę kontekst',
+        hint: '+reputacja',
+        effects: [{ key: 'reputation', delta: 1 }],
+      },
+      {
+        id: 'ignore',
+        label: 'Olewam hejt',
+        hint: '+morale, ryzyko wizerunku',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'reputation', delta: -2 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'academy_kids',
+    title: 'Trening z akademią',
+    speaker: 'Trener młodzieży',
+    speakerRole: 'Akademia',
+    messages: [
+      'Chłopaki z U17 proszą, żebyś poprowadził sesję.',
+      'To buduje markę w klubie — ale męczy przed ligą.',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'lead',
+        label: 'Prowadzę trening',
+        hint: '+reputacja, +podanie, −kondycja',
+        effects: [
+          { key: 'reputation', delta: 2 },
+          { key: 'passing', delta: 1 },
+          { key: 'stamina', delta: -1 },
+        ],
+      },
+      {
+        id: 'short',
+        label: 'Wpadnę na 20 minut',
+        hint: '+morale',
+        effects: [{ key: 'morale', delta: 2 }],
+      },
+      {
+        id: 'skip_aca',
+        label: 'Odpuszczam — regeneracja',
+        hint: '+kondycja',
+        effects: [{ key: 'stamina', delta: 1 }],
+      },
+    ],
+  },
+  {
+    id: 'national_tease',
+    title: 'Szept o kadrze',
+    speaker: 'Agent',
+    speakerRole: 'Przedstawiciel',
+    messages: [
+      'Ktoś ze sztabu kadry pytał o Ciebie „nieoficjalnie”.',
+      'Możemy to podkręcić w mediach albo zostawić w spokoju.',
+    ],
+    weight: 1,
+    minReputation: 28,
+    choices: [
+      {
+        id: 'hype',
+        label: 'Podkręćmy temat',
+        hint: '+reputacja, −morale (presja)',
+        effects: [
+          { key: 'reputation', delta: 3 },
+          { key: 'morale', delta: -2 },
+        ],
+      },
+      {
+        id: 'quiet',
+        label: 'Cicho — praca na boisku',
+        hint: '+strzał/tempo, spokój',
+        effects: [
+          { key: 'shooting', delta: 1 },
+          { key: 'pace', delta: 1 },
+          { key: 'morale', delta: 1 },
+        ],
+      },
+      {
+        id: 'deny',
+        label: 'Gasimy plotkę',
+        hint: '+morale',
+        effects: [{ key: 'morale', delta: 2 }],
+      },
+    ],
+  },
+  {
+    id: 'physio_plan',
+    title: 'Plan fizjo',
+    speaker: 'Fizjoterapeuta',
+    speakerRole: 'Sztab medyczny',
+    messages: [
+      'Mamy wolne sloty na profilaktykę.',
+      'Albo pełny protokół, albo zostajesz przy standardzie.',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'full_physio',
+        label: 'Pełny protokół',
+        hint: '+ochrona urazu, −morale (nudne)',
+        effects: [
+          { key: 'injuryCare', delta: 2 },
+          { key: 'morale', delta: -1 },
+        ],
+      },
+      {
+        id: 'light_physio',
+        label: 'Lekka seria',
+        hint: '+ochrona urazu',
+        effects: [{ key: 'injuryCare', delta: 1 }],
+      },
+      {
+        id: 'skip_physio',
+        label: 'Dam radę bez tego',
+        hint: '+morale',
+        effects: [{ key: 'morale', delta: 2 }],
+      },
+    ],
+  },
+  {
+    id: 'contract_whisper',
+    title: 'Szept o kontrakcie',
+    speaker: 'Dyrektor sportowy',
+    speakerRole: 'Zarząd',
+    messages: [
+      'Widzimy Cię w planach… albo i nie.',
+      'Chcesz twardych rozmów o pensji, czy wolisz spokój i grę?',
+    ],
+    weight: 2,
+    minReputation: 18,
+    choices: [
+      {
+        id: 'ask_money',
+        label: 'Chcę podwyżki',
+        hint: '+pieniądze, −reputacja w klubie',
+        effects: [
+          { key: 'money', delta: 2500 },
+          { key: 'reputation', delta: -1 },
+          { key: 'rivalPressure', delta: 1 },
+        ],
+      },
+      {
+        id: 'loyalty',
+        label: 'Gram i nie kombinuję',
+        hint: '+morale, −rywal',
+        effects: [
+          { key: 'morale', delta: 3 },
+          { key: 'rivalPressure', delta: -1 },
+        ],
+      },
+      {
+        id: 'agent_push',
+        label: 'Mój agent zadzwoni',
+        hint: '+reputacja, napięcie',
+        effects: [
+          { key: 'reputation', delta: 2 },
+          { key: 'morale', delta: -1 },
+          { key: 'rivalPressure', delta: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'video_analysis',
+    title: 'Analiza wideo',
+    speaker: 'Analityk',
+    speakerRole: 'Sztab',
+    messages: [
+      'Mamy sesję analizy Twoich błędów z ostatnich meczów.',
+      'Siadasz na 2 godziny czy wolisz pole?',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'deep_video',
+        label: 'Siadam na całość',
+        hint: '+podanie/obrona, −morale',
+        effects: [
+          { key: 'passing', delta: 1 },
+          { key: 'defending', delta: 1 },
+          { key: 'morale', delta: -1 },
+        ],
+      },
+      {
+        id: 'highlights',
+        label: 'Tylko kluczowe klipy',
+        hint: '+podanie',
+        effects: [{ key: 'passing', delta: 1 }],
+      },
+      {
+        id: 'skip_video',
+        label: 'Idę kopać',
+        hint: '+tempo, +morale',
+        effects: [
+          { key: 'pace', delta: 1 },
+          { key: 'morale', delta: 1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'charity_match',
+    title: 'Mecz charytatywny',
+    speaker: 'Rzecznik',
+    speakerRole: 'Klub',
+    messages: [
+      'Lokalna fundacja prosi o Twój udział w meczu gwiazd.',
+      'Świetny PR, ale to kolejny wysiłek w tygodniu.',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'play_charity',
+        label: 'Gram i robię zdjęcia',
+        hint: '+reputacja, −kondycja',
+        effects: [
+          { key: 'reputation', delta: 2 },
+          { key: 'stamina', delta: -1 },
+          { key: 'money', delta: -200 },
+        ],
+      },
+      {
+        id: 'donate',
+        label: 'Wpłacam, nie gram',
+        hint: '+reputacja, −pieniądze',
+        effects: [
+          { key: 'reputation', delta: 1 },
+          { key: 'money', delta: -800 },
+          { key: 'morale', delta: 1 },
+        ],
+      },
+      {
+        id: 'decline_charity',
+        label: 'Odmawiam — regeneracja',
+        hint: '+kondycja, −reputacja',
+        effects: [
+          { key: 'stamina', delta: 1 },
+          { key: 'reputation', delta: -1 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'winter_reset',
+    title: 'Przerwa — reset',
+    speaker: 'Trener',
+    speakerRole: 'Sztab',
+    messages: [
+      'Zima to dobry moment coś zmienić.',
+      'Więcej siłowy, więcej taktyki, czy urlop z głową?',
+    ],
+    weight: 2,
+    choices: [
+      {
+        id: 'winter_gym',
+        label: 'Blok siłowy',
+        hint: '+tempo/kondycja',
+        effects: [
+          { key: 'pace', delta: 1 },
+          { key: 'stamina', delta: 2 },
+        ],
+      },
+      {
+        id: 'winter_tactics',
+        label: 'Taktyka i wideo',
+        hint: '+podanie/obrona',
+        effects: [
+          { key: 'passing', delta: 1 },
+          { key: 'defending', delta: 1 },
+        ],
+      },
+      {
+        id: 'winter_rest',
+        label: 'Urlop i świeża głowa',
+        hint: '+morale, +ochrona',
+        effects: [
+          { key: 'morale', delta: 4 },
+          { key: 'injuryCare', delta: 1 },
+        ],
+      },
+    ],
+  },
 ]
 
 export function pickEvent(

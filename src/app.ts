@@ -12,6 +12,7 @@ import {
   openMidSeasonTransfers,
   openPreseasonDecision,
   openTransferChoice,
+  openWinterDecision,
   openWinterLoans,
   openWinterTransfers,
   playCareerMatchday,
@@ -24,7 +25,7 @@ import { nextPlayerFixture } from './systems/matchday'
 import { actionLabel, mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type { GameState, MatchAction, Position, PreferredFoot } from './state/types'
-import { createEmptyState, footLabel } from './state/types'
+import { createEmptyState, cupCompetitionName, cupStageLabel, footLabel } from './state/types'
 
 const POSITIONS: { id: Position; label: string }[] = [
   { id: 'NP', label: 'Napastnik' },
@@ -267,11 +268,24 @@ export class App {
     const clubPower = getEffectiveStrength(s.clubId, mods)
     const midOffers = hasMidSeasonOffers(this.state)
     const next = nextPlayerFixture(s)
-    const nextLine = next
-      ? `<p class="meta">Następny mecz: <strong>${getClub(next.homeId).name}</strong> vs <strong>${getClub(next.awayId).name}</strong></p>
+    const cupCountry = getClub(s.clubId).country
+    const cupPending = s.pendingCup
+    const nextLine = cupPending
+      ? `<p class="meta"><strong>${cupCompetitionName(cupCountry)}</strong>: ${cupStageLabel(cupPending.stage, cupCountry)} vs <strong>${getClub(cupPending.opponentId).name}</strong></p>
+         <p class="meta">Forma meczowa: <strong>${Math.round(s.matchMood)}</strong></p>`
+      : next
+        ? `<p class="meta">Następny mecz: <strong>${getClub(next.homeId).name}</strong> vs <strong>${getClub(next.awayId).name}</strong></p>
          <p class="meta">Forma meczowa: <strong>${Math.round(s.matchMood)}</strong> · kolejka ~${Math.min(s.fixtureIndex + 1, s.fixtures.length)}/${s.fixtures.length}</p>
-         <p class="muted">Sezon: ${s.liveStats.appearances} meczy · ${s.liveStats.goals} G · ${s.liveStats.assists} A</p>`
-      : `<p class="muted">Terminarz domknięty — raport sezonu.</p>`
+         <p class="muted">Sezon: ${s.liveStats.appearances} meczy · ${s.liveStats.goals} G · ${s.liveStats.assists} A${
+           s.cupAlive
+             ? ` · ${cupCompetitionName(cupCountry)}: ${s.cupFurthest === 'out' ? 'w grze' : cupStageLabel(s.cupFurthest, cupCountry)}`
+             : s.cupFurthest !== 'out'
+               ? ` · ${cupStageLabel(s.cupFurthest, cupCountry)}`
+               : ''
+         }</p>`
+        : `<p class="muted">Terminarz ligowy domknięty${
+            s.cupAlive ? ` — jeszcze ${cupCompetitionName(cupCountry)}` : ''
+          }.</p>`
     const log = this.state.log
       .slice(0, 4)
       .map((l) => `<li>${l}</li>`)
@@ -327,7 +341,7 @@ export class App {
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
         ${nextLine}
-        <p class="muted">Pełny sezon dwurundowy (np. 20 drużyn = 38 Twoich meczów). Czasem minigierka wg pozycji. W połowie — zima.</p>
+        <p class="muted">Liga + puchar krajowy (PP / FA Cup / Copa…). Czasem minigierka. W połowie — zima i decyzja.</p>
         <div class="actions">
           ${
             s.preseasonDone
@@ -340,7 +354,13 @@ export class App {
               : ''
           }
           <button class="btn primary" id="btn-season">${
-            next ? 'Następny mecz' : 'Zakończ sezon'
+            cupPending
+              ? `Puchar: ${cupStageLabel(cupPending.stage, cupCountry)}`
+              : next
+                ? 'Następny mecz'
+                : s.cupAlive
+                  ? 'Mecz pucharowy'
+                  : 'Zakończ sezon'
           }</button>
         </div>
       </section>
@@ -785,6 +805,11 @@ export class App {
         <p class="muted">${w.narrative}</p>
         <div class="actions">
           <button class="btn primary" id="btn-winter-continue">Zostaję — dalej sezon</button>
+          ${
+            w && !this.state.season?.winterDecisionDone
+              ? `<button class="btn ghost" id="btn-winter-decision">Rozmowa w klubie</button>`
+              : ''
+          }
           <button class="btn ghost" id="btn-winter-offers">Oferty zimowe</button>
           <button class="btn ghost" id="btn-winter-loan">Szukaj wypożyczenia</button>
         </div>
@@ -796,6 +821,9 @@ export class App {
   private bindWinterBreak(): void {
     this.root.querySelector('#btn-winter-continue')?.addEventListener('click', () => {
       this.go(() => continueAfterWinter(this.state))
+    })
+    this.root.querySelector('#btn-winter-decision')?.addEventListener('click', () => {
+      this.go(() => openWinterDecision(this.state))
     })
     this.root.querySelector('#btn-winter-offers')?.addEventListener('click', () => {
       this.go(() => openWinterTransfers(this.state))

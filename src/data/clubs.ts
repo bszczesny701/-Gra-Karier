@@ -15,9 +15,9 @@ export interface League {
   id: string
   name: string
   /**
-   * 0 = top 5 Europy (PL/ENG/ESP/ITA top)
-   * 1 = Ekstraklasa
-   * 2 = I liga … 4 = III liga
+   * 0 = top (PL / La Liga / Serie A)
+   * 1 = Ekstraklasa / Championship / Segunda
+   * 2–4 = niższe ligi PL
    */
   tier: number
   country: ClubCountry
@@ -195,9 +195,53 @@ export const CLUBS: Record<string, Club> = {
   'parma': c('parma', 'Parma', 'PAR', 65, 5000, 2.5, 'ITA'),
   'como': c('como', 'Como', 'COM', 64, 4700, 2.5, 'ITA'),
   'venezia': c('venezia', 'Venezia', 'VEN', 62, 4200, 2.5, 'ITA'),
+
+  // Championship (1 liga angielska) — pełna 20
+  'leeds': c('leeds', 'Leeds United', 'LEE', 78, 9000, 3, 'ENG'),
+  'burnley': c('burnley', 'Burnley', 'BUR', 76, 8200, 3, 'ENG'),
+  'sheffield-utd': c('sheffield-utd', 'Sheffield United', 'SHU', 74, 7800, 2.5, 'ENG'),
+  'sunderland': c('sunderland', 'Sunderland', 'SUN', 73, 7500, 2.5, 'ENG'),
+  'middlesbrough': c('middlesbrough', 'Middlesbrough', 'MID', 72, 7200, 2.5, 'ENG'),
+  'norwich': c('norwich', 'Norwich City', 'NOR', 71, 7000, 2.5, 'ENG'),
+  'west-brom': c('west-brom', 'West Bromwich', 'WBA', 71, 6900, 2.5, 'ENG'),
+  'coventry': c('coventry', 'Coventry City', 'COV', 70, 6500, 2.5, 'ENG'),
+  'watford': c('watford', 'Watford', 'WAT', 69, 6400, 2.5, 'ENG'),
+  'hull': c('hull', 'Hull City', 'HUL', 68, 6000, 2, 'ENG'),
+  'stoke': c('stoke', 'Stoke City', 'STK', 68, 5900, 2, 'ENG'),
+  'bristol-city': c('bristol-city', 'Bristol City', 'BRC', 67, 5700, 2, 'ENG'),
+  'preston': c('preston', 'Preston North End', 'PNE', 66, 5500, 2, 'ENG'),
+  'blackburn': c('blackburn', 'Blackburn Rovers', 'BLB', 66, 5400, 2, 'ENG'),
+  'qpr': c('qpr', 'Queens Park Rangers', 'QPR', 65, 5200, 2, 'ENG'),
+  'millwall': c('millwall', 'Millwall', 'MLW', 65, 5100, 2, 'ENG'),
+  'cardiff': c('cardiff', 'Cardiff City', 'CDF', 64, 5000, 2, 'ENG'),
+  'swansea': c('swansea', 'Swansea City', 'SWA', 64, 4900, 2, 'ENG'),
+  'derby': c('derby', 'Derby County', 'DER', 63, 4800, 2, 'ENG'),
+  'plymouth': c('plymouth', 'Plymouth Argyle', 'PLY', 62, 4500, 2, 'ENG'),
+
+  // Segunda División (1 liga hiszpańska) — pełna 20
+  'almeria': c('almeria', 'UD Almería', 'ALM', 74, 7000, 2.5, 'ESP'),
+  'granada': c('granada', 'Granada', 'GRA', 72, 6500, 2.5, 'ESP'),
+  'cadiz': c('cadiz', 'Cádiz', 'CAD', 71, 6200, 2.5, 'ESP'),
+  'levante': c('levante', 'Levante', 'LEV', 71, 6100, 2.5, 'ESP'),
+  'oviedo': c('oviedo', 'Real Oviedo', 'OVI', 70, 5800, 2.5, 'ESP'),
+  'sporting-gijon': c('sporting-gijon', 'Sporting Gijón', 'SPO', 69, 5600, 2, 'ESP'),
+  'zaragoza': c('zaragoza', 'Real Zaragoza', 'ZAR', 69, 5500, 2, 'ESP'),
+  'eibar': c('eibar', 'Eibar', 'EIB', 68, 5300, 2, 'ESP'),
+  'racing-santander': c('racing-santander', 'Racing Santander', 'RAC', 67, 5100, 2, 'ESP'),
+  'tenerife': c('tenerife', 'Tenerife', 'TEN', 66, 5000, 2, 'ESP'),
+  'elche': c('elche', 'Elche', 'ELC', 66, 4900, 2, 'ESP'),
+  'huesca': c('huesca', 'Huesca', 'HUE', 65, 4700, 2, 'ESP'),
+  'deportivo': c('deportivo', 'Deportivo La Coruña', 'DEP', 65, 4800, 2, 'ESP'),
+  'malaga': c('malaga', 'Málaga', 'MAL', 64, 4600, 2, 'ESP'),
+  'mirandes': c('mirandes', 'Mirandés', 'MIR', 63, 4400, 2, 'ESP'),
+  'burgos': c('burgos', 'Burgos CF', 'BGS', 63, 4300, 2, 'ESP'),
+  'albacete': c('albacete', 'Albacete', 'ALB', 62, 4200, 2, 'ESP'),
+  'cartagena': c('cartagena', 'FC Cartagena', 'CTG', 62, 4100, 2, 'ESP'),
+  'cordoba': c('cordoba', 'Córdoba', 'COR', 61, 4000, 1.5, 'ESP'),
+  'eldense': c('eldense', 'CD Eldense', 'ELD', 60, 3800, 1.5, 'ESP'),
 }
 
-/** tier 0 = top Europa; 1–4 = Polska */
+/** tier 0 = top; 1 = 2. poziom (Ekstraklasa / Championship / Segunda); 2–4 = niższe PL */
 export const LEAGUES: League[] = [
   {
     id: 'premier-league',
@@ -228,6 +272,34 @@ export const LEAGUES: League[] = [
     ],
   },
   {
+    id: 'championship',
+    name: 'Championship',
+    tier: 1,
+    country: 'ENG',
+    clubIds: [
+      'leeds',
+      'burnley',
+      'sheffield-utd',
+      'sunderland',
+      'middlesbrough',
+      'norwich',
+      'west-brom',
+      'coventry',
+      'watford',
+      'hull',
+      'stoke',
+      'bristol-city',
+      'preston',
+      'blackburn',
+      'qpr',
+      'millwall',
+      'cardiff',
+      'swansea',
+      'derby',
+      'plymouth',
+    ],
+  },
+  {
     id: 'la-liga',
     name: 'La Liga',
     tier: 0,
@@ -253,6 +325,34 @@ export const LEAGUES: League[] = [
       'espanyol',
       'leganes',
       'valladolid',
+    ],
+  },
+  {
+    id: 'segunda',
+    name: 'Segunda División',
+    tier: 1,
+    country: 'ESP',
+    clubIds: [
+      'almeria',
+      'granada',
+      'cadiz',
+      'levante',
+      'oviedo',
+      'sporting-gijon',
+      'zaragoza',
+      'eibar',
+      'racing-santander',
+      'tenerife',
+      'elche',
+      'huesca',
+      'deportivo',
+      'malaga',
+      'mirandes',
+      'burgos',
+      'albacete',
+      'cartagena',
+      'cordoba',
+      'eldense',
     ],
   },
   {

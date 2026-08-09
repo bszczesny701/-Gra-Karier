@@ -147,6 +147,13 @@ export function createSeason(
     lastMatch: null,
     pendingGoalMoment: null,
     winterBreakTaken: false,
+    cupAlive: true,
+    cupFurthest: 'out',
+    cupRoundIndex: 0,
+    cupLeagueMatchesDone: 0,
+    pendingCup: null,
+    cupPlayedLive: false,
+    winterDecisionDone: false,
   }
   initSeasonMatchdayFields(season, playerOverall)
   return season
@@ -372,6 +379,28 @@ export function openPreseasonDecision(state: GameState): void {
     speakerRole: event.speakerRole,
     messages: event.messages,
     description: event.messages.join(' '),
+    source: 'preseason',
+    choices: event.choices.map((c) => ({
+      id: c.id,
+      label: c.label,
+      hint: c.hint,
+    })),
+  }
+  state.screen = 'decision'
+}
+
+export function openWinterDecision(state: GameState): void {
+  if (!state.season || state.season.winterDecisionDone) return
+  const player = state.player!
+  const event = pickEvent(CAREER_EVENTS, player.position, player.reputation)
+  state.pendingDecision = {
+    eventId: event.id,
+    title: event.title,
+    speaker: event.speaker,
+    speakerRole: event.speakerRole,
+    messages: event.messages,
+    description: event.messages.join(' '),
+    source: 'winter',
     choices: event.choices.map((c) => ({
       id: c.id,
       label: c.label,
@@ -409,6 +438,11 @@ export function applyPreseasonDecision(state: GameState, choiceId: string): void
     }`,
   )
   state.pendingDecision = null
+  if (pending.source === 'winter') {
+    state.season.winterDecisionDone = true
+    state.screen = 'winterBreak'
+    return
+  }
   state.season.preseasonDone = true
   // Kotwica OVR sezonu = po decyzji przygotowawczej (wzrost ±4 liczony od tego)
   if (state.season.liveStats) {
