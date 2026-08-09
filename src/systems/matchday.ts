@@ -322,12 +322,12 @@ function finishPlayerMatchCore(
         matchGoals,
       )
     }
-    // Typowo 6–7; 8 rzadziej; ~9 bez G/A tylko przy elitarnej formie dnia
+    // Forma dnia = jakość meczu; gol/asysta tylko lekko pomagają (bywa słaby mecz z golem)
     const resultSwing =
       (homeId === season.clubId && hg > ag) || (awayId === season.clubId && ag > hg)
-        ? 0.25 + Math.random() * 0.3
+        ? 0.2 + Math.random() * 0.25
         : hg === ag
-          ? Math.random() * 0.15
+          ? Math.random() * 0.12
           : -(0.25 + Math.random() * 0.35)
     const formRoll = Math.random()
     const dayForm =
@@ -336,12 +336,15 @@ function finishPlayerMatchCore(
         : formRoll < 0.14
           ? 0.85 + Math.random() * 0.55 // ~10%: dobry mecz → często ~7.5–8.2
           : Math.random() * 1.85 - 0.85 // reszta: zwykle 5.8–7.2
+    // „Tani” gol vs kluczowy — statystyki nie gwarantują świetnej noty
+    const goalBump = matchGoals * (0.12 + Math.random() * 0.32)
+    const assistBump = matchAssists * (0.08 + Math.random() * 0.22)
     rating = clamp(
       5.35 +
         season.matchMood / 95 +
         (player.overall - 45) / 60 +
-        matchGoals * 0.75 +
-        matchAssists * 0.45 +
+        goalBump +
+        assistBump +
         resultSwing +
         dayForm,
       3.6,
