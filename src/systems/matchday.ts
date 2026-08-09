@@ -322,26 +322,30 @@ function finishPlayerMatchCore(
         matchGoals,
       )
     }
-    // Forma dnia: bez G/A też da się wbić ~9 (MOTM); gol/asysta nadal pomagają
+    // Typowo 6–7; 8 rzadziej; ~9 bez G/A tylko przy elitarnej formie dnia
     const resultSwing =
       (homeId === season.clubId && hg > ag) || (awayId === season.clubId && ag > hg)
-        ? 0.35 + Math.random() * 0.4
+        ? 0.25 + Math.random() * 0.3
         : hg === ag
-          ? 0.05 + Math.random() * 0.25
-          : -(0.2 + Math.random() * 0.4)
-    const dayForm = Math.random() * 3.8 - 1.1 // -1.1 … +2.7
-    const motmSpark = Math.random() < 0.12 ? 0.7 + Math.random() * 0.9 : 0
+          ? Math.random() * 0.15
+          : -(0.25 + Math.random() * 0.35)
+    const formRoll = Math.random()
+    const dayForm =
+      formRoll < 0.035
+        ? 1.9 + Math.random() * 1.15 // ~3.5%: elita → możliwa 9 bez G/A
+        : formRoll < 0.14
+          ? 0.85 + Math.random() * 0.55 // ~10%: dobry mecz → często ~7.5–8.2
+          : Math.random() * 1.85 - 0.85 // reszta: zwykle 5.8–7.2
     rating = clamp(
-      5.15 +
-        season.matchMood / 85 +
-        (player.overall - 45) / 55 +
-        matchGoals * 0.85 +
-        matchAssists * 0.5 +
+      5.35 +
+        season.matchMood / 95 +
+        (player.overall - 45) / 60 +
+        matchGoals * 0.75 +
+        matchAssists * 0.45 +
         resultSwing +
-        dayForm +
-        motmSpark,
+        dayForm,
       3.6,
-      9.9,
+      9.8,
     )
     live.ratingSum += rating
     if (rating >= 7.2) season.matchMood = clamp(season.matchMood + 2 + Math.random() * 2, 28, 88)
