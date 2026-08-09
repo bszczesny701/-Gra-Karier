@@ -18,6 +18,7 @@ import {
   clamp,
   clampFloat,
   clampSeasonOvrDelta,
+  cupCompetitionName,
   cupStageLabel,
 } from '../state/types'
 import { calcOverall } from './playerFactory'
@@ -184,29 +185,54 @@ export type CupLadderStep = {
   state: 'done' | 'now' | 'lost' | 'idle' | 'won'
 }
 
+const CUP_SHORT_LABEL: Record<string, string> = {
+  r32: '1/16',
+  r16: '1/8',
+  qf: '1/4',
+  sf: '1/2',
+  final: 'Finał',
+}
+
 export function cupLadderSteps(season: SeasonState): CupLadderStep[] {
-  const country = getClub(season.clubId).country
   const stages = CUP_ROUNDS.map((r) => r.id)
+  const labelOf = (id: string) => CUP_SHORT_LABEL[id] ?? id
+
   if (season.cupFurthest === 'winner') {
-    return stages.map((id) => ({
-      id,
-      label: cupStageLabel(id, country).replace(/^.*?—\s*/, ''),
-      state: 'won' as const,
-    }))
+    return stages.map((id) => ({ id, label: labelOf(id), state: 'won' as const }))
   }
   return stages.map((id, i) => {
-    const short = cupStageLabel(id, country).replace(/^.*?—\s*/, '')
+    const label = labelOf(id)
     if (season.cupAlive) {
-      if (i < season.cupRoundIndex) return { id, label: short, state: 'done' }
-      if (i === season.cupRoundIndex) return { id, label: short, state: 'now' }
-      return { id, label: short, state: 'idle' }
+      if (i < season.cupRoundIndex) return { id, label, state: 'done' }
+      if (i === season.cupRoundIndex) return { id, label, state: 'now' }
+      return { id, label, state: 'idle' }
     }
-    if (i < season.cupRoundIndex) return { id, label: short, state: 'done' }
+    if (i < season.cupRoundIndex) return { id, label, state: 'done' }
     if (i === season.cupRoundIndex && season.cupPlayedLive) {
-      return { id, label: short, state: 'lost' }
+      return { id, label, state: 'lost' }
     }
-    return { id, label: short, state: 'idle' }
+    return { id, label, state: 'idle' }
   })
+}
+
+/** Krótki status pucharu pod drabinką */
+export function cupStatusLine(season: SeasonState): string {
+  const country = getClub(season.clubId).country
+  const cup = cupCompetitionName(country)
+  if (season.cupFurthest === 'winner') return `Zdobywca: ${cup}`
+  if (season.pendingCup) {
+    return `Następny: ${CUP_SHORT_LABEL[season.pendingCup.stage] ?? season.pendingCup.stage} vs ${getClub(season.pendingCup.opponentId).name}`
+  }
+  if (season.cupAlive) {
+    const next = CUP_ROUNDS[season.cupRoundIndex]
+    return next ? `W grze — następna runda: ${CUP_SHORT_LABEL[next.id]}` : `W grze — ${cup}`
+  }
+  if (season.cupPlayedLive) {
+    const lost = CUP_ROUNDS[season.cupRoundIndex]
+    if (lost) return `Odpadnięcie w rundzie ${CUP_SHORT_LABEL[lost.id]}`
+    return `Odpadnięcie — ${cup}`
+  }
+  return `Losowanie przed nami — ${cup}`
 }
 
 /** 3 napastników/pomocników na klub — gole nie lecą na jedną osobę. */

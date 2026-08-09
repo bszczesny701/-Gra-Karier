@@ -630,25 +630,32 @@ h3 {
 
 .cup-ladder {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
   align-items: center;
-  margin-top: 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .cup-step {
-  font-size: 0.72rem;
+  flex: 0 0 auto;
+  min-width: 2.6rem;
+  text-align: center;
+  font-size: 0.78rem;
   font-weight: 700;
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: 999px;
   border: 1px solid var(--line);
   color: var(--muted);
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .cup-step.done {
   color: var(--text);
-  border-color: rgba(200, 245, 96, 0.35);
-  background: rgba(200, 245, 96, 0.12);
+  border-color: rgba(200, 245, 96, 0.4);
+  background: rgba(200, 245, 96, 0.14);
 }
 
 .cup-step.now {
@@ -658,8 +665,9 @@ h3 {
 }
 
 .cup-step.lost {
-  color: var(--danger);
-  border-color: rgba(255, 122, 110, 0.45);
+  color: #ffc4be;
+  border-color: rgba(255, 122, 110, 0.55);
+  background: rgba(255, 122, 110, 0.12);
 }
 
 .cup-step.won {
@@ -667,9 +675,15 @@ h3 {
   background: var(--accent);
 }
 
+.cup-step.idle {
+  opacity: 0.55;
+}
+
 .cup-arrow {
+  flex: 0 0 auto;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
 }
 
 .rival-quote {

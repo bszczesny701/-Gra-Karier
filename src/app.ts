@@ -21,7 +21,7 @@ import {
   playerTablePosition,
   stayAtClub,
 } from './systems/career'
-import { describeRival, cupLadderSteps, matchAppearanceChance } from './systems/seasonSim'
+import { describeRival, cupLadderSteps, cupStatusLine, matchAppearanceChance } from './systems/seasonSim'
 import { nextPlayerFixture } from './systems/matchday'
 import { actionLabel, mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
@@ -331,22 +331,12 @@ export class App {
     const cupHtml = `
       <div>
         <h3 style="margin-bottom:6px">${cupCompetitionName(cupCountry)}</h3>
-        <p class="meta">${
-          s.cupFurthest === 'winner'
-            ? 'Zdobywca pucharu!'
-            : s.pendingCup
-              ? `Następny: ${cupStageLabel(s.pendingCup.stage, cupCountry)} vs ${getClub(s.pendingCup.opponentId).name}`
-              : s.cupAlive
-                ? 'W grze'
-                : s.cupPlayedLive
-                  ? cupStageLabel(s.cupFurthest === 'out' ? 'out' : s.cupFurthest, cupCountry)
-                  : 'Jeszcze przed startem'
-        }</p>
+        <p class="meta">${cupStatusLine(s)}</p>
         <div class="cup-ladder" aria-label="Drabinka pucharu">
           ${ladder
             .map(
               (step, i) =>
-                `${i ? '<span class="cup-arrow">→</span>' : ''}<span class="cup-step ${step.state}">${step.label}</span>`,
+                `${i ? '<span class="cup-arrow" aria-hidden="true">→</span>' : ''}<span class="cup-step ${step.state}" title="${step.label}">${step.label}</span>`,
             )
             .join('')}
         </div>
