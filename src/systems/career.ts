@@ -154,6 +154,7 @@ export function createSeason(
     pendingCup: null,
     cupPlayedLive: false,
     winterDecisionDone: false,
+    rivalLastComment: null,
   }
   initSeasonMatchdayFields(season, playerOverall)
   return season
@@ -599,16 +600,34 @@ export function generateTransferOffers(state: GameState): TransferOffer[] {
   const player = state.player!
   const report = state.seasonReport!
   const currentLeague = getLeague(report.leagueId)
-  const offers = buildOffersForPlayer(player, report.clubId, currentLeague, {
-    goals: report.goals,
-    form: report.formLabel,
-    place: report.place,
-    avgRating: report.avgRating,
-    cupBoost: report.cupStage === 'winner' || report.cupStage === 'final',
-    forceHigher: player.overall >= ovrThresholdForTier(currentLeague.tier - 1),
-  })
   const playPct = estimatePlayChance(player, report.clubId, state.clubStrengthMods ?? {})
-  if (playPct < 30 || !report.contractRenewed) {
+  const willSell = clubWillSell(
+    player,
+    playPct,
+    report.formLabel,
+    report.avgRating,
+    report.contractRenewed,
+  )
+
+  const offers: TransferOffer[] = []
+  if (willSell) {
+    offers.push(
+      ...buildOffersForPlayer(player, report.clubId, currentLeague, {
+        goals: report.goals,
+        form: report.formLabel,
+        place: report.place,
+        avgRating: report.avgRating,
+        cupBoost: report.cupStage === 'winner' || report.cupStage === 'final',
+        forceHigher: player.overall >= ovrThresholdForTier(currentLeague.tier - 1),
+      }),
+    )
+  } else {
+    pushLog(
+      state,
+      `${getClub(report.clubId).name} nie chce Cię sprzedać (forma/minuty). Zostaje wypożyczenie albo przedłużenie.`,
+    )
+  }
+  if (playPct < 30 || !report.contractRenewed || !willSell) {
     offers.push(...generateLoanOffers(state, report.clubId, currentLeague.id, false))
   }
   return dedupeOffers(offers).slice(0, 5)
@@ -619,39 +638,49 @@ export function generateMidSeasonOffers(state: GameState): TransferOffer[] {
   const season = state.season!
   const currentLeague = getLeague(season.leagueId)
   const higher = leagueByTier(currentLeague.tier - 1, currentLeague.country)
-  const offers: TransferOffer[] = []
+  const form = formLabelFromPlayer(player, season.matchMood)
+  const place =
+    state.winterSnapshot?.place ??
+    (() => {
+      try {
+        return playerTablePosition(season)
+      } catch {
+        return Math.ceil(currentLeague.clubIds.length / 2)
+      }
+    })()
+  const avgRating =
+    state.winterSnapshot?.avgRating ??
+    (season.liveStats.appearances
+      ? Math.round((season.liveStats.ratingSum / season.liveStats.appearances) * 10) / 10
+      : 6.5)
+  const goals = state.winterSnapshot?.goals ?? season.liveStats.goals
+  const playPct = estimatePlayChance(player, season.clubId, state.clubStrengthMods ?? {}, season)
+  const willSell = clubWillSell(player, playPct, form, avgRating, true)
 
-  if (
-    (higher && player.overall >= ovrThresholdForTier(higher.tier)) ||
-    (currentLeague.tier <= 1 && player.overall >= ovrThresholdForTier(0))
-  ) {
+  const offers: TransferOffer[] = []
+  if (willSell) {
+    const forceHigher =
+      (higher && player.overall >= ovrThresholdForTier(higher.tier) && avgRating >= 6.8) ||
+      (currentLeague.tier <= 1 && player.overall >= ovrThresholdForTier(0) && avgRating >= 7.0)
     offers.push(
       ...buildOffersForPlayer(player, season.clubId, currentLeague, {
-        goals: state.winterSnapshot?.goals ?? 0,
-        form: 'przyzwoita',
-        place: state.winterSnapshot?.place ?? Math.ceil(currentLeague.clubIds.length / 2),
-        avgRating: state.winterSnapshot?.avgRating ?? 6.5,
-        cupBoost: false,
-        forceHigher: true,
+        goals,
+        form,
+        place,
+        avgRating,
+        cupBoost: season.cupFurthest === 'sf' || season.cupFurthest === 'final' || season.cupFurthest === 'winner',
+        forceHigher: Boolean(forceHigher),
         midSeason: true,
       }),
     )
   } else {
-    offers.push(
-      ...buildOffersForPlayer(player, season.clubId, currentLeague, {
-        goals: state.winterSnapshot?.goals ?? 0,
-        form: 'przyzwoita',
-        place: Math.ceil(currentLeague.clubIds.length / 2),
-        avgRating: 6.5,
-        cupBoost: false,
-        forceHigher: false,
-        midSeason: true,
-      }),
+    pushLog(
+      state,
+      `${getClub(season.clubId).name} blokuje transfer zimą — możesz szukać wypożyczenia.`,
     )
   }
 
-  const playPct = estimatePlayChance(player, season.clubId, state.clubStrengthMods ?? {}, season)
-  if (playPct < 35) {
+  if (playPct < 35 || !willSell) {
     offers.push(...generateLoanOffers(state, season.clubId, season.leagueId, true))
   }
 
@@ -690,6 +719,10 @@ export function generateLoanOffers(
     const league = getLeagueForClub(clubId)
     const playChance = Math.min(78, estimatePlayChance(player, clubId, state.clubStrengthMods ?? {}) + 12)
     const wage = Math.round(club.wage * 0.75)
+    const buyOption = Math.random() < 0.42
+    const buyOptionFee = buyOption
+      ? Math.round(wage * 28 + player.overall * 90 + (winter ? 400 : 900))
+      : undefined
     return {
       clubId,
       leagueId: league.id,
@@ -698,9 +731,15 @@ export function generateLoanOffers(
       playChance,
       kind: 'loan' as const,
       contractYears: 0,
+      buyOption,
+      buyOptionFee,
       message: winter
-        ? `Wypożyczenie do końca sezonu. Więcej minut (≈${playChance}%), wracasz do ${getClub(currentClubId).name}.`
-        : `Wypożyczenie na sezon. Szansa gry ≈${playChance}%. Kontrakt z ${getClub(currentClubId).name} zostaje.`,
+        ? `Wypożyczenie do końca sezonu. Więcej minut (≈${playChance}%)${
+            buyOption ? ` · opcja wykupu ~${buyOptionFee} zł` : ''
+          }. Wracasz do ${getClub(currentClubId).name}.`
+        : `Wypożyczenie na sezon. Szansa gry ≈${playChance}%${
+            buyOption ? ` · opcja wykupu ~${buyOptionFee} zł` : ''
+          }. Kontrakt z ${getClub(currentClubId).name} zostaje.`,
     }
   })
 }
@@ -715,6 +754,34 @@ function dedupeOffers(offers: TransferOffer[]): TransferOffer[] {
     out.push(o)
   }
   return out
+}
+
+function formLabelFromPlayer(player: Player, matchMood?: number): string {
+  const f = matchMood != null ? Math.round(player.form * 0.4 + matchMood * 0.6) : player.form
+  if (f >= 72) return 'świetna'
+  if (f >= 62) return 'dobra'
+  if (f >= 48) return 'przyzwoita'
+  if (f >= 38) return 'słaba'
+  return 'fatalna'
+}
+
+/** Czy obecny klub wypuszcza zawodnika (transfer). Słaba forma / ławka = łatwiej. */
+function clubWillSell(
+  player: Player,
+  playPct: number,
+  form: string,
+  avgRating: number,
+  contractRenewed: boolean,
+): boolean {
+  if (player.contract.yearsLeft <= 1 && !contractRenewed) return true
+  if (playPct < 32 || form === 'fatalna' || (avgRating > 0 && avgRating < 5.7)) return true
+  if (playPct >= 58 && (form === 'świetna' || avgRating >= 7.2)) {
+    return Math.random() < 0.22 // gwiazda — rzadko
+  }
+  if (playPct >= 48 && form === 'dobra' && avgRating >= 6.8) {
+    return Math.random() < 0.45
+  }
+  return Math.random() < 0.72
 }
 
 function ovrThresholdForTier(tier: number): number {
@@ -814,39 +881,50 @@ function buildOffersForPlayer(
   const canGoAbroad = player.overall >= ovrThresholdForTier(0)
 
   if (ctx.midSeason) {
-    if (higher && player.overall >= ovrThresholdForTier(higher.tier)) {
-      addFromLeague(higher.id, 2, 'Okno zimowe — wyższa liga.')
+    const hot = ctx.avgRating >= 7.0 || form === 'świetna' || form === 'dobra'
+    const cold =
+      (ctx.avgRating > 0 && ctx.avgRating < 6.0) || form === 'słaba' || form === 'fatalna'
+    if (higher && player.overall >= ovrThresholdForTier(higher.tier) && hot && !cold) {
+      addFromLeague(higher.id, 2, 'Okno zimowe — wyższa liga (forma/oceny).')
     }
-    if (canGoAbroad && currentLeague.tier <= 1) {
+    if (canGoAbroad && currentLeague.tier <= 1 && ctx.avgRating >= 6.8 && player.overall >= 72) {
       for (const fl of foreignTopLeagues()) {
         addFromLeague(fl.id, 1, `${fl.name} — zainteresowanie zimą.`)
       }
     }
-    addFromLeague(currentLeague.id, 1, 'Oferta z ligi w trakcie sezonu.')
-    if (lower) addFromLeague(lower.id, 1, 'Niższa liga — więcej minut.', true)
+    addFromLeague(currentLeague.id, cold ? 2 : 1, 'Oferta z ligi w trakcie sezonu.', cold)
+    if (lower && (cold || ctx.place >= currentLeague.clubIds.length - 3)) {
+      addFromLeague(lower.id, 1, 'Niższa liga — więcej minut.', true)
+    }
     return offers.slice(0, 4)
   }
 
-  if (form === 'fatalna' || form === 'słaba') {
+  if (form === 'fatalna' || form === 'słaba' || (ctx.avgRating > 0 && ctx.avgRating < 5.9)) {
     if (lower) addFromLeague(lower.id, 2, 'Słabszy klub — odbudowa.', true)
     addFromLeague(currentLeague.id, 2, 'Oferta z dołu tabeli.', true)
   } else {
+    const ratingOk = ctx.avgRating <= 0 || ctx.avgRating >= 6.4
     if (
       higher &&
+      ratingOk &&
       (ctx.forceHigher ||
         ctx.cupBoost ||
         ctx.place <= 3 ||
         ctx.goals >= 8 ||
-        player.overall >= ovrThresholdForTier(higher.tier))
+        (player.overall >= ovrThresholdForTier(higher.tier) && ctx.avgRating >= 6.7))
     ) {
       addFromLeague(higher.id, 2, 'Wyższa liga interesuje się Tobą.')
       const top = leagueByTier(higher.tier - 1, currentLeague.country)
-      if (top && player.overall >= ovrThresholdForTier(top.tier) + 2) {
+      if (top && player.overall >= ovrThresholdForTier(top.tier) + 2 && ctx.avgRating >= 7.0) {
         addFromLeague(top.id, 1, 'Skok o dwie ligi.')
       }
     }
-    // Big 5 — dopiero od ~72; konkretny klub filtruje meetsClubOfferBar
-    if (canGoAbroad && (currentLeague.tier <= 1 || player.overall >= 74)) {
+    // Big 5 — dopiero od ~72 + przyzwoita średnia
+    if (
+      canGoAbroad &&
+      (ctx.avgRating <= 0 || ctx.avgRating >= 6.8) &&
+      (currentLeague.tier <= 1 || player.overall >= 74)
+    ) {
       for (const fl of foreignTopLeagues()) {
         if (fl.id === currentLeague.id) continue
         addFromLeague(fl.id, 1, `${fl.name} patrzy na Ciebie.`)
@@ -884,23 +962,47 @@ function LEAGUES_SAFE(overall: number) {
 
 export function openTransferChoice(state: GameState): void {
   const player = state.player!
+  let buyBack: TransferOffer | null = null
   // Przy aktywnym wypożyczeniu oferty liczymy względem klubu-rodzica
   if (player.loan?.returnAfterSeason && state.seasonReport) {
+    const loanClubId = state.seasonReport.clubId
+    const loanLeagueId = state.seasonReport.leagueId
     const parentClub = player.loan.parentClubId
     const parentLeague = player.loan.parentLeagueId
+    if (player.loan.buyOption) {
+      const fee = player.loan.buyOptionFee ?? Math.round(player.contract.wage * 30 + player.overall * 100)
+      const playChance = estimatePlayChance(player, loanClubId, state.clubStrengthMods ?? {})
+      const years = contractYearsForOffer(loanLeagueId)
+      buyBack = {
+        clubId: loanClubId,
+        leagueId: loanLeagueId,
+        wage: Math.round(getClub(loanClubId).wage * (0.9 + player.overall / 200)),
+        signingBonus: 0,
+        playChance,
+        kind: 'transfer',
+        contractYears: years,
+        buyOption: true,
+        buyOptionFee: fee,
+        message: `Opcja wykupu z wypożyczenia (~${fee} zł). Zostajesz w ${getClub(loanClubId).name} na stałe.`,
+      }
+    }
     state.seasonReport = {
       ...state.seasonReport,
-      // zachowaj stats z wypożyczenia, ale „dom” = rodzic (do ofert / powrotu)
       clubId: parentClub,
       leagueId: parentLeague,
     }
     pushLog(
       state,
-      `Koniec wypożyczenia — wracasz do ${getClub(parentClub).name}. Możesz zostać albo wybrać transfer.`,
+      `Koniec wypożyczenia — wracasz do ${getClub(parentClub).name}.${
+        buyBack ? ` ${getClub(loanClubId).name} ma opcję wykupu.` : ''
+      }`,
     )
     player.loan = null
   }
   state.transferOffers = generateTransferOffers(state)
+  if (buyBack) {
+    state.transferOffers = dedupeOffers([buyBack, ...state.transferOffers]).slice(0, 6)
+  }
   state.screen = 'transferChoice'
 }
 
@@ -1052,6 +1154,8 @@ export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
       parentClubId: season.clubId,
       parentLeagueId: season.leagueId,
       returnAfterSeason: true,
+      buyOption: offer.buyOption,
+      buyOptionFee: offer.buyOptionFee,
     }
   } else {
     player.loan = null
@@ -1059,6 +1163,10 @@ export function acceptMidSeasonOffer(state: GameState, clubId: string): void {
       clubId,
       yearsLeft: offer.contractYears ?? 2,
       wage: offer.wage,
+    }
+    if (offer.buyOption && offer.buyOptionFee) {
+      player.money = Math.max(0, player.money - offer.buyOptionFee)
+      pushLog(state, `Wykup z wypożyczenia — zapłacono ~${offer.buyOptionFee} zł.`)
     }
   }
 
@@ -1154,6 +1262,8 @@ export function acceptOffer(state: GameState, clubId: string): void {
       parentClubId: parentClub,
       parentLeagueId: parentLeague,
       returnAfterSeason: true,
+      buyOption: offer.buyOption,
+      buyOptionFee: offer.buyOptionFee,
     }
   } else {
     player.loan = null
@@ -1161,6 +1271,10 @@ export function acceptOffer(state: GameState, clubId: string): void {
       clubId,
       yearsLeft: offer.contractYears ?? 2,
       wage: offer.wage,
+    }
+    if (offer.buyOption && offer.buyOptionFee) {
+      player.money = Math.max(0, player.money - offer.buyOptionFee)
+      pushLog(state, `Wykup z wypożyczenia — zapłacono ~${offer.buyOptionFee} zł.`)
     }
   }
 

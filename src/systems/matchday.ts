@@ -32,6 +32,7 @@ import {
   shouldInsertCupRound,
   tweakRivalForm,
   updateRivalAfterMatch,
+  rivalMatchComment,
   updateStanding,
   type FixtureBatchState,
 } from './seasonSim'
@@ -460,6 +461,17 @@ function finishPlayerMatchCore(
   }
 
   updateRivalAfterMatch(season.rival, player, starts, rating, season.matchMood)
+  const rivalLine = rivalMatchComment(
+    player,
+    season.rival,
+    starts,
+    rating,
+    season.rivalPressure ?? 0,
+  )
+  if (rivalLine) {
+    narrative += ` ${rivalLine}`
+    season.rivalLastComment = rivalLine
+  }
 
   return {
     homeId,

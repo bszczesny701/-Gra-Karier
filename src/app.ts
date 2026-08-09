@@ -18,9 +18,10 @@ import {
   playCareerMatchday,
   resolveKeyMatch,
   sortedStandings,
+  playerTablePosition,
   stayAtClub,
 } from './systems/career'
-import { describeRival, matchAppearanceChance } from './systems/seasonSim'
+import { describeRival, cupLadderSteps, matchAppearanceChance } from './systems/seasonSim'
 import { nextPlayerFixture } from './systems/matchday'
 import { actionLabel, mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
@@ -297,7 +298,59 @@ export class App {
       ? `<p class="muted">Wypożyczenie z ${getClub(p.loan.parentClubId).name}</p>`
       : ''
     const contractLine = `<p class="meta">Kontrakt: ${p.contract.yearsLeft} lat · pensja ~${p.contract.wage} zł</p>`
-    const rivalLine = `<p class="meta">Rywal: ${s.rival.name} · OVR ${s.rival.overall} · forma ${s.rival.form} — ${describeRival(p, s.rival)}</p>`
+    const rivalLine = `<p class="meta">Rywal: <strong>${s.rival.name}</strong> · OVR ${s.rival.overall} · forma ${s.rival.form}<br/>${describeRival(p, s.rival)}</p>${
+      s.rivalLastComment ? `<p class="rival-quote">${s.rivalLastComment}</p>` : ''
+    }`
+
+    const standings = sortedStandings(s)
+    const place = playerTablePosition(s)
+    const myRow = standings.find((r) => r.clubId === s.clubId)
+    const tableSlice = standings.slice(0, 5)
+    if (place > 5 && myRow) {
+      tableSlice.push(myRow)
+    }
+    const tableHtml = `
+      <div>
+        <h3 style="margin-bottom:6px">${league.name}</h3>
+        <p class="meta">Twoje miejsce: <strong>${place}.</strong> · ${myRow?.points ?? 0} pkt · bilans ${myRow?.goalsFor ?? 0}:${myRow?.goalsAgainst ?? 0}</p>
+        <table class="mini-table">
+          <thead><tr><th>#</th><th>Klub</th><th>Pkt</th></tr></thead>
+          <tbody>
+            ${tableSlice
+              .map((row) => {
+                const pos = standings.findIndex((r) => r.clubId === row.clubId) + 1
+                const you = row.clubId === s.clubId
+                return `<tr class="${you ? 'you' : ''}"><td>${pos}</td><td>${getClub(row.clubId).short}${you ? ' (Ty)' : ''}</td><td>${row.points}</td></tr>`
+              })
+              .join('')}
+          </tbody>
+        </table>
+      </div>`
+
+    const ladder = cupLadderSteps(s)
+    const cupHtml = `
+      <div>
+        <h3 style="margin-bottom:6px">${cupCompetitionName(cupCountry)}</h3>
+        <p class="meta">${
+          s.cupFurthest === 'winner'
+            ? 'Zdobywca pucharu!'
+            : s.pendingCup
+              ? `Następny: ${cupStageLabel(s.pendingCup.stage, cupCountry)} vs ${getClub(s.pendingCup.opponentId).name}`
+              : s.cupAlive
+                ? 'W grze'
+                : s.cupPlayedLive
+                  ? cupStageLabel(s.cupFurthest === 'out' ? 'out' : s.cupFurthest, cupCountry)
+                  : 'Jeszcze przed startem'
+        }</p>
+        <div class="cup-ladder" aria-label="Drabinka pucharu">
+          ${ladder
+            .map(
+              (step, i) =>
+                `${i ? '<span class="cup-arrow">→</span>' : ''}<span class="cup-step ${step.state}">${step.label}</span>`,
+            )
+            .join('')}
+        </div>
+      </div>`
 
     return this.shell(
       `
@@ -332,7 +385,7 @@ export class App {
             <li><strong>Rep.</strong> — reputacja. Pomaga w ofertach i mediach.</li>
             <li><strong>Tempo / Strzał / Podanie / Obrona / Kondycja</strong> — atrybuty budujące OVR wg pozycji.</li>
             <li><strong>Forma meczowa</strong> — krótki humor pod mecz; dobra forma wyraźnie podnosi szansę gry.</li>
-            <li><strong>Rywal</strong> — konkurent o „11”; gdy wygrywasz z nim walkę (+ forma), dostajesz więcej minut.</li>
+            <li><strong>Rywal</strong> — konkurent o „11”; komentuje Twoje mecze i walkę o skład.</li>
             <li><strong>Gra ≈ %</strong> — szansa wystawienia w następnym meczu (forma + rywal + OVR).</li>
           </ul>
         </details>
@@ -341,7 +394,8 @@ export class App {
       <section class="panel">
         <h3>Sezon ${s.year}</h3>
         ${nextLine}
-        <p class="muted">Liga + puchar krajowy (PP / FA Cup / Copa…). Czasem minigierka. W połowie — zima i decyzja.</p>
+        <div class="hub-split">${tableHtml}${cupHtml}</div>
+        <p class="muted" style="margin-top:12px">Liga + puchar. Oferty zależą od formy i miejsca w tabeli. W połowie — zima.</p>
         <div class="actions">
           ${
             s.preseasonDone
@@ -724,14 +778,18 @@ export class App {
         const play = o.playChance != null ? ` · gra ≈ ${o.playChance}%` : ''
         const kind =
           o.kind === 'loan'
-            ? '<span class="badge">Wypożyczenie</span> '
-            : o.contractYears
-              ? `<span class="muted">${o.contractYears} lat · </span>`
-              : ''
+            ? `<span class="badge">Wypożyczenie${o.buyOption ? ' + wykup' : ''}</span> `
+            : o.buyOption
+              ? '<span class="badge loan-buy">Opcja wykupu</span> '
+              : o.contractYears
+                ? `<span class="muted">${o.contractYears} lat · </span>`
+                : ''
         return `
           <button class="choice" data-offer="${o.clubId}">
             <strong>${kind}${c.name}</strong>
-            <span>${l.name} · ${formatStars(c.stars)} (${starsLabel(c.stars)}) · pensja ~${o.wage} zł · premia ${o.signingBonus} zł${play}</span>
+            <span>${l.name} · ${formatStars(c.stars)} (${starsLabel(c.stars)}) · pensja ~${o.wage} zł · premia ${o.signingBonus} zł${play}${
+              o.buyOption && o.buyOptionFee ? ` · wykup ~${o.buyOptionFee} zł` : ''
+            }</span>
             <span>${o.message}</span>
           </button>`
       })

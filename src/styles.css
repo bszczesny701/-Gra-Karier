@@ -597,3 +597,90 @@ h3 {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.hub-split {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.mini-table th,
+.mini-table td {
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.mini-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.mini-table tr.you td {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.cup-ladder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.cup-step {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.cup-step.done {
+  color: var(--text);
+  border-color: rgba(200, 245, 96, 0.35);
+  background: rgba(200, 245, 96, 0.12);
+}
+
+.cup-step.now {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.cup-step.lost {
+  color: var(--danger);
+  border-color: rgba(255, 122, 110, 0.45);
+}
+
+.cup-step.won {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.cup-arrow {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.rival-quote {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.badge.loan-buy {
+  background: #8ec8ff;
+}

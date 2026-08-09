@@ -110,6 +110,9 @@ export interface PlayerLoan {
   parentLeagueId: string
   /** Po 2. połowie / końcu sezonu wracasz do rodzica */
   returnAfterSeason: boolean
+  /** Klub wypożyczający może wykupić */
+  buyOption?: boolean
+  buyOptionFee?: number
 }
 
 export interface PositionalRival {
@@ -217,6 +220,8 @@ export interface SeasonState {
   pendingCup: PendingCupMatch | null
   cupPlayedLive: boolean
   winterDecisionDone: boolean
+  /** Ostatni komentarz rywala o skład (hub / narracja) */
+  rivalLastComment: string | null
 }
 
 export interface PendingKeyMatch {
@@ -244,6 +249,9 @@ export interface TransferOffer {
   kind?: 'transfer' | 'loan'
   /** Lata kontraktu przy transferze (1–3) */
   contractYears?: number
+  /** Wypożyczenie z opcją wykupu */
+  buyOption?: boolean
+  buyOptionFee?: number
 }
 
 export interface PendingDecision {
@@ -341,7 +349,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-save-v11'
-export const SAVE_VERSION = 12
+export const SAVE_VERSION = 13
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

@@ -128,6 +128,87 @@ export function describeRival(player: Player, rival: PositionalRival): string {
   return `Rywal ${rival.name} (OVR ${rival.overall}) — równa walka o skład.`
 }
 
+/** Komentarz rywala po meczu — walka o „11” jako postać. */
+export function rivalMatchComment(
+  player: Player,
+  rival: PositionalRival,
+  starts: boolean,
+  rating: number | null,
+  rivalPressure = 0,
+): string | null {
+  const playerEdge = player.overall + (player.morale - 50) / 10 + (player.form - 50) / 8
+  const rivalEdge = rival.overall + (rival.form - 50) / 5
+  const diff = playerEdge - rivalEdge
+  const roll = Math.random()
+
+  if (!starts) {
+    if (roll > 0.55) return null
+    if (diff < -2 || rivalPressure > 0) {
+      return `${rival.name}: „Trener wie, kto ma grać — ja zostaję w „11”.”`
+    }
+    return `${rival.name}: „Ławka? Może następnym razem to ja usiądę.”`
+  }
+
+  if (rating != null && rating >= 7.5) {
+    if (roll > 0.5) return null
+    return `${rival.name}: „Ok, dziś wygrałeś — ale walka o skład trwa.”`
+  }
+  if (rating != null && rating >= 6.8) {
+    if (roll > 0.62) return null
+    return diff > 1
+      ? `${rival.name}: „Trzymasz miejsce. Na razie.”`
+      : `${rival.name}: „Równy mecz — jutro znów walczymy o minutę.”`
+  }
+  if (rating != null && rating < 5.5) {
+    if (roll > 0.45) return null
+    return `${rival.name}: „Takie występy otwierają drzwi — dla mnie.”`
+  }
+  if (roll > 0.78) return null
+  return `${rival.name} obserwuje Cię z ławki — walka o skład trwa.`
+}
+
+export const CUP_ROUNDS: Array<{ id: CupStage; difficulty: number }> = [
+  { id: 'r32', difficulty: 0.92 },
+  { id: 'r16', difficulty: 1.0 },
+  { id: 'qf', difficulty: 1.08 },
+  { id: 'sf', difficulty: 1.15 },
+  { id: 'final', difficulty: 1.22 },
+]
+
+/** Po ilu meczach ligowych (zawodnika) wstawić kolejną rundę pucharu */
+export const CUP_INSERT_AFTER_LEAGUE = [2, 7, 13, 19, 26]
+
+export type CupLadderStep = {
+  id: string
+  label: string
+  state: 'done' | 'now' | 'lost' | 'idle' | 'won'
+}
+
+export function cupLadderSteps(season: SeasonState): CupLadderStep[] {
+  const country = getClub(season.clubId).country
+  const stages = CUP_ROUNDS.map((r) => r.id)
+  if (season.cupFurthest === 'winner') {
+    return stages.map((id) => ({
+      id,
+      label: cupStageLabel(id, country).replace(/^.*?—\s*/, ''),
+      state: 'won' as const,
+    }))
+  }
+  return stages.map((id, i) => {
+    const short = cupStageLabel(id, country).replace(/^.*?—\s*/, '')
+    if (season.cupAlive) {
+      if (i < season.cupRoundIndex) return { id, label: short, state: 'done' }
+      if (i === season.cupRoundIndex) return { id, label: short, state: 'now' }
+      return { id, label: short, state: 'idle' }
+    }
+    if (i < season.cupRoundIndex) return { id, label: short, state: 'done' }
+    if (i === season.cupRoundIndex && season.cupPlayedLive) {
+      return { id, label: short, state: 'lost' }
+    }
+    return { id, label: short, state: 'idle' }
+  })
+}
+
 /** 3 napastników/pomocników na klub — gole nie lecą na jedną osobę. */
 export function ensureClubScorers(
   map: Map<string, ScorerEntry>,
@@ -393,17 +474,6 @@ export function scorerMapFromEntries(entries: ScorerEntry[]): Map<string, Scorer
   return map
 }
 
-export const CUP_ROUNDS: Array<{ id: CupStage; difficulty: number }> = [
-  { id: 'r32', difficulty: 0.92 },
-  { id: 'r16', difficulty: 1.0 },
-  { id: 'qf', difficulty: 1.08 },
-  { id: 'sf', difficulty: 1.15 },
-  { id: 'final', difficulty: 1.22 },
-]
-
-/** Po ilu meczach ligowych (zawodnika) wstawić kolejną rundę pucharu */
-export const CUP_INSERT_AFTER_LEAGUE = [2, 7, 13, 19, 26]
-
 export function initCupState(season: SeasonState): void {
   season.cupAlive = true
   season.cupFurthest = 'out'
@@ -412,6 +482,7 @@ export function initCupState(season: SeasonState): void {
   season.pendingCup = null
   season.cupPlayedLive = false
   season.winterDecisionDone = false
+  season.rivalLastComment = null
 }
 
 export function pickCupOpponent(playerClubId: string): string {
