@@ -1389,6 +1389,70 @@ h3 {
   cursor: not-allowed;
 }
 
+.fifa-fatigue {
+  width: 56px;
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.fifa-fatigue i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff7a6e, #e8d44a, #c8f560);
+}
+
+.fifa-fatigue.low i {
+  background: #ffb08a;
+}
+
+.fifa-fatigue.crit i {
+  background: #ff7a6e;
+}
+
+.fifa-bench-fat {
+  display: block;
+  width: 36px;
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.fifa-bench-fat i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff7a6e, #c8f560);
+}
+
+.live-pause-lineup .live-scoreboard.compact {
+  margin-bottom: 4px;
+  padding: 10px 14px;
+}
+
+.live-pause-lineup .live-score {
+  font-size: 1.8rem;
+}
+
+.live-pause-lineup .live-team {
+  font-size: 1.25rem;
+}
+
+.fifa-bench-row.drag-over {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.pause-hint {
+  margin: 0 0 8px;
+}
+
+.live-grid.single {
+  grid-template-columns: 1fr;
+}
+
 .live-match {
   display: flex;
   flex-direction: column;

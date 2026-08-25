@@ -16,6 +16,7 @@ import { beginMatchday } from './matchEngine'
 import {
   applyHalftimeMotivation,
   liveSubstitute,
+  liveSwapOnPitch,
   setMatchPaused,
   setMatchSpeed,
   startSecondHalf,
@@ -31,6 +32,7 @@ export { beginMatchday }
 export {
   applyHalftimeMotivation,
   liveSubstitute,
+  liveSwapOnPitch,
   setMatchPaused,
   setMatchSpeed,
   startSecondHalf,

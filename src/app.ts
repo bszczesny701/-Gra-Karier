@@ -11,6 +11,7 @@ import {
   confirmManagerName,
   dismissMatchResult,
   liveSubstitute,
+  liveSwapOnPitch,
   openLineup,
   playNextMatchFromHub,
   polishLeagues,
@@ -52,7 +53,6 @@ export class App {
   private state: GameState
   private pickLeagueId: string | null = null
   private matchTimer: number | null = null
-  private subOutId: string | null = null
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -553,82 +553,62 @@ export class App {
 
   private liveMatchHtml(): string {
     const live = this.state.liveMatch!
-    const team = this.state.team!
-    const map = new Map(team.squad.map((p) => [p.id, p]))
     const home = getClub(live.homeId)
     const away = getClub(live.awayId)
     const clock =
       live.stoppageUntil != null && live.minute > (live.half === '1' ? 45 : 90)
         ? `${live.half === '1' ? 45 : 90}+${live.minute - (live.half === '1' ? 45 : 90)}'`
         : `${live.minute}'`
+    const speeds: MatchSpeed[] = [1, 2, 4]
+
+    const scoreboard = `
+      <div class="live-scoreboard compact">
+        <div class="live-team">${home.short}</div>
+        <div class="live-score">${live.homeGoals} : ${live.awayGoals}</div>
+        <div class="live-team">${away.short}</div>
+        <div class="live-clock">${clock} · zmiany ${live.subsUsed}/3</div>
+      </div>
+      <div class="live-controls">
+        <button class="btn ${live.paused ? 'primary' : 'ghost'}" id="btn-pause">${live.paused ? 'Wznów mecz' : 'Pauza'}</button>
+        ${speeds
+          .map(
+            (s) =>
+              `<button class="btn ghost ${live.speed === s ? 'active' : ''}" data-speed="${s}">${s}x</button>`,
+          )
+          .join('')}
+      </div>`
+
+    // Pauza = pełny skład jak przed meczem + zmęczenie
+    if (live.paused) {
+      return this.shell(
+        `
+        <section class="lineup-fifa live-pause-lineup">
+          ${scoreboard}
+          <p class="muted pause-hint">Przeciągnij: ławka ↔ boisko = zmiana (${3 - live.subsUsed} pozostało) · slot ↔ slot = przestawienie</p>
+          ${this.liveFifaLineupInner()}
+        </section>`,
+        'Pauza',
+        'fifa',
+      )
+    }
 
     const feed = live.events
-      .slice(0, 12)
+      .slice(0, 14)
       .map(
         (e) =>
           `<li class="live-event ${e.side ?? ''}"><span class="live-min">${e.minute}'</span> ${e.text}</li>`,
       )
       .join('')
 
-    const xi = live.onPitchIds
-      .map((id) => {
-        const p = map.get(id)!
-        const fat = Math.round(live.fatigue[id] ?? 50)
-        const sel = this.subOutId === id ? 'selected' : ''
-        return `<button type="button" class="live-xi-chip ${sel}" data-out="${id}" ${live.paused ? '' : 'disabled'}>
-          <strong>${p.name.split(' ').pop()}</strong>
-          <span class="live-fat"><i style="width:${fat}%"></i></span>
-          <span class="muted">${p.overall} · ${fat}%</span>
-        </button>`
-      })
-      .join('')
-
-    const bench = live.paused
-      ? live.benchIds
-          .map((id) => {
-            const p = map.get(id)!
-            return `<button type="button" class="fifa-bench-row" data-in="${id}">
-              <span class="fifa-bench-role">${p.role}</span>
-              <span class="fifa-bench-ovr">${p.overall}</span>
-              <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
-              <span class="muted">${Math.round(live.fatigue[id] ?? 90)}%</span>
-            </button>`
-          })
-          .join('')
-      : `<p class="muted">Pauza, aby robić zmiany (${live.subsUsed}/3).</p>`
-
-    const speeds: MatchSpeed[] = [1, 2, 4]
-
     return this.shell(
       `
       <section class="live-match">
-        <div class="live-scoreboard">
-          <div class="live-team">${home.short}</div>
-          <div class="live-score">${live.homeGoals} : ${live.awayGoals}</div>
-          <div class="live-team">${away.short}</div>
-          <div class="live-clock">${clock}</div>
-        </div>
-        <div class="live-controls">
-          <button class="btn ghost" id="btn-pause">${live.paused ? 'Wznów' : 'Pauza'}</button>
-          ${speeds
-            .map(
-              (s) =>
-                `<button class="btn ghost ${live.speed === s ? 'active' : ''}" data-speed="${s}">${s}x</button>`,
-            )
-            .join('')}
-          <span class="muted">Zmiany ${live.subsUsed}/3</span>
-        </div>
-        <div class="live-grid">
+        ${scoreboard}
+        <div class="live-grid single">
           <div class="live-main">
             <h3>Przebieg</h3>
             <ul class="live-feed">${feed || '<li class="muted">Mecz się zaczyna…</li>'}</ul>
-            <h3 class="hub-sub">Na boisku</h3>
-            <div class="live-xi">${xi}</div>
           </div>
-          <aside class="live-side">
-            <h3>Ławka ${live.paused ? '— zmiana' : ''}</h3>
-            <div class="fifa-list">${bench}</div>
-          </aside>
         </div>
       </section>`,
       'Mecz',
@@ -636,12 +616,69 @@ export class App {
     )
   }
 
+  /** Boisko + ławka z paskami zmęczenia (pauza / przerwa). */
+  private liveFifaLineupInner(): string {
+    const live = this.state.liveMatch!
+    const team = this.state.team!
+    const map = new Map(team.squad.map((p) => [p.id, p]))
+    const plan = formationPlan(team.tactics.formation)
+
+    const pitchPlayers = live.onPitchIds
+      .map((id, i) => {
+        const p = map.get(id)!
+        const slot = plan[i]!
+        const mismatch = slotMismatch(p, slot)
+        const short = p.name.split(' ').pop() ?? p.name
+        const fat = Math.round(live.fatigue[id] ?? 50)
+        const fatCls = fat < 30 ? 'crit' : fat < 55 ? 'low' : ''
+        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role} · zmęczenie ${fat}%">
+          <div class="fifa-badge">
+            <span class="fifa-ovr">${p.overall}</span>
+            <span class="fifa-pos">${slot.role}</span>
+          </div>
+          <div class="fifa-fatigue ${fatCls}" title="Zmęczenie ${fat}%"><i style="width:${fat}%"></i></div>
+          <div class="fifa-meta">
+            <span class="fifa-name">${short}</span>
+            ${formArrowHtml(p.form)}
+          </div>
+        </div>`
+      })
+      .join('')
+
+    const bench = live.benchIds
+      .map((id) => {
+        const p = map.get(id)!
+        const fat = Math.round(live.fatigue[id] ?? 90)
+        return `<div class="fifa-bench-row" draggable="true" data-drag="bench" data-id="${id}" title="${p.name} · ${ROLE_FULL[p.role]} · świeżość ${fat}%">
+          <span class="fifa-bench-role">${p.role}</span>
+          <span class="fifa-bench-ovr">${p.overall}</span>
+          <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
+          <span class="fifa-bench-fat"><i style="width:${fat}%"></i></span>
+        </div>`
+      })
+      .join('')
+
+    return `
+      <div class="lineup-layout fifa-layout">
+        <div class="pitch fifa-pitch" aria-label="Skład">
+          <div class="pitch-markings fifa-marks"></div>
+          ${pitchPlayers}
+        </div>
+        <aside class="bench-panel fifa-squad">
+          <div class="fifa-squad-head">
+            <h3>Ławka</h3>
+            <span class="muted">${live.subsUsed}/3 zmian</span>
+          </div>
+          <div class="bench-strip vertical fifa-list" data-drop="bench">${bench || '<p class="muted">Pusta ławka</p>'}</div>
+        </aside>
+      </div>`
+  }
+
   private bindLiveMatch(): void {
     this.root.querySelector('#btn-pause')?.addEventListener('click', () => {
       this.go(() => {
         const live = this.state.liveMatch!
         setMatchPaused(this.state, !live.paused)
-        this.subOutId = null
       })
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((btn) => {
@@ -649,27 +686,78 @@ export class App {
         this.go(() => setMatchSpeed(this.state, Number(btn.dataset.speed) as MatchSpeed))
       })
     })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-out]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (!this.state.liveMatch?.paused) return
-        this.subOutId = this.subOutId === btn.dataset.out ? null : btn.dataset.out!
-        this.render()
-        // keep paused — don't restart as running
-        this.stopMatchTimer()
+
+    if (this.state.liveMatch?.paused) this.bindLiveLineupDrag()
+  }
+
+  /** Drag: slot↔slot = przestawienie, ławka↔boisko = zmiana. */
+  private bindLiveLineupDrag(): void {
+    let dragPayload: { kind: 'slot' | 'bench'; slot?: number; id: string } | null = null
+
+    this.root.querySelectorAll<HTMLElement>('[data-drag]').forEach((el) => {
+      el.addEventListener('dragstart', (e) => {
+        const kind = el.dataset.drag as 'slot' | 'bench'
+        dragPayload = {
+          kind,
+          id: el.dataset.id!,
+          slot: el.dataset.slot != null ? Number(el.dataset.slot) : undefined,
+        }
+        el.classList.add('dragging')
+        e.dataTransfer?.setData('text/plain', el.dataset.id!)
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+      })
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging')
+        dragPayload = null
+        this.root.querySelectorAll('.drag-over').forEach((n) => n.classList.remove('drag-over'))
       })
     })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-in]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (!this.subOutId) {
-          pushTempAlert('Najpierw wybierz zawodnika z boiska.')
-          return
-        }
-        const outId = this.subOutId
-        const inId = btn.dataset.in!
+
+    this.root.querySelectorAll<HTMLElement>('[data-slot]').forEach((el) => {
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        el.classList.add('drag-over')
+      })
+      el.addEventListener('dragleave', () => el.classList.remove('drag-over'))
+      el.addEventListener('drop', (e) => {
+        e.preventDefault()
+        el.classList.remove('drag-over')
+        const targetSlot = Number(el.dataset.slot)
+        if (!dragPayload || Number.isNaN(targetSlot)) return
+        if (dragPayload.kind === 'slot' && dragPayload.slot === targetSlot) return
+        this.go(() => {
+          if (dragPayload!.kind === 'slot' && dragPayload!.slot != null) {
+            liveSwapOnPitch(this.state, dragPayload!.slot, targetSlot)
+          } else if (dragPayload!.kind === 'bench') {
+            const outId = this.state.liveMatch!.onPitchIds[targetSlot]!
+            const err = liveSubstitute(this.state, outId, dragPayload!.id)
+            if (err) pushTempAlert(err)
+          }
+          if (this.state.liveMatch && this.state.liveMatch.half !== 'ht') {
+            this.state.liveMatch.paused = true
+          }
+        })
+      })
+    })
+
+    this.root.querySelectorAll<HTMLElement>('[data-drag="bench"]').forEach((el) => {
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        el.classList.add('drag-over')
+      })
+      el.addEventListener('dragleave', () => el.classList.remove('drag-over'))
+      el.addEventListener('drop', (e) => {
+        e.preventDefault()
+        el.classList.remove('drag-over')
+        if (!dragPayload || dragPayload.kind !== 'slot') return
+        const outId = dragPayload.id
+        const inId = el.dataset.id!
         this.go(() => {
           const err = liveSubstitute(this.state, outId, inId)
           if (err) pushTempAlert(err)
-          this.subOutId = null
+          if (this.state.liveMatch && this.state.liveMatch.half !== 'ht') {
+            this.state.liveMatch.paused = true
+          }
         })
       })
     })
@@ -677,8 +765,6 @@ export class App {
 
   private halfTimeHtml(): string {
     const live = this.state.liveMatch!
-    const team = this.state.team!
-    const map = new Map(team.squad.map((p) => [p.id, p]))
     const home = getClub(live.homeId)
     const away = getClub(live.awayId)
 
@@ -690,53 +776,20 @@ export class App {
           <button class="chat-reply" data-mot="defend"><span class="chat-reply-text">Zamknąć mecz</span><span class="chat-reply-hint">Broń wyniku, mniej zmęczenia</span></button>
         </div>`
 
-    const xi = live.onPitchIds
-      .map((id) => {
-        const p = map.get(id)!
-        const fat = Math.round(live.fatigue[id] ?? 50)
-        const sel = this.subOutId === id ? 'selected' : ''
-        return `<button type="button" class="live-xi-chip ${sel}" data-out="${id}">
-          <strong>${p.name.split(' ').pop()}</strong>
-          <span class="live-fat"><i style="width:${fat}%"></i></span>
-          <span class="muted">${fat}% · ${p.role}</span>
-        </button>`
-      })
-      .join('')
-
-    const bench = live.benchIds
-      .map((id) => {
-        const p = map.get(id)!
-        return `<button type="button" class="fifa-bench-row" data-in="${id}">
-          <span class="fifa-bench-role">${p.role}</span>
-          <span class="fifa-bench-ovr">${p.overall}</span>
-          <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
-        </button>`
-      })
-      .join('')
-
     return this.shell(
       `
-      <section class="live-match">
-        <div class="live-scoreboard">
+      <section class="lineup-fifa live-pause-lineup">
+        <div class="live-scoreboard compact">
           <div class="live-team">${home.short}</div>
           <div class="live-score">${live.homeGoals} : ${live.awayGoals}</div>
           <div class="live-team">${away.short}</div>
-          <div class="live-clock">HT</div>
+          <div class="live-clock">HT · zmiany ${live.subsUsed}/3</div>
         </div>
         <h2>Przerwa</h2>
-        <p class="muted">Motywacja i zmiany (max 3 w meczu · użyte ${live.subsUsed}).</p>
         <h3 class="hub-sub">Motywacja</h3>
         ${motivation}
-        <div class="live-grid" style="margin-top:12px">
-          <div>
-            <h3>Na boisku — kliknij, kogo zmieniasz</h3>
-            <div class="live-xi">${xi}</div>
-          </div>
-          <aside class="live-side">
-            <h3>Ławka</h3>
-            <div class="fifa-list">${bench}</div>
-          </aside>
-        </div>
+        <p class="muted pause-hint">Przeciągnij: ławka ↔ boisko = zmiana · slot ↔ slot = przestawienie</p>
+        ${this.liveFifaLineupInner()}
         <div class="actions" style="margin-top:14px">
           <button class="btn primary" id="btn-second">Druga połowa</button>
         </div>
@@ -752,29 +805,8 @@ export class App {
         this.go(() => applyHalftimeMotivation(this.state, btn.dataset.mot as MotivationId))
       })
     })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-out]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.subOutId = this.subOutId === btn.dataset.out ? null : btn.dataset.out!
-        this.render()
-      })
-    })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-in]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (!this.subOutId) {
-          pushTempAlert('Najpierw wybierz zawodnika z boiska.')
-          return
-        }
-        const outId = this.subOutId
-        const inId = btn.dataset.in!
-        this.go(() => {
-          const err = liveSubstitute(this.state, outId, inId)
-          if (err) pushTempAlert(err)
-          this.subOutId = null
-        })
-      })
-    })
+    this.bindLiveLineupDrag()
     this.root.querySelector('#btn-second')?.addEventListener('click', () => {
-      this.subOutId = null
       this.go(() => startSecondHalf(this.state))
     })
   }

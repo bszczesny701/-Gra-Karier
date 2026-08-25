@@ -20,6 +20,8 @@ import { formationFit } from './tactics'
 
 const MAX_SUBS = 3
 
+export type MotivationId = 'calm' | 'push' | 'defend'
+
 function pushEvent(live: LiveMatchState, kind: MatchEvent['kind'], text: string, side?: 'you' | 'them'): void {
   live.events.unshift({
     minute: live.minute,
@@ -183,7 +185,17 @@ export function liveSubstitute(state: GameState, outId: string, inId: string): s
   return null
 }
 
-export type MotivationId = 'calm' | 'push' | 'defend'
+/** Zamiana pozycji na boisku (bez zużycia limitu zmian). */
+export function liveSwapOnPitch(state: GameState, slotA: number, slotB: number): void {
+  const live = state.liveMatch
+  if (!live) return
+  if (live.half !== 'ht' && !live.paused) return
+  if (slotA < 0 || slotB < 0 || slotA > 10 || slotB > 10 || slotA === slotB) return
+  const tmp = live.onPitchIds[slotA]!
+  live.onPitchIds[slotA] = live.onPitchIds[slotB]!
+  live.onPitchIds[slotB] = tmp
+  state.team!.startingIds = [...live.onPitchIds]
+}
 
 export function applyHalftimeMotivation(state: GameState, choice: MotivationId): void {
   const live = state.liveMatch
