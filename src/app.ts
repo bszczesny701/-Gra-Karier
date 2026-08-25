@@ -35,7 +35,9 @@ import type {
 } from './state/types'
 import {
   createEmptyState,
+  formationPitchLayout,
   formationSlots,
+  formArrowHtml,
   styleLabel,
 } from './state/types'
 
@@ -324,41 +326,43 @@ export class App {
   private lineupHtml(): string {
     const team = this.state.team!
     const slots = formationSlots(team.tactics.formation)
+    const layout = formationPitchLayout(team.tactics.formation)
     const map = new Map(team.squad.map((p) => [p.id, p]))
     const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
     const styles: TacticalStyle[] = ['attack', 'balanced', 'defend']
 
-    const xi = team.startingIds
+    const pitchPlayers = team.startingIds
       .map((id, i) => {
         const p = map.get(id)!
         const slot = slots[i]!
+        const pos = layout[i] ?? { x: 50, y: 50 }
         const mismatch = p.position !== slot
         const sel = this.selectedSlot === i ? 'selected' : ''
-        return `<button class="xi-slot ${sel} ${mismatch ? 'mismatch' : ''}" data-slot="${i}">
-          <span class="slot-pos">${slot}</span>
-          <strong>${p.name}</strong>
-          <span class="muted">${p.overall} · F${p.form} · Kond.${p.fitness}</span>
+        const short = p.name.split(' ').pop() ?? p.name
+        return `<button type="button" class="pitch-player ${sel} ${mismatch ? 'mismatch' : ''}" data-slot="${i}" style="left:${pos.x}%;top:${pos.y}%" title="${p.name} · ${slot} · OVR ${p.overall}">
+          <span class="pitch-ovr">${p.overall}</span>
+          ${formArrowHtml(p.form)}
+          <span class="pitch-name">${short}</span>
+          <span class="pitch-role">${slot}</span>
         </button>`
       })
       .join('')
 
-    const bench = team.benchIds
-      .map((id) => {
-        const p = map.get(id)!
-        return `<button class="bench-slot" data-bench="${id}">
-          <span class="slot-pos">${p.position}</span>
-          <strong>${p.name}</strong>
-          <span class="muted">${p.overall}</span>
-        </button>`
-      })
-      .join('')
+    const renderBenchBtn = (id: string, dim = false) => {
+      const p = map.get(id)!
+      return `<button type="button" class="bench-chip ${dim ? 'dim' : ''}" data-bench="${id}" title="${p.name}">
+        <span class="slot-pos">${p.position}</span>
+        <span class="bench-chip-body">
+          <strong>${p.name.split(' ').pop()}</strong>
+          <span class="muted">${p.overall} ${formArrowHtml(p.form)}</span>
+        </span>
+      </button>`
+    }
 
+    const bench = team.benchIds.map((id) => renderBenchBtn(id)).join('')
     const rest = team.squad
       .filter((p) => !team.startingIds.includes(p.id) && !team.benchIds.includes(p.id))
-      .map(
-        (p) =>
-          `<button class="bench-slot dim" data-bench="${p.id}"><span class="slot-pos">${p.position}</span><strong>${p.name}</strong><span class="muted">${p.overall}</span></button>`,
-      )
+      .map((p) => renderBenchBtn(p.id, true))
       .join('')
 
     return this.shell(
@@ -381,11 +385,13 @@ export class App {
             )
             .join('')}
         </div>
-        <p class="muted">Kliknij slot XI, potem zawodnika z ławki — zamiana. Niedopasowanie pozycji podświetlone.</p>
-        <h3 class="hub-sub">Pierwsza „11”</h3>
-        <div class="xi-grid">${xi}</div>
+        <p class="muted">Kliknij zawodnika na boisku, potem kogoś z ławki. ▲ forma · czerwony slot = zła pozycja.</p>
+        <div class="pitch" aria-label="Formacja ${team.tactics.formation}">
+          <div class="pitch-markings"></div>
+          ${pitchPlayers}
+        </div>
         <h3 class="hub-sub">Ławka</h3>
-        <div class="bench-grid">${bench}${rest}</div>
+        <div class="bench-strip">${bench}${rest}</div>
         <div class="actions">
           <button class="btn ghost" id="btn-auto">Auto skład</button>
           <button class="btn ghost" id="btn-back-hub">Wróć</button>

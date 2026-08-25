@@ -847,6 +847,165 @@ h3 {
   color: var(--accent);
 }
 
+.pitch {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 58vh;
+  margin: 10px 0 4px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(244, 247, 245, 0.2);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 30%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(31, 107, 74, 0.95) 0 12%,
+      rgba(27, 96, 66, 0.95) 12% 24%
+    );
+}
+
+.pitch-markings {
+  position: absolute;
+  inset: 8%;
+  border: 2px solid rgba(244, 247, 245, 0.28);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.pitch-markings::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 2px solid rgba(244, 247, 245, 0.28);
+}
+
+.pitch-markings::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(244, 247, 245, 0.28);
+  border-radius: 50%;
+}
+
+.pitch-player {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 4.4rem;
+  padding: 6px 4px 5px;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 247, 245, 0.35);
+  background: rgba(10, 28, 20, 0.88);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.15;
+  z-index: 2;
+}
+
+.pitch-player.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(200, 245, 96, 0.45);
+  z-index: 3;
+}
+
+.pitch-player.mismatch {
+  border-color: rgba(255, 122, 110, 0.85);
+}
+
+.pitch-ovr {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.pitch-name {
+  font-size: 0.68rem;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pitch-role {
+  font-size: 0.58rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.bench-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bench-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  min-width: 7.5rem;
+}
+
+.bench-chip.dim {
+  opacity: 0.65;
+}
+
+.bench-chip-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.bench-chip-body strong {
+  font-size: 0.85rem;
+}
+
+.form-arrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.form-up-strong {
+  color: #b8f04a;
+}
+
+.form-up {
+  color: #c8f560;
+}
+
+.form-flat {
+  color: var(--muted);
+}
+
+.form-down {
+  color: #ffb08a;
+}
+
+.form-down-strong {
+  color: var(--danger);
+}
+
 .moment-canvas {
   width: 100%;
   max-width: 480px;

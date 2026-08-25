@@ -196,10 +196,54 @@ export function styleLabel(style: TacticalStyle): string {
 
 export function formationSlots(formation: Formation): Position[] {
   if (formation === '4-3-3') {
-    return ['OB', 'OB', 'OB', 'OB', 'ŚO', 'POM', 'POM', 'NP', 'NP', 'NP', 'ŚO']
+    // 4 DEF · 4 MID · 3 ATT
+    return ['OB', 'OB', 'OB', 'OB', 'ŚO', 'POM', 'POM', 'ŚO', 'NP', 'NP', 'NP']
   }
   if (formation === '3-5-2') {
-    return ['OB', 'OB', 'OB', 'ŚO', 'ŚO', 'POM', 'POM', 'POM', 'NP', 'NP', 'ŚO']
+    // 3 DEF · 5 MID · 2 ATT · CAM
+    return ['OB', 'OB', 'OB', 'ŚO', 'POM', 'ŚO', 'POM', 'POM', 'NP', 'NP', 'POM']
   }
-  return ['OB', 'OB', 'OB', 'OB', 'POM', 'POM', 'ŚO', 'ŚO', 'NP', 'NP', 'POM']
+  // 4-4-2: 4 DEF · 4 MID · 2 ATT · CAM
+  return ['OB', 'OB', 'OB', 'OB', 'POM', 'ŚO', 'ŚO', 'POM', 'NP', 'NP', 'POM']
 }
+
+/** Współrzędne na boisku (x/y 0–100), atak u góry. */
+export function formationPitchLayout(formation: Formation): Array<{ x: number; y: number }> {
+  const row = (ys: number, xs: number[]) => xs.map((x) => ({ x, y: ys }))
+  if (formation === '4-3-3') {
+    return [
+      ...row(84, [14, 38, 62, 86]),
+      ...row(54, [18, 40, 60, 82]),
+      ...row(22, [22, 50, 78]),
+    ]
+  }
+  if (formation === '3-5-2') {
+    return [
+      ...row(84, [22, 50, 78]),
+      ...row(56, [8, 28, 50, 72, 92]),
+      ...row(22, [36, 64]),
+      { x: 50, y: 36 },
+    ]
+  }
+  return [
+    ...row(84, [14, 38, 62, 86]),
+    ...row(56, [14, 38, 62, 86]),
+    ...row(22, [36, 64]),
+    { x: 50, y: 36 },
+  ]
+}
+
+/** Strzałka formy zamiast liczby. */
+export function formArrow(form: number): { symbol: string; cls: string; title: string } {
+  if (form >= 70) return { symbol: '▲▲', cls: 'form-up-strong', title: 'Świetna forma' }
+  if (form >= 58) return { symbol: '▲', cls: 'form-up', title: 'Dobra forma' }
+  if (form >= 45) return { symbol: '●', cls: 'form-flat', title: 'Przeciętna forma' }
+  if (form >= 32) return { symbol: '▼', cls: 'form-down', title: 'Słaba forma' }
+  return { symbol: '▼▼', cls: 'form-down-strong', title: 'Fatalna forma' }
+}
+
+export function formArrowHtml(form: number): string {
+  const a = formArrow(form)
+  return `<span class="form-arrow ${a.cls}" title="${a.title}">${a.symbol}</span>`
+}
+
