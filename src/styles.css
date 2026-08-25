@@ -1106,7 +1106,7 @@ h3 {
 
 .fifa-bench-row {
   display: grid;
-  grid-template-columns: 2.6rem 2.2rem 1fr auto;
+  grid-template-columns: 2.6rem 2.2rem 1fr auto auto;
   gap: 8px;
   align-items: center;
   padding: 9px 10px;

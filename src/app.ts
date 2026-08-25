@@ -370,11 +370,14 @@ export class App {
         const slot = plan[i]!
         const mismatch = slotMismatch(p, slot)
         const short = p.name.split(' ').pop() ?? p.name
-        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · slot ${slot.role} (${ROLE_FULL[slot.role]}) · naturalnie ${p.role}">
+        const fit = Math.round(p.fitness)
+        const fitCls = fit < 30 ? 'crit' : fit < 55 ? 'low' : ''
+        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · slot ${slot.role} (${ROLE_FULL[slot.role]}) · naturalnie ${p.role} · kondycja ${fit}%">
           <div class="fifa-badge">
             <span class="fifa-ovr">${p.overall}</span>
             <span class="fifa-pos">${slot.role}</span>
           </div>
+          <div class="fifa-fatigue ${fitCls}" title="Kondycja ${fit}%"><i style="width:${fit}%"></i></div>
           <div class="fifa-meta">
             <span class="fifa-name">${short}</span>
             ${formArrowHtml(p.form)}
@@ -385,10 +388,12 @@ export class App {
 
     const renderBenchBtn = (id: string, dim = false) => {
       const p = map.get(id)!
-      return `<div class="fifa-bench-row ${dim ? 'dim' : ''}" draggable="true" data-drag="bench" data-id="${id}" title="${p.name} · ${ROLE_FULL[p.role]}">
+      const fit = Math.round(p.fitness)
+      return `<div class="fifa-bench-row ${dim ? 'dim' : ''}" draggable="true" data-drag="bench" data-id="${id}" title="${p.name} · ${ROLE_FULL[p.role]} · kondycja ${fit}%">
         <span class="fifa-bench-role">${p.role}</span>
         <span class="fifa-bench-ovr">${p.overall}</span>
         <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
+        <span class="fifa-bench-fat"><i style="width:${fit}%"></i></span>
         ${formArrowHtml(p.form)}
       </div>`
     }
