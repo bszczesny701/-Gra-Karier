@@ -42,6 +42,8 @@ export function roleBase(role: PitchRole): Position {
 export type MatchAction = 'shoot' | 'pass' | 'tackle' | 'clear'
 export type Formation = '4-4-2' | '4-3-3' | '3-5-2'
 export type TacticalStyle = 'attack' | 'balanced' | 'defend'
+/** 1 = nisko/wąsko/wolno, 2 = średnio, 3 = wysoko/szeroko/szybko */
+export type TacticAxis = 1 | 2 | 3
 
 export type Screen =
   | 'home'
@@ -94,6 +96,12 @@ export interface SquadPlayer {
 export interface Tactics {
   formation: Formation
   style: TacticalStyle
+  /** Szerokość gry */
+  width: TacticAxis
+  /** Intensywność pressingu */
+  press: TacticAxis
+  /** Tempo gry */
+  tempo: TacticAxis
 }
 
 export interface TeamState {
@@ -266,7 +274,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 103
+export const SAVE_VERSION = 104
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -302,6 +310,39 @@ export function styleLabel(style: TacticalStyle): string {
   if (style === 'attack') return 'Ofensywa'
   if (style === 'defend') return 'Defensywa'
   return 'Zbalansowana'
+}
+
+export function widthLabel(v: TacticAxis): string {
+  if (v === 1) return 'Wąsko'
+  if (v === 3) return 'Szeroko'
+  return 'Normalnie'
+}
+
+export function pressLabel(v: TacticAxis): string {
+  if (v === 1) return 'Niski'
+  if (v === 3) return 'Wysoki'
+  return 'Średni'
+}
+
+export function tempoLabel(v: TacticAxis): string {
+  if (v === 1) return 'Wolne'
+  if (v === 3) return 'Szybkie'
+  return 'Normalne'
+}
+
+export function defaultTactics(formation: Formation = '4-4-2'): Tactics {
+  return { formation, style: 'balanced', width: 2, press: 2, tempo: 2 }
+}
+
+export function normalizeTactics(t: Partial<Tactics> & Pick<Tactics, 'formation' | 'style'>): Tactics {
+  const axis = (v: unknown): TacticAxis => (v === 1 || v === 3 ? v : 2)
+  return {
+    formation: t.formation,
+    style: t.style,
+    width: axis(t.width),
+    press: axis(t.press),
+    tempo: axis(t.tempo),
+  }
 }
 
 export interface FormationSlot {

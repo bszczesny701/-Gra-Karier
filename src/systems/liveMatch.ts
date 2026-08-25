@@ -79,10 +79,25 @@ export function liveTeamPower(state: GameState, live: LiveMatchState): number {
 }
 
 function drainPerMinute(state: GameState, live: LiveMatchState): number {
-  const style = state.team!.tactics.style
-  let d = style === 'attack' ? 0.55 : style === 'defend' ? 0.32 : 0.42
+  const t = state.team!.tactics
+  let d = t.style === 'attack' ? 0.55 : t.style === 'defend' ? 0.32 : 0.42
+  d *= 0.88 + ((t.tempo ?? 2) - 1) * 0.11
+  d *= 0.9 + ((t.press ?? 2) - 1) * 0.1
   d *= live.half === '2' ? live.drainMod : 1
   return d
+}
+
+function tacticAttackMods(state: GameState): { you: number; them: number; chanceYou: number; chanceThem: number } {
+  const t = state.team!.tactics
+  const width = t.width ?? 2
+  const press = t.press ?? 2
+  const tempo = t.tempo ?? 2
+  return {
+    you: (width - 2) * 0.7 + (tempo - 2) * 0.55 + (press - 2) * 0.25,
+    them: (width - 2) * 0.4 + (press - 2) * 0.55 - (tempo - 2) * 0.15,
+    chanceYou: 1 + (tempo - 2) * 0.08 + (width - 2) * 0.05 + (press - 2) * 0.04,
+    chanceThem: 1 + (press - 2) * 0.09 + (width - 2) * 0.04 - (tempo - 2) * 0.02,
+  }
 }
 
 function yourGoals(live: LiveMatchState, clubId: string): { yours: number; theirs: number } {
@@ -410,14 +425,15 @@ export function tickLiveMinute(state: GameState): boolean {
     }
   }
 
+  const mods = tacticAttackMods(state)
   const yourPow = liveTeamPower(state, live)
   const isHome = live.homeId === clubId
   const oppPow = aiClubPower(live.opponentId) + (isHome ? 0 : 1.0)
-  const youAtt = yourPow + (isHome ? 1.5 : 0) + live.moraleBoost * 0.5
-  const themAtt = oppPow + (isHome ? 0 : 1.2) - live.moraleBoost * 0.3
+  const youAtt = yourPow + (isHome ? 1.5 : 0) + live.moraleBoost * 0.5 + mods.you
+  const themAtt = oppPow + (isHome ? 0 : 1.2) - live.moraleBoost * 0.3 + mods.them
 
-  const youChance = clampFloat(0.006 + (youAtt - themAtt) / 900, 0.003, 0.028)
-  const themChance = clampFloat(0.006 + (themAtt - youAtt) / 900, 0.003, 0.028)
+  const youChance = clampFloat((0.006 + (youAtt - themAtt) / 900) * mods.chanceYou, 0.003, 0.032)
+  const themChance = clampFloat((0.006 + (themAtt - youAtt) / 900) * mods.chanceThem, 0.003, 0.032)
 
   let scored = false
   if (chance(youChance)) {

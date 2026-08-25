@@ -3,9 +3,10 @@ import type {
   Formation,
   GameState,
   SeasonReport,
+  TacticAxis,
   TacticalStyle,
 } from '../state/types'
-import { formationPlan } from '../state/types'
+import { formationPlan, normalizeTactics } from '../state/types'
 import { pushLog } from '../state/gameState'
 import {
   applyPromotionRelegation,
@@ -90,18 +91,28 @@ export function selectClub(state: GameState, clubId: string): void {
 
 export function openLineup(state: GameState): void {
   if (!state.team || !state.season || state.season.phase !== 'playing') return
+  state.team.tactics = normalizeTactics(state.team.tactics)
   state.screen = 'lineup'
 }
 
 export function setFormation(state: GameState, formation: Formation): void {
   if (!state.team) return
-  state.team.tactics.formation = formation
+  state.team.tactics = normalizeTactics({ ...state.team.tactics, formation })
   applyFormationDefaultOrder(state.team)
 }
 
 export function setStyle(state: GameState, style: TacticalStyle): void {
   if (!state.team) return
-  state.team.tactics.style = style
+  state.team.tactics = normalizeTactics({ ...state.team.tactics, style })
+}
+
+export function setTacticAxis(
+  state: GameState,
+  key: 'width' | 'press' | 'tempo',
+  value: TacticAxis,
+): void {
+  if (!state.team) return
+  state.team.tactics = normalizeTactics({ ...state.team.tactics, [key]: value })
 }
 
 /** Ustaw konkretnego zawodnika na slot XI (0–10). */

@@ -21,6 +21,7 @@ import {
   setMatchPaused,
   setMatchSpeed,
   setStyle,
+  setTacticAxis,
   standingsAroundPlayer,
   playerTablePosition,
   startManagerCreate,
@@ -40,14 +41,19 @@ import type {
   GameState,
   MatchEvent,
   MatchSpeed,
+  TacticAxis,
   TacticalStyle,
 } from './state/types'
 import {
   createEmptyState,
   formationPlan,
   formArrowHtml,
+  normalizeTactics,
+  pressLabel,
   ROLE_FULL,
   styleLabel,
+  tempoLabel,
+  widthLabel,
 } from './state/types'
 
 export class App {
@@ -90,15 +96,60 @@ export class App {
   }
 
   private startMatchTimer(): void {
-    this.stopMatchTimer()
+    if (this.matchTimer != null) return
     const live = this.state.liveMatch
     if (!live || live.paused || live.half === 'ht' || live.half === 'done') return
+    if (this.state.screen !== 'liveMatch') return
     const ms = intervalMsForSpeed(live.speed)
     this.matchTimer = window.setInterval(() => {
+      const before = {
+        screen: this.state.screen,
+        paused: this.state.liveMatch?.paused ?? false,
+        half: this.state.liveMatch?.half,
+        speed: this.state.liveMatch?.speed,
+      }
       tickLiveMinute(this.state)
       this.persist()
-      this.render()
+      const after = this.state.liveMatch
+      const needsFull =
+        this.state.screen !== before.screen ||
+        !after ||
+        after.paused !== before.paused ||
+        after.half !== before.half
+      if (needsFull) {
+        this.stopMatchTimer()
+        this.render()
+        return
+      }
+      this.patchLiveMatchUi()
     }, ms)
+  }
+
+  /** Odśwież wynik / zegar / feed bez niszczenia DOM (kliknięcia działają). */
+  private patchLiveMatchUi(): void {
+    const live = this.state.liveMatch
+    if (!live || live.paused || this.state.screen !== 'liveMatch') return
+
+    const clock =
+      live.stoppageUntil != null && live.minute > (live.half === '1' ? 45 : 90)
+        ? `${live.half === '1' ? 45 : 90}+${live.minute - (live.half === '1' ? 45 : 90)}'`
+        : `${live.minute}'`
+
+    const scoreEl = this.root.querySelector('.live-score')
+    if (scoreEl) scoreEl.textContent = `${live.homeGoals} : ${live.awayGoals}`
+    const clockEl = this.root.querySelector('.live-clock')
+    if (clockEl) clockEl.textContent = `${clock} · zmiany ${live.subsUsed}/3`
+
+    const feed = this.root.querySelector('.event-feed')
+    if (feed) {
+      const sig = `${live.events[0]?.minute}:${live.events[0]?.kind}:${live.events[0]?.text}:${live.events.length}`
+      if (feed.getAttribute('data-sig') !== sig) {
+        feed.setAttribute('data-sig', sig)
+        feed.innerHTML =
+          live.events.slice(0, 12).map((e, i) => this.eventCardHtml(e, i === 0)).join('') ||
+          '<p class="muted">Mecz się zaczyna…</p>'
+      }
+    }
   }
 
   private shell(body: string, title: string, mode: 'narrow' | 'wide' | 'fifa' = 'narrow'): string {
@@ -309,7 +360,7 @@ export class App {
           <div class="money">${formatStars(club.stars)}</div>
         </div>
         <p class="meta">Miejsce <strong>${place}.</strong> · bilans ${s.record.won}-${s.record.drawn}-${s.record.lost} · chemia <strong>${chem}</strong> · XI ≈ <strong>${xiOvr}</strong> OVR</p>
-        <p class="muted">Taktyka: ${team.tactics.formation} · ${styleLabel(team.tactics.style)}</p>
+        <p class="muted">Taktyka: ${team.tactics.formation} · ${styleLabel(team.tactics.style)} · ${widthLabel(team.tactics.width ?? 2)} · press ${pressLabel(team.tactics.press ?? 2)} · ${tempoLabel(team.tactics.tempo ?? 2)}</p>
         <p class="muted">XI: ${topXi}…</p>
       </section>
 
@@ -361,10 +412,29 @@ export class App {
 
   private lineupHtml(): string {
     const team = this.state.team!
+    team.tactics = normalizeTactics(team.tactics)
     const plan = formationPlan(team.tactics.formation)
     const map = new Map(team.squad.map((p) => [p.id, p]))
     const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
     const styles: TacticalStyle[] = ['attack', 'balanced', 'defend']
+    const axes: TacticAxis[] = [1, 2, 3]
+
+    const axisRow = (
+      key: 'width' | 'press' | 'tempo',
+      label: string,
+      labels: Record<TacticAxis, string>,
+    ) => `
+      <div class="tactics-axis">
+        <span class="tactics-axis-label">${label}</span>
+        <div class="tactics-row compact">
+          ${axes
+            .map(
+              (v) =>
+                `<button class="btn ghost ${team.tactics[key] === v ? 'active' : ''}" data-axis="${key}" data-val="${v}">${labels[v]}</button>`,
+            )
+            .join('')}
+        </div>
+      </div>`
 
     const pitchPlayers = team.startingIds
       .map((id, i) => {
@@ -431,6 +501,11 @@ export class App {
                 )
                 .join('')}
             </div>
+            <div class="tactics-deep">
+              ${axisRow('width', 'Szerokość', { 1: 'Wąsko', 2: 'Normalnie', 3: 'Szeroko' })}
+              ${axisRow('press', 'Pressing', { 1: 'Niski', 2: 'Średni', 3: 'Wysoki' })}
+              ${axisRow('tempo', 'Tempo', { 1: 'Wolne', 2: 'Normalne', 3: 'Szybkie' })}
+            </div>
           </div>
           <div class="actions compact">
             <button class="btn ghost" id="btn-auto">Auto XI</button>
@@ -466,6 +541,13 @@ export class App {
     this.root.querySelectorAll<HTMLButtonElement>('[data-style]').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.go(() => setStyle(this.state, btn.dataset.style as TacticalStyle))
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-axis]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.axis as 'width' | 'press' | 'tempo'
+        const val = Number(btn.dataset.val) as TacticAxis
+        this.go(() => setTacticAxis(this.state, key, val))
       })
     })
 
@@ -651,7 +733,7 @@ export class App {
       detail = e.text
     }
 
-    return `<article class="event-card kind-${e.kind} ${e.side ?? ''} ${featured ? 'featured' : ''}">
+    return `<article class="event-card kind-${e.kind} ${e.side ?? ''} ${featured ? 'featured fresh' : ''}">
       <div class="event-card-tag">${labels[e.kind]}</div>
       <div class="event-card-body">
         <div class="event-card-title">${title}</div>

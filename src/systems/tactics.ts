@@ -55,7 +55,11 @@ export function lineupPower(team: TeamState, tactics: Tactics = team.tactics): n
   const chem = (team.teamChemistry - 50) * 0.06
   const styleBias =
     tactics.style === 'attack' ? 1.5 : tactics.style === 'defend' ? -0.5 : 0.4
-  return ovr + (fit - 0.65) * 8 + chem + styleBias
+  const width = tactics.width ?? 2
+  const press = tactics.press ?? 2
+  const tempo = tactics.tempo ?? 2
+  const axisBias = (width - 2) * 0.35 + (press - 2) * 0.2 + (tempo - 2) * 0.4
+  return ovr + (fit - 0.65) * 8 + chem + styleBias + axisBias
 }
 
 export function validateLineup(team: TeamState): string | null {

@@ -1,6 +1,6 @@
 import { getClub } from '../data/clubs'
 import type { FormationSlot, PitchRole, Position, SquadPlayer, TeamState } from '../state/types'
-import { clamp, formationPlan, roleBase } from '../state/types'
+import { clamp, defaultTactics, formationPlan, roleBase } from '../state/types'
 import { attrsFromOverall, calcOverall } from './playerFactory'
 
 const FIRST = [
@@ -135,7 +135,7 @@ export function createTeamState(clubId: string): TeamState {
   return {
     clubId,
     squad,
-    tactics: { formation: '4-4-2', style: 'balanced' },
+    tactics: defaultTactics('4-4-2'),
     teamChemistry: 52,
     budget: Math.round(getClub(clubId).wage * 40 + getClub(clubId).strength * 80),
     startingIds,
