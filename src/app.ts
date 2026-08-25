@@ -6,32 +6,37 @@ import {
 import {
   assignSlot,
   autoPickLineup,
+  applyHalftimeMotivation,
   confirmLineupAndPlay,
   confirmManagerName,
   dismissMatchResult,
+  liveSubstitute,
   openLineup,
   playNextMatchFromHub,
   polishLeagues,
-  resolveMomentChoice,
-  resolveMomentMinigame,
   selectClub,
   setFormation,
+  setMatchPaused,
+  setMatchSpeed,
   setStyle,
   standingsAroundPlayer,
   playerTablePosition,
   startManagerCreate,
   startNextSeason,
+  startSecondHalf,
+  tickLiveMinute,
   finalizeSeason,
+  type MotivationId,
 } from './systems/managerCareer'
+import { intervalMsForSpeed } from './systems/liveMatch'
 import { nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
 import { averageStarterOvr, starters } from './systems/squadGen'
 import { slotMismatch } from './systems/tactics'
-import { actionLabel, mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type {
   Formation,
   GameState,
-  MatchAction,
+  MatchSpeed,
   TacticalStyle,
 } from './state/types'
 import {
@@ -45,13 +50,19 @@ import {
 export class App {
   private root: HTMLElement
   private state: GameState
-  private cleanupMoment: (() => void) | null = null
   private pickLeagueId: string | null = null
+  private matchTimer: number | null = null
+  private subOutId: string | null = null
 
   constructor(root: HTMLElement) {
     this.root = root
     this.state = hasSave() ? loadState() : createEmptyState()
     if (!this.state.manager || !this.state.team) this.state.screen = 'home'
+    else if (this.state.liveMatch && (this.state.screen === 'liveMatch' || this.state.screen === 'halfTime')) {
+      /* keep */
+    } else if (this.state.liveMatch) {
+      this.state.screen = this.state.liveMatch.half === 'ht' ? 'halfTime' : 'liveMatch'
+    }
   }
 
   start(): void {
@@ -62,12 +73,30 @@ export class App {
     if (this.state.manager && this.state.team) saveState(this.state)
   }
 
+  private stopMatchTimer(): void {
+    if (this.matchTimer != null) {
+      window.clearInterval(this.matchTimer)
+      this.matchTimer = null
+    }
+  }
+
   private go(mutate: () => void): void {
-    this.cleanupMoment?.()
-    this.cleanupMoment = null
+    this.stopMatchTimer()
     mutate()
     this.persist()
     this.render()
+  }
+
+  private startMatchTimer(): void {
+    this.stopMatchTimer()
+    const live = this.state.liveMatch
+    if (!live || live.paused || live.half === 'ht' || live.half === 'done') return
+    const ms = intervalMsForSpeed(live.speed)
+    this.matchTimer = window.setInterval(() => {
+      tickLiveMinute(this.state)
+      this.persist()
+      this.render()
+    }, ms)
   }
 
   private shell(body: string, title: string, mode: 'narrow' | 'wide' | 'fifa' = 'narrow'): string {
@@ -104,9 +133,14 @@ export class App {
         this.root.innerHTML = this.lineupHtml()
         this.bindLineup()
         break
-      case 'matchMoment':
-        this.root.innerHTML = this.matchMomentHtml()
-        this.bindMatchMoment()
+      case 'liveMatch':
+        this.root.innerHTML = this.liveMatchHtml()
+        this.bindLiveMatch()
+        this.startMatchTimer()
+        break
+      case 'halfTime':
+        this.root.innerHTML = this.halfTimeHtml()
+        this.bindHalfTime()
         break
       case 'matchResult':
         this.root.innerHTML = this.matchResultHtml()
@@ -517,60 +551,232 @@ export class App {
     })
   }
 
-  private matchMomentHtml(): string {
-    const moment = this.state.season!.pendingMoment!
-    if (moment.kind === 'choice') {
-      const choices = (moment.choices ?? [])
-        .map(
-          (c) =>
-            `<button class="chat-reply" data-choice="${c.id}"><span class="chat-reply-text">${c.label}</span><span class="chat-reply-hint">${c.hint}</span></button>`,
-        )
-        .join('')
-      return this.shell(
-        `
-        <section class="panel">
-          <h2>${moment.label}</h2>
-          <p>${moment.description}</p>
-          <p class="meta">${getClub(moment.homeId).short} ${moment.homeGoals}:${moment.awayGoals} ${getClub(moment.awayId).short}</p>
-          <div class="chat-replies">${choices}</div>
-        </section>`,
-        'Decyzja',
+  private liveMatchHtml(): string {
+    const live = this.state.liveMatch!
+    const team = this.state.team!
+    const map = new Map(team.squad.map((p) => [p.id, p]))
+    const home = getClub(live.homeId)
+    const away = getClub(live.awayId)
+    const clock =
+      live.stoppageUntil != null && live.minute > (live.half === '1' ? 45 : 90)
+        ? `${live.half === '1' ? 45 : 90}+${live.minute - (live.half === '1' ? 45 : 90)}'`
+        : `${live.minute}'`
+
+    const feed = live.events
+      .slice(0, 12)
+      .map(
+        (e) =>
+          `<li class="live-event ${e.side ?? ''}"><span class="live-min">${e.minute}'</span> ${e.text}</li>`,
       )
-    }
+      .join('')
+
+    const xi = live.onPitchIds
+      .map((id) => {
+        const p = map.get(id)!
+        const fat = Math.round(live.fatigue[id] ?? 50)
+        const sel = this.subOutId === id ? 'selected' : ''
+        return `<button type="button" class="live-xi-chip ${sel}" data-out="${id}" ${live.paused ? '' : 'disabled'}>
+          <strong>${p.name.split(' ').pop()}</strong>
+          <span class="live-fat"><i style="width:${fat}%"></i></span>
+          <span class="muted">${p.overall} · ${fat}%</span>
+        </button>`
+      })
+      .join('')
+
+    const bench = live.paused
+      ? live.benchIds
+          .map((id) => {
+            const p = map.get(id)!
+            return `<button type="button" class="fifa-bench-row" data-in="${id}">
+              <span class="fifa-bench-role">${p.role}</span>
+              <span class="fifa-bench-ovr">${p.overall}</span>
+              <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
+              <span class="muted">${Math.round(live.fatigue[id] ?? 90)}%</span>
+            </button>`
+          })
+          .join('')
+      : `<p class="muted">Pauza, aby robić zmiany (${live.subsUsed}/3).</p>`
+
+    const speeds: MatchSpeed[] = [1, 2, 4]
+
     return this.shell(
       `
-      <section class="panel">
-        <h2>${moment.label}</h2>
-        <p class="muted">${moment.description}</p>
-        <p class="meta">${actionLabel(moment.action as MatchAction)} · ${getClub(moment.homeId).short} ${moment.homeGoals}:${moment.awayGoals} ${getClub(moment.awayId).short}</p>
-        <canvas id="moment-canvas" width="480" height="320" class="moment-canvas"></canvas>
+      <section class="live-match">
+        <div class="live-scoreboard">
+          <div class="live-team">${home.short}</div>
+          <div class="live-score">${live.homeGoals} : ${live.awayGoals}</div>
+          <div class="live-team">${away.short}</div>
+          <div class="live-clock">${clock}</div>
+        </div>
+        <div class="live-controls">
+          <button class="btn ghost" id="btn-pause">${live.paused ? 'Wznów' : 'Pauza'}</button>
+          ${speeds
+            .map(
+              (s) =>
+                `<button class="btn ghost ${live.speed === s ? 'active' : ''}" data-speed="${s}">${s}x</button>`,
+            )
+            .join('')}
+          <span class="muted">Zmiany ${live.subsUsed}/3</span>
+        </div>
+        <div class="live-grid">
+          <div class="live-main">
+            <h3>Przebieg</h3>
+            <ul class="live-feed">${feed || '<li class="muted">Mecz się zaczyna…</li>'}</ul>
+            <h3 class="hub-sub">Na boisku</h3>
+            <div class="live-xi">${xi}</div>
+          </div>
+          <aside class="live-side">
+            <h3>Ławka ${live.paused ? '— zmiana' : ''}</h3>
+            <div class="fifa-list">${bench}</div>
+          </aside>
+        </div>
       </section>`,
-      'Moment',
+      'Mecz',
+      'fifa',
     )
   }
 
-  private bindMatchMoment(): void {
-    const moment = this.state.season!.pendingMoment!
-    if (moment.kind === 'choice') {
-      this.root.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          this.go(() => resolveMomentChoice(this.state, btn.dataset.choice!))
+  private bindLiveMatch(): void {
+    this.root.querySelector('#btn-pause')?.addEventListener('click', () => {
+      this.go(() => {
+        const live = this.state.liveMatch!
+        setMatchPaused(this.state, !live.paused)
+        this.subOutId = null
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => setMatchSpeed(this.state, Number(btn.dataset.speed) as MatchSpeed))
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-out]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!this.state.liveMatch?.paused) return
+        this.subOutId = this.subOutId === btn.dataset.out ? null : btn.dataset.out!
+        this.render()
+        // keep paused — don't restart as running
+        this.stopMatchTimer()
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-in]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!this.subOutId) {
+          pushTempAlert('Najpierw wybierz zawodnika z boiska.')
+          return
+        }
+        const outId = this.subOutId
+        const inId = btn.dataset.in!
+        this.go(() => {
+          const err = liveSubstitute(this.state, outId, inId)
+          if (err) pushTempAlert(err)
+          this.subOutId = null
         })
       })
-      return
-    }
-    const canvas = this.root.querySelector<HTMLCanvasElement>('#moment-canvas')
-    if (!canvas || !moment.action) return
-    const opp = getClub(moment.opponentId)
-    const diff = Math.min(1, Math.max(0, (opp.strength - 40) / 45))
-    this.cleanupMoment = mountMatchMoment(
-      canvas,
-      moment.action,
-      (score) => {
-        this.go(() => resolveMomentMinigame(this.state, score))
-      },
-      { difficulty: diff },
+    })
+  }
+
+  private halfTimeHtml(): string {
+    const live = this.state.liveMatch!
+    const team = this.state.team!
+    const map = new Map(team.squad.map((p) => [p.id, p]))
+    const home = getClub(live.homeId)
+    const away = getClub(live.awayId)
+
+    const motivation = live.motivationDone
+      ? `<p class="meta">Motywacja ustawiona.</p>`
+      : `<div class="chat-replies">
+          <button class="chat-reply" data-mot="calm"><span class="chat-reply-text">Spokojnie, trzymamy plan</span><span class="chat-reply-hint">Bez zmian tempa</span></button>
+          <button class="chat-reply" data-mot="push"><span class="chat-reply-text">Podnieść tempo!</span><span class="chat-reply-hint">+siła, większe zmęczenie</span></button>
+          <button class="chat-reply" data-mot="defend"><span class="chat-reply-text">Zamknąć mecz</span><span class="chat-reply-hint">Broń wyniku, mniej zmęczenia</span></button>
+        </div>`
+
+    const xi = live.onPitchIds
+      .map((id) => {
+        const p = map.get(id)!
+        const fat = Math.round(live.fatigue[id] ?? 50)
+        const sel = this.subOutId === id ? 'selected' : ''
+        return `<button type="button" class="live-xi-chip ${sel}" data-out="${id}">
+          <strong>${p.name.split(' ').pop()}</strong>
+          <span class="live-fat"><i style="width:${fat}%"></i></span>
+          <span class="muted">${fat}% · ${p.role}</span>
+        </button>`
+      })
+      .join('')
+
+    const bench = live.benchIds
+      .map((id) => {
+        const p = map.get(id)!
+        return `<button type="button" class="fifa-bench-row" data-in="${id}">
+          <span class="fifa-bench-role">${p.role}</span>
+          <span class="fifa-bench-ovr">${p.overall}</span>
+          <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
+        </button>`
+      })
+      .join('')
+
+    return this.shell(
+      `
+      <section class="live-match">
+        <div class="live-scoreboard">
+          <div class="live-team">${home.short}</div>
+          <div class="live-score">${live.homeGoals} : ${live.awayGoals}</div>
+          <div class="live-team">${away.short}</div>
+          <div class="live-clock">HT</div>
+        </div>
+        <h2>Przerwa</h2>
+        <p class="muted">Motywacja i zmiany (max 3 w meczu · użyte ${live.subsUsed}).</p>
+        <h3 class="hub-sub">Motywacja</h3>
+        ${motivation}
+        <div class="live-grid" style="margin-top:12px">
+          <div>
+            <h3>Na boisku — kliknij, kogo zmieniasz</h3>
+            <div class="live-xi">${xi}</div>
+          </div>
+          <aside class="live-side">
+            <h3>Ławka</h3>
+            <div class="fifa-list">${bench}</div>
+          </aside>
+        </div>
+        <div class="actions" style="margin-top:14px">
+          <button class="btn primary" id="btn-second">Druga połowa</button>
+        </div>
+      </section>`,
+      'Przerwa',
+      'fifa',
     )
+  }
+
+  private bindHalfTime(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-mot]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => applyHalftimeMotivation(this.state, btn.dataset.mot as MotivationId))
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-out]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.subOutId = this.subOutId === btn.dataset.out ? null : btn.dataset.out!
+        this.render()
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-in]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!this.subOutId) {
+          pushTempAlert('Najpierw wybierz zawodnika z boiska.')
+          return
+        }
+        const outId = this.subOutId
+        const inId = btn.dataset.in!
+        this.go(() => {
+          const err = liveSubstitute(this.state, outId, inId)
+          if (err) pushTempAlert(err)
+          this.subOutId = null
+        })
+      })
+    })
+    this.root.querySelector('#btn-second')?.addEventListener('click', () => {
+      this.subOutId = null
+      this.go(() => startSecondHalf(this.state))
+    })
   }
 
   private matchResultHtml(): string {

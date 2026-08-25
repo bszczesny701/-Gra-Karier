@@ -49,6 +49,8 @@ export type Screen =
   | 'pickClub'
   | 'hub'
   | 'lineup'
+  | 'liveMatch'
+  | 'halfTime'
   | 'matchMoment'
   | 'matchResult'
   | 'seasonReport'
@@ -132,6 +134,53 @@ export interface ManagerMatchResult {
   chemistryAfter: number
 }
 
+export type MatchEventKind =
+  | 'goal'
+  | 'sub'
+  | 'fatigue'
+  | 'kickoff'
+  | 'ht'
+  | 'ft'
+  | 'motivation'
+  | 'chance'
+
+export interface MatchEvent {
+  minute: number
+  kind: MatchEventKind
+  text: string
+  side?: 'you' | 'them'
+}
+
+export type LiveHalf = '1' | 'ht' | '2' | 'done'
+export type MatchSpeed = 1 | 2 | 4
+
+export interface LiveMatchState {
+  homeId: string
+  awayId: string
+  opponentId: string
+  minute: number
+  half: LiveHalf
+  homeGoals: number
+  awayGoals: number
+  onPitchIds: string[]
+  benchIds: string[]
+  /** Max 3 */
+  subsUsed: number
+  fatigue: Record<string, number>
+  /** Po motywacji: -1 bronić, 0 plan, +1 atak */
+  moraleBoost: number
+  /** Mnożnik zmęczenia w 2. połowie */
+  drainMod: number
+  motivationDone: boolean
+  events: MatchEvent[]
+  paused: boolean
+  speed: MatchSpeed
+  /** Wszyscy, którzy wyszli na boisko */
+  playedIds: string[]
+  /** Koniec doliczonego czasu (null = normalna gra) */
+  stoppageUntil: number | null
+}
+
 export interface PendingMatchMoment {
   homeId: string
   awayId: string
@@ -194,13 +243,14 @@ export interface GameState {
   team: TeamState | null
   season: SeasonState | null
   seasonReport: SeasonReport | null
+  liveMatch: LiveMatchState | null
   /** clubId → leagueId (ruchome awanse/spadki) */
   clubLeagueIds: Record<string, string>
   log: string[]
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 101
+export const SAVE_VERSION = 102
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -219,6 +269,7 @@ export function createEmptyState(): GameState {
     team: null,
     season: null,
     seasonReport: null,
+    liveMatch: null,
     clubLeagueIds: {},
     log: [],
   }

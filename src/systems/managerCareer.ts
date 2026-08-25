@@ -12,13 +12,31 @@ import {
   createManagerSeason,
   initClubLeagueMap,
 } from './leagueSim'
-import { beginMatchday, resolveMomentChoice, resolveMomentMinigame } from './matchEngine'
+import { beginMatchday } from './matchEngine'
+import {
+  applyHalftimeMotivation,
+  liveSubstitute,
+  setMatchPaused,
+  setMatchSpeed,
+  startSecondHalf,
+  tickLiveMinute,
+  type MotivationId,
+} from './liveMatch'
 import { createTeamState, pickDefaultLineup } from './squadGen'
 import { applyFormationDefaultOrder, validateLineup } from './tactics'
 import { playerTablePosition, sortedStandings, standingsAroundPlayer } from './standings'
 
 export { playerTablePosition, sortedStandings, standingsAroundPlayer }
-export { beginMatchday, resolveMomentChoice, resolveMomentMinigame }
+export { beginMatchday }
+export {
+  applyHalftimeMotivation,
+  liveSubstitute,
+  setMatchPaused,
+  setMatchSpeed,
+  startSecondHalf,
+  tickLiveMinute,
+}
+export type { MotivationId }
 
 export function polishLeagues() {
   return LEAGUES.filter((l) => l.country === 'PL').sort((a, b) => b.tier - a.tier)
