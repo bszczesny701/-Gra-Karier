@@ -85,5 +85,6 @@ export function applyFormationDefaultOrder(team: TeamState): void {
 }
 
 export function slotMismatch(p: SquadPlayer, slot: FormationSlot): boolean {
+  if (p.role === 'BR') return true
   return p.role !== slot.role && p.position !== slot.base
 }

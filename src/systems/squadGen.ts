@@ -1,4 +1,5 @@
 import { getClub } from '../data/clubs'
+import { EKSTRAKLASA_SQUADS, type RealPlayerSeed } from '../data/ekstraklasaSquads'
 import type { FormationSlot, PitchRole, Position, SquadPlayer, TeamState } from '../state/types'
 import { clamp, defaultTactics, formationPlan, roleBase } from '../state/types'
 import { attrsFromOverall, calcOverall } from './playerFactory'
@@ -67,7 +68,31 @@ function makePlayer(
   }
 }
 
+function makeFromSeed(clubId: string, index: number, seed: RealPlayerSeed): SquadPlayer {
+  const position = roleBase(seed.role)
+  const attrs = attrsFromOverall(position, seed.overall)
+  const h = hash(`${clubId}-${seed.name}-${index}`)
+  return {
+    id: `${clubId}-r${index}`,
+    name: seed.name,
+    position,
+    role: seed.role,
+    age: seed.age,
+    overall: seed.overall,
+    attrs,
+    form: 48 + (h % 20),
+    fitness: 78 + (h % 18),
+    morale: 50 + (h % 25),
+    injuryMatchesLeft: 0,
+    suspensionMatchesLeft: 0,
+  }
+}
+
 export function generateSquad(clubId: string): SquadPlayer[] {
+  const real = EKSTRAKLASA_SQUADS[clubId]
+  if (real?.length) {
+    return real.map((seed, i) => makeFromSeed(clubId, i, seed))
+  }
   const club = getClub(clubId)
   return SQUAD_ROLES.map((role, i) => makePlayer(clubId, i, role, club.strength))
 }
@@ -79,6 +104,7 @@ function relatedPos(a: Position, b: Position): boolean {
 }
 
 function fitScore(p: SquadPlayer, slot: FormationSlot): number {
+  if (p.role === 'BR') return -999
   if ((p.injuryMatchesLeft ?? 0) > 0 || (p.suspensionMatchesLeft ?? 0) > 0) return -999
   let s = p.overall + (p.form - 50) / 5 + (p.fitness - 70) / 8
   if (p.role === slot.role) s += 14

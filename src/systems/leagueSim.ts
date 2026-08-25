@@ -165,6 +165,11 @@ export function aiClubPower(clubId: string, mods: Record<string, number> = {}): 
   return getEffectiveStrength(clubId, mods) + (Math.random() * 4 - 2)
 }
 
+/** Stabilny podgląd mocy klubu (bez losu) — do UI. */
+export function clubPowerPreview(clubId: string): number {
+  return Math.round(getEffectiveStrength(clubId))
+}
+
 export function simulateAiMatch(
   homeId: string,
   awayId: string,

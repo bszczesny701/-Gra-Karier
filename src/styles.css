@@ -658,6 +658,92 @@ h3 {
   font-size: 0.8rem;
 }
 
+.mini-table.full-table th:nth-child(n + 3),
+.mini-table.full-table td:nth-child(n + 3) {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rival-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rival-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rival-edge {
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-size: 1.1rem;
+}
+
+.rival-matchup {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.rival-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rival-side:last-child {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.rival-name {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+}
+
+.rival-pow {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.rival-vs {
+  font-family: var(--font-display);
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+
+.pow-bar {
+  width: 100%;
+  max-width: 140px;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.pow-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7ab87a, var(--accent));
+}
+
+.pow-bar.them i {
+  background: linear-gradient(90deg, #ffb08a, var(--danger));
+}
+
+.rival-fixture {
+  margin: 0;
+}
+
 .hub-sub {
   margin: 14px 0 4px;
   font-size: 0.95rem;

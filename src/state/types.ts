@@ -2,6 +2,7 @@ export type Position = 'NP' | 'POM' | 'ŚO' | 'OB'
 
 /** Dokładna pozycja na boisku (skrót jak w FIFA). */
 export type PitchRole =
+  | 'BR'
   | 'LO'
   | 'ŚOL'
   | 'ŚO'
@@ -17,6 +18,7 @@ export type PitchRole =
   | 'PN'
 
 export const ROLE_FULL: Record<PitchRole, string> = {
+  BR: 'Bramkarz',
   LO: 'Lewy obrońca',
   ŚOL: 'Lewy środkowy obrońca',
   ŚO: 'Środkowy obrońca',
@@ -33,6 +35,7 @@ export const ROLE_FULL: Record<PitchRole, string> = {
 }
 
 export function roleBase(role: PitchRole): Position {
+  if (role === 'BR') return 'OB'
   if (role === 'LN' || role === 'ŚN' || role === 'PN') return 'NP'
   if (role === 'LP' || role === 'PP' || role === 'OP' || role === 'ŚP') return 'POM'
   if (role === 'DP') return 'ŚO'
@@ -274,7 +277,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 104
+export const SAVE_VERSION = 105
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
