@@ -56,8 +56,24 @@ body {
 }
 
 .app-shell.wide {
-  max-width: min(1280px, 100%);
+  max-width: min(1400px, 100%);
   padding: 0 20px 20px;
+}
+
+.app-shell.fifa {
+  max-width: none;
+  width: 100%;
+  padding: 0 10px 10px;
+  min-height: 100dvh;
+}
+
+.app-shell.fifa .content {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-shell.fifa .topbar {
+  padding: 10px 4px 8px;
 }
 
 .topbar {
@@ -907,6 +923,242 @@ h3 {
   gap: 16px;
   align-items: stretch;
   min-height: calc(100dvh - 200px);
+}
+
+.fifa-layout {
+  grid-template-columns: 1fr minmax(280px, 340px);
+  gap: 12px;
+  min-height: calc(100dvh - 110px);
+  height: calc(100dvh - 110px);
+}
+
+.lineup-fifa {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.fifa-bar {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+  align-items: center;
+}
+
+.fifa-bar-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.fifa-bar-left h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.lineup-layout .pitch {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 560px;
+  max-height: none;
+  margin: 0;
+}
+
+.fifa-pitch {
+  min-height: 0 !important;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.35);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.06), transparent 45%),
+    repeating-linear-gradient(
+      90deg,
+      #1a7a4c 0 8%,
+      #176f45 8% 16%
+    ) !important;
+}
+
+.fifa-marks {
+  inset: 5% !important;
+  border-width: 2px !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.fifa-card {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: grab;
+  user-select: none;
+  z-index: 2;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+}
+
+.fifa-card:active,
+.fifa-card.dragging,
+.fifa-bench-row.dragging {
+  cursor: grabbing;
+  opacity: 0.75;
+}
+
+.fifa-card.drag-over .fifa-badge {
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+.fifa-badge {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.2), transparent 50%),
+    linear-gradient(160deg, #1e3a2c, #0d1f16);
+  border: 3px solid #d4f06a;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.fifa-card.mismatch .fifa-badge {
+  border-color: #ff7a6e;
+}
+
+.fifa-ovr {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.fifa-pos {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  margin-top: 1px;
+}
+
+.fifa-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 90px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.fifa-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fifa-squad {
+  background: rgba(8, 18, 14, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fifa-squad-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.fifa-squad-head h3 {
+  margin: 0;
+}
+
+.fifa-list {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.fifa-list.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+.fifa-bench-row {
+  display: grid;
+  grid-template-columns: 2.6rem 2.2rem 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: grab;
+  user-select: none;
+  width: 100%;
+  color: var(--text);
+  font: inherit;
+}
+
+.fifa-bench-row:hover {
+  background: rgba(200, 245, 96, 0.08);
+  border-color: rgba(200, 245, 96, 0.25);
+}
+
+.fifa-bench-row.dim {
+  opacity: 0.55;
+}
+
+.fifa-bench-role {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.fifa-bench-ovr {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: #fff;
+}
+
+.fifa-bench-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .fifa-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .fifa-pitch {
+    min-height: 480px !important;
+  }
 }
 
 .lineup-layout .pitch {

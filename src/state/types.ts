@@ -1,4 +1,44 @@
 export type Position = 'NP' | 'POM' | 'ŚO' | 'OB'
+
+/** Dokładna pozycja na boisku (skrót jak w FIFA). */
+export type PitchRole =
+  | 'LO'
+  | 'ŚOL'
+  | 'ŚO'
+  | 'ŚOP'
+  | 'PO'
+  | 'LP'
+  | 'DP'
+  | 'ŚP'
+  | 'PP'
+  | 'OP'
+  | 'LN'
+  | 'ŚN'
+  | 'PN'
+
+export const ROLE_FULL: Record<PitchRole, string> = {
+  LO: 'Lewy obrońca',
+  ŚOL: 'Lewy środkowy obrońca',
+  ŚO: 'Środkowy obrońca',
+  ŚOP: 'Prawy środkowy obrońca',
+  PO: 'Prawy obrońca',
+  LP: 'Lewy pomocnik',
+  DP: 'Defensywny pomocnik',
+  ŚP: 'Środkowy pomocnik',
+  PP: 'Prawy pomocnik',
+  OP: 'Ofensywny pomocnik',
+  LN: 'Lewy napastnik',
+  ŚN: 'Środkowy napastnik',
+  PN: 'Prawy napastnik',
+}
+
+export function roleBase(role: PitchRole): Position {
+  if (role === 'LN' || role === 'ŚN' || role === 'PN') return 'NP'
+  if (role === 'LP' || role === 'PP' || role === 'OP' || role === 'ŚP') return 'POM'
+  if (role === 'DP') return 'ŚO'
+  return 'OB'
+}
+
 export type MatchAction = 'shoot' | 'pass' | 'tackle' | 'clear'
 export type Formation = '4-4-2' | '4-3-3' | '3-5-2'
 export type TacticalStyle = 'attack' | 'balanced' | 'defend'
@@ -33,7 +73,10 @@ export interface Manager {
 export interface SquadPlayer {
   id: string
   name: string
+  /** Grupa atrybutów (OB/POM/ŚO/NP) */
   position: Position
+  /** Dokładna pozycja FIFA-style: LP, ŚN, LO… */
+  role: PitchRole
   age: number
   overall: number
   attrs: Attributes
@@ -157,7 +200,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 100
+export const SAVE_VERSION = 101
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -194,50 +237,11 @@ export function styleLabel(style: TacticalStyle): string {
   return 'Zbalansowana'
 }
 
-/** Dokładna pozycja na boisku (skrót jak w składach). */
-export type PitchRole =
-  | 'LO'
-  | 'ŚOL'
-  | 'ŚO'
-  | 'ŚOP'
-  | 'PO'
-  | 'LP'
-  | 'DP'
-  | 'ŚP'
-  | 'PP'
-  | 'OP'
-  | 'LN'
-  | 'ŚN'
-  | 'PN'
-
 export interface FormationSlot {
   role: PitchRole
   base: Position
   x: number
   y: number
-}
-
-export const ROLE_FULL: Record<PitchRole, string> = {
-  LO: 'Lewy obrońca',
-  ŚOL: 'Lewy środkowy obrońca',
-  ŚO: 'Środkowy obrońca',
-  ŚOP: 'Prawy środkowy obrońca',
-  PO: 'Prawy obrońca',
-  LP: 'Lewy pomocnik',
-  DP: 'Defensywny pomocnik',
-  ŚP: 'Środkowy pomocnik',
-  PP: 'Prawy pomocnik',
-  OP: 'Ofensywny pomocnik',
-  LN: 'Lewy napastnik',
-  ŚN: 'Środkowy napastnik',
-  PN: 'Prawy napastnik',
-}
-
-export function roleBase(role: PitchRole): Position {
-  if (role === 'LN' || role === 'ŚN' || role === 'PN') return 'NP'
-  if (role === 'LP' || role === 'PP' || role === 'OP' || role === 'ŚP') return 'POM'
-  if (role === 'DP') return 'ŚO'
-  return 'OB'
 }
 
 export function formationPlan(formation: Formation): FormationSlot[] {

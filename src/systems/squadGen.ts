@@ -1,6 +1,6 @@
 import { getClub } from '../data/clubs'
-import type { Position, SquadPlayer, TeamState } from '../state/types'
-import { clamp } from '../state/types'
+import type { FormationSlot, PitchRole, Position, SquadPlayer, TeamState } from '../state/types'
+import { clamp, formationPlan, roleBase } from '../state/types'
 import { attrsFromOverall, calcOverall } from './playerFactory'
 
 const FIRST = [
@@ -26,28 +26,27 @@ export function playerName(seed: string): string {
   return `${FIRST[h % FIRST.length]} ${LAST[Math.floor(h / 19) % LAST.length]}`
 }
 
-/** Rozkład pozycji w kadrze ~18 osób */
-const SQUAD_SHAPE: Position[] = [
-  'OB', 'OB', 'OB', 'OB', 'OB',
-  'ŚO', 'ŚO', 'ŚO', 'ŚO',
-  'POM', 'POM', 'POM', 'POM',
-  'NP', 'NP', 'NP', 'NP',
-  'POM',
+/** Kadra z dokładnymi rolami (jak w FIFA). */
+const SQUAD_ROLES: PitchRole[] = [
+  'LO', 'ŚOL', 'ŚOP', 'PO', 'ŚO',
+  'LP', 'DP', 'ŚP', 'PP', 'OP',
+  'LN', 'ŚN', 'PN',
+  'LP', 'PP', 'DP', 'ŚOL', 'ŚN',
 ]
 
 function makePlayer(
   clubId: string,
   index: number,
-  position: Position,
+  role: PitchRole,
   baseStrength: number,
 ): SquadPlayer {
-  const seed = `${clubId}-${index}-${position}`
+  const position = roleBase(role)
+  const seed = `${clubId}-${index}-${role}`
   const h = hash(seed)
   const age = 18 + (h % 16)
   const variance = ((h % 13) - 6) + (age <= 21 ? -2 : age >= 32 ? -1 : 1)
   const overall = clamp(baseStrength + variance, 32, 92)
   const attrs = attrsFromOverall(position, overall)
-  // Lekki rozrzut atrybutów
   const keys = ['pace', 'shooting', 'passing', 'defending', 'stamina'] as const
   const jitter = keys[h % keys.length]!
   attrs[jitter] = clamp(attrs[jitter] + ((h % 5) - 2))
@@ -56,6 +55,7 @@ function makePlayer(
     id: `${clubId}-p${index}`,
     name: playerName(seed),
     position,
+    role,
     age,
     overall: finalOvr,
     attrs,
@@ -67,28 +67,37 @@ function makePlayer(
 
 export function generateSquad(clubId: string): SquadPlayer[] {
   const club = getClub(clubId)
-  return SQUAD_SHAPE.map((pos, i) => makePlayer(clubId, i, pos, club.strength))
+  return SQUAD_ROLES.map((role, i) => makePlayer(clubId, i, role, club.strength))
 }
 
-/** Domyślna „11” — najlepsi dopasowani do slotów 4-4-2 */
+function relatedPos(a: Position, b: Position): boolean {
+  if (a === b) return true
+  if ((a === 'POM' || a === 'ŚO') && (b === 'POM' || b === 'ŚO')) return true
+  return false
+}
+
+function fitScore(p: SquadPlayer, slot: FormationSlot): number {
+  let s = p.overall + (p.form - 50) / 5 + (p.fitness - 70) / 8
+  if (p.role === slot.role) s += 14
+  else if (p.position === slot.base) s += 7
+  else if (relatedPos(p.position, slot.base)) s += 2
+  else s -= 14
+  if (p.fitness < 50) s -= 8
+  return s
+}
+
+/** Domyślna „11” — najlepsi dopasowani do ról formacji. */
 export function pickDefaultLineup(
   squad: SquadPlayer[],
-  slots: Position[],
+  plan: FormationSlot[],
 ): { startingIds: string[]; benchIds: string[] } {
   const used = new Set<string>()
   const startingIds: string[] = []
 
-  for (const slot of slots) {
+  for (const slot of plan) {
     const candidates = squad
       .filter((p) => !used.has(p.id))
-      .map((p) => ({
-        p,
-        score:
-          p.overall +
-          (p.position === slot ? 8 : relatedPos(p.position, slot) ? 2 : -12) +
-          (p.form - 50) / 5 +
-          (p.fitness - 70) / 8,
-      }))
+      .map((p) => ({ p, score: fitScore(p, slot) }))
       .sort((a, b) => b.score - a.score)
     const pick = candidates[0]?.p
     if (pick) {
@@ -106,18 +115,10 @@ export function pickDefaultLineup(
   return { startingIds, benchIds }
 }
 
-function relatedPos(a: Position, b: Position): boolean {
-  if (a === b) return true
-  if ((a === 'POM' || a === 'ŚO') && (b === 'POM' || b === 'ŚO')) return true
-  return false
-}
-
 export function createTeamState(clubId: string): TeamState {
   const squad = generateSquad(clubId)
-  const slots: Position[] = [
-    'OB', 'OB', 'OB', 'OB', 'POM', 'POM', 'ŚO', 'ŚO', 'NP', 'NP', 'POM',
-  ]
-  const { startingIds, benchIds } = pickDefaultLineup(squad, slots)
+  const plan = formationPlan('4-4-2')
+  const { startingIds, benchIds } = pickDefaultLineup(squad, plan)
   return {
     clubId,
     squad,

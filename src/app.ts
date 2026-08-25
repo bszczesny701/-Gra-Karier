@@ -25,6 +25,7 @@ import {
 } from './systems/managerCareer'
 import { nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
 import { averageStarterOvr, starters } from './systems/squadGen'
+import { slotMismatch } from './systems/tactics'
 import { actionLabel, mountMatchMoment } from './systems/matchMoment'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type {
@@ -69,9 +70,10 @@ export class App {
     this.render()
   }
 
-  private shell(body: string, title: string, wide = false): string {
+  private shell(body: string, title: string, mode: 'narrow' | 'wide' | 'fifa' = 'narrow'): string {
+    const cls = mode === 'narrow' ? 'app-shell' : mode === 'fifa' ? 'app-shell fifa' : 'app-shell wide'
     return `
-      <div class="app-shell${wide ? ' wide' : ''}">
+      <div class="${cls}">
         <header class="topbar">
           <div class="brand">GRA TRENERA</div>
           <div class="topbar-title">${title}</div>
@@ -298,7 +300,7 @@ export class App {
         <div class="actions"><button class="btn ghost danger" id="btn-reset">Nowa gra</button></div>
       </section>`,
       club.short,
-      true,
+      'wide',
     )
   }
 
@@ -332,25 +334,28 @@ export class App {
       .map((id, i) => {
         const p = map.get(id)!
         const slot = plan[i]!
-        const mismatch = p.position !== slot.base
+        const mismatch = slotMismatch(p, slot)
         const short = p.name.split(' ').pop() ?? p.name
-        return `<div class="pitch-player ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role} (${ROLE_FULL[slot.role]}) · OVR ${p.overall}">
-          <span class="pitch-role">${slot.role}</span>
-          <span class="pitch-ovr">${p.overall}</span>
-          ${formArrowHtml(p.form)}
-          <span class="pitch-name">${short}</span>
+        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · slot ${slot.role} (${ROLE_FULL[slot.role]}) · naturalnie ${p.role}">
+          <div class="fifa-badge">
+            <span class="fifa-ovr">${p.overall}</span>
+            <span class="fifa-pos">${slot.role}</span>
+          </div>
+          <div class="fifa-meta">
+            <span class="fifa-name">${short}</span>
+            ${formArrowHtml(p.form)}
+          </div>
         </div>`
       })
       .join('')
 
     const renderBenchBtn = (id: string, dim = false) => {
       const p = map.get(id)!
-      return `<div class="bench-chip ${dim ? 'dim' : ''}" draggable="true" data-drag="bench" data-id="${id}" title="${p.name} · ${p.position}">
-        <span class="slot-pos">${p.position}</span>
-        <span class="bench-chip-body">
-          <strong>${p.name.split(' ').pop()}</strong>
-          <span class="muted">${p.overall} ${formArrowHtml(p.form)}</span>
-        </span>
+      return `<div class="fifa-bench-row ${dim ? 'dim' : ''}" draggable="true" data-drag="bench" data-id="${id}" title="${p.name} · ${ROLE_FULL[p.role]}">
+        <span class="fifa-bench-role">${p.role}</span>
+        <span class="fifa-bench-ovr">${p.overall}</span>
+        <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
+        ${formArrowHtml(p.form)}
       </div>`
     }
 
@@ -362,13 +367,10 @@ export class App {
 
     return this.shell(
       `
-      <section class="panel lineup-panel">
-        <div class="lineup-toolbar">
-          <div>
-            <h2>Skład i taktyka</h2>
-            <p class="muted">Przeciągnij zawodników · LP = lewy pomocnik, ŚN = środkowy napastnik itd.</p>
-          </div>
-          <div class="lineup-toolbar-actions">
+      <section class="lineup-fifa">
+        <div class="lineup-toolbar fifa-bar">
+          <div class="fifa-bar-left">
+            <h2>Skład</h2>
             <div class="tactics-row">
               ${formations
                 .map(
@@ -385,26 +387,29 @@ export class App {
                 )
                 .join('')}
             </div>
-            <div class="actions compact">
-              <button class="btn ghost" id="btn-auto">Auto</button>
-              <button class="btn ghost" id="btn-back-hub">Wróć</button>
-              <button class="btn primary" id="btn-play">Graj mecz</button>
-            </div>
+          </div>
+          <div class="actions compact">
+            <button class="btn ghost" id="btn-auto">Auto XI</button>
+            <button class="btn ghost" id="btn-back-hub">Wróć</button>
+            <button class="btn primary" id="btn-play">Graj mecz</button>
           </div>
         </div>
-        <div class="lineup-layout">
-          <div class="pitch" aria-label="Formacja ${team.tactics.formation}">
-            <div class="pitch-markings"></div>
+        <div class="lineup-layout fifa-layout">
+          <div class="pitch fifa-pitch" aria-label="Formacja ${team.tactics.formation}">
+            <div class="pitch-markings fifa-marks"></div>
             ${pitchPlayers}
           </div>
-          <aside class="bench-panel">
-            <h3>Ławka</h3>
-            <div class="bench-strip vertical" data-drop="bench">${bench}${rest}</div>
+          <aside class="bench-panel fifa-squad">
+            <div class="fifa-squad-head">
+              <h3>Rezerwa</h3>
+              <span class="muted">Przeciągnij na boisko</span>
+            </div>
+            <div class="bench-strip vertical fifa-list" data-drop="bench">${bench}${rest}</div>
           </aside>
         </div>
       </section>`,
       'Skład',
-      true,
+      'fifa',
     )
   }
 

@@ -5,7 +5,7 @@ import type {
   SeasonReport,
   TacticalStyle,
 } from '../state/types'
-import { formationSlots } from '../state/types'
+import { formationPlan } from '../state/types'
 import { pushLog } from '../state/gameState'
 import {
   applyPromotionRelegation,
@@ -202,8 +202,8 @@ export function startNextSeason(state: GameState): void {
     p.age += 1
   }
   team.teamChemistry = Math.max(40, Math.min(70, team.teamChemistry))
-  const slots = formationSlots(team.tactics.formation)
-  const picked = pickDefaultLineup(team.squad, slots)
+  const plan = formationPlan(team.tactics.formation)
+  const picked = pickDefaultLineup(team.squad, plan)
   team.startingIds = picked.startingIds
   team.benchIds = picked.benchIds
 

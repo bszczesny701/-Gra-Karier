@@ -1,13 +1,14 @@
 import type {
   Formation,
+  FormationSlot,
   Position,
   SquadPlayer,
   TacticalStyle,
   Tactics,
   TeamState,
 } from '../state/types'
-import { formationSlots } from '../state/types'
-import { starters } from './squadGen'
+import { formationPlan } from '../state/types'
+import { pickDefaultLineup, starters } from './squadGen'
 
 /** Bonus taktyczny względem siły przeciwnika (różnica stylów). */
 export function styleMatchupBonus(style: TacticalStyle, opponentStrength: number, yourOvr: number): number {
@@ -21,26 +22,27 @@ export function styleMatchupBonus(style: TacticalStyle, opponentStrength: number
   return 0.4
 }
 
-/** Jak dobrze XI pasuje do slotów formacji (0–1). */
-export function formationFit(team: TeamState, formation: Formation = team.tactics.formation): number {
-  const slots = formationSlots(formation)
-  const xi = starters(team)
-  if (xi.length < 11) return 0.55
-  let score = 0
-  for (let i = 0; i < 11; i++) {
-    const slot = slots[i]!
-    const p = xi[i]
-    if (!p) continue
-    if (p.position === slot) score += 1
-    else if (softFit(p.position, slot)) score += 0.45
-  }
-  return score / 11
-}
-
 function softFit(pos: Position, slot: Position): boolean {
   if ((pos === 'POM' || pos === 'ŚO') && (slot === 'POM' || slot === 'ŚO')) return true
   if (pos === 'NP' && slot === 'POM') return true
   return false
+}
+
+/** Jak dobrze XI pasuje do slotów formacji (0–1). */
+export function formationFit(team: TeamState, formation: Formation = team.tactics.formation): number {
+  const plan = formationPlan(formation)
+  const xi = starters(team)
+  if (xi.length < 11) return 0.55
+  let score = 0
+  for (let i = 0; i < 11; i++) {
+    const slot = plan[i]!
+    const p = xi[i]
+    if (!p) continue
+    if (p.role === slot.role) score += 1
+    else if (p.position === slot.base) score += 0.7
+    else if (softFit(p.position, slot.base)) score += 0.4
+  }
+  return score / 11
 }
 
 export function lineupPower(team: TeamState, tactics: Tactics = team.tactics): number {
@@ -69,33 +71,12 @@ export function validateLineup(team: TeamState): string | null {
 }
 
 export function applyFormationDefaultOrder(team: TeamState): void {
-  const slots = formationSlots(team.tactics.formation)
-  const pool = [...team.squad]
-  const used = new Set<string>()
-  const next: string[] = []
-  for (const slot of slots) {
-    const ranked = pool
-      .filter((p) => !used.has(p.id))
-      .sort((a, b) => slotScore(b, slot) - slotScore(a, slot))
-    const pick = ranked[0]
-    if (pick) {
-      used.add(pick.id)
-      next.push(pick.id)
-    }
-  }
-  team.startingIds = next
-  team.benchIds = pool
-    .filter((p) => !used.has(p.id))
-    .sort((a, b) => b.overall - a.overall)
-    .slice(0, 7)
-    .map((p) => p.id)
+  const plan = formationPlan(team.tactics.formation)
+  const picked = pickDefaultLineup(team.squad, plan)
+  team.startingIds = picked.startingIds
+  team.benchIds = picked.benchIds
 }
 
-function slotScore(p: SquadPlayer, slot: Position): number {
-  let s = p.overall + (p.form - 50) / 4
-  if (p.position === slot) s += 10
-  else if (softFit(p.position, slot)) s += 3
-  else s -= 14
-  if (p.fitness < 50) s -= 8
-  return s
+export function slotMismatch(p: SquadPlayer, slot: FormationSlot): boolean {
+  return p.role !== slot.role && p.position !== slot.base
 }
