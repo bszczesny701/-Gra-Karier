@@ -194,43 +194,112 @@ export function styleLabel(style: TacticalStyle): string {
   return 'Zbalansowana'
 }
 
-export function formationSlots(formation: Formation): Position[] {
+/** Dokładna pozycja na boisku (skrót jak w składach). */
+export type PitchRole =
+  | 'LO'
+  | 'ŚOL'
+  | 'ŚO'
+  | 'ŚOP'
+  | 'PO'
+  | 'LP'
+  | 'DP'
+  | 'ŚP'
+  | 'PP'
+  | 'OP'
+  | 'LN'
+  | 'ŚN'
+  | 'PN'
+
+export interface FormationSlot {
+  role: PitchRole
+  base: Position
+  x: number
+  y: number
+}
+
+export const ROLE_FULL: Record<PitchRole, string> = {
+  LO: 'Lewy obrońca',
+  ŚOL: 'Lewy środkowy obrońca',
+  ŚO: 'Środkowy obrońca',
+  ŚOP: 'Prawy środkowy obrońca',
+  PO: 'Prawy obrońca',
+  LP: 'Lewy pomocnik',
+  DP: 'Defensywny pomocnik',
+  ŚP: 'Środkowy pomocnik',
+  PP: 'Prawy pomocnik',
+  OP: 'Ofensywny pomocnik',
+  LN: 'Lewy napastnik',
+  ŚN: 'Środkowy napastnik',
+  PN: 'Prawy napastnik',
+}
+
+export function roleBase(role: PitchRole): Position {
+  if (role === 'LN' || role === 'ŚN' || role === 'PN') return 'NP'
+  if (role === 'LP' || role === 'PP' || role === 'OP' || role === 'ŚP') return 'POM'
+  if (role === 'DP') return 'ŚO'
+  return 'OB'
+}
+
+export function formationPlan(formation: Formation): FormationSlot[] {
+  const s = (role: PitchRole, x: number, y: number): FormationSlot => ({
+    role,
+    base: roleBase(role),
+    x,
+    y,
+  })
   if (formation === '4-3-3') {
-    // 4 DEF · 4 MID · 3 ATT
-    return ['OB', 'OB', 'OB', 'OB', 'ŚO', 'POM', 'POM', 'ŚO', 'NP', 'NP', 'NP']
+    return [
+      s('LO', 12, 84),
+      s('ŚOL', 36, 86),
+      s('ŚOP', 64, 86),
+      s('PO', 88, 84),
+      s('LP', 18, 54),
+      s('DP', 42, 58),
+      s('ŚP', 58, 52),
+      s('PP', 82, 54),
+      s('LN', 20, 22),
+      s('ŚN', 50, 18),
+      s('PN', 80, 22),
+    ]
   }
   if (formation === '3-5-2') {
-    // 3 DEF · 5 MID · 2 ATT · CAM
-    return ['OB', 'OB', 'OB', 'ŚO', 'POM', 'ŚO', 'POM', 'POM', 'NP', 'NP', 'POM']
+    return [
+      s('ŚOL', 28, 86),
+      s('ŚO', 50, 88),
+      s('ŚOP', 72, 86),
+      s('LP', 8, 54),
+      s('DP', 32, 58),
+      s('ŚP', 50, 56),
+      s('PP', 92, 54),
+      s('PO', 78, 58),
+      s('OP', 50, 36),
+      s('LN', 36, 20),
+      s('PN', 64, 20),
+    ]
   }
-  // 4-4-2: 4 DEF · 4 MID · 2 ATT · CAM
-  return ['OB', 'OB', 'OB', 'OB', 'POM', 'ŚO', 'ŚO', 'POM', 'NP', 'NP', 'POM']
+  // 4-4-2
+  return [
+    s('LO', 12, 84),
+    s('ŚOL', 36, 86),
+    s('ŚOP', 64, 86),
+    s('PO', 88, 84),
+    s('LP', 14, 54),
+    s('DP', 38, 56),
+    s('ŚP', 62, 56),
+    s('PP', 86, 54),
+    s('LN', 36, 20),
+    s('PN', 64, 20),
+    s('OP', 50, 34),
+  ]
+}
+
+export function formationSlots(formation: Formation): Position[] {
+  return formationPlan(formation).map((p) => p.base)
 }
 
 /** Współrzędne na boisku (x/y 0–100), atak u góry. */
 export function formationPitchLayout(formation: Formation): Array<{ x: number; y: number }> {
-  const row = (ys: number, xs: number[]) => xs.map((x) => ({ x, y: ys }))
-  if (formation === '4-3-3') {
-    return [
-      ...row(84, [14, 38, 62, 86]),
-      ...row(54, [18, 40, 60, 82]),
-      ...row(22, [22, 50, 78]),
-    ]
-  }
-  if (formation === '3-5-2') {
-    return [
-      ...row(84, [22, 50, 78]),
-      ...row(56, [8, 28, 50, 72, 92]),
-      ...row(22, [36, 64]),
-      { x: 50, y: 36 },
-    ]
-  }
-  return [
-    ...row(84, [14, 38, 62, 86]),
-    ...row(56, [14, 38, 62, 86]),
-    ...row(22, [36, 64]),
-    { x: 50, y: 36 },
-  ]
+  return formationPlan(formation).map((p) => ({ x: p.x, y: p.y }))
 }
 
 /** Strzałka formy zamiast liczby. */

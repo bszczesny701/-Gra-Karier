@@ -35,9 +35,9 @@ import type {
 } from './state/types'
 import {
   createEmptyState,
-  formationPitchLayout,
-  formationSlots,
+  formationPlan,
   formArrowHtml,
+  ROLE_FULL,
   styleLabel,
 } from './state/types'
 
@@ -45,7 +45,6 @@ export class App {
   private root: HTMLElement
   private state: GameState
   private cleanupMoment: (() => void) | null = null
-  private selectedSlot: number | null = null
   private pickLeagueId: string | null = null
 
   constructor(root: HTMLElement) {
@@ -70,9 +69,9 @@ export class App {
     this.render()
   }
 
-  private shell(body: string, title: string): string {
+  private shell(body: string, title: string, wide = false): string {
     return `
-      <div class="app-shell">
+      <div class="app-shell${wide ? ' wide' : ''}">
         <header class="topbar">
           <div class="brand">GRA TRENERA</div>
           <div class="topbar-title">${title}</div>
@@ -299,16 +298,15 @@ export class App {
         <div class="actions"><button class="btn ghost danger" id="btn-reset">Nowa gra</button></div>
       </section>`,
       club.short,
+      true,
     )
   }
 
   private bindHub(): void {
     this.root.querySelector('#btn-match')?.addEventListener('click', () => {
-      this.selectedSlot = null
       this.go(() => playNextMatchFromHub(this.state))
     })
     this.root.querySelector('#btn-lineup')?.addEventListener('click', () => {
-      this.selectedSlot = null
       this.go(() => openLineup(this.state))
     })
     this.root.querySelector('#btn-end')?.addEventListener('click', () => {
@@ -325,8 +323,7 @@ export class App {
 
   private lineupHtml(): string {
     const team = this.state.team!
-    const slots = formationSlots(team.tactics.formation)
-    const layout = formationPitchLayout(team.tactics.formation)
+    const plan = formationPlan(team.tactics.formation)
     const map = new Map(team.squad.map((p) => [p.id, p]))
     const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
     const styles: TacticalStyle[] = ['attack', 'balanced', 'defend']
@@ -334,29 +331,27 @@ export class App {
     const pitchPlayers = team.startingIds
       .map((id, i) => {
         const p = map.get(id)!
-        const slot = slots[i]!
-        const pos = layout[i] ?? { x: 50, y: 50 }
-        const mismatch = p.position !== slot
-        const sel = this.selectedSlot === i ? 'selected' : ''
+        const slot = plan[i]!
+        const mismatch = p.position !== slot.base
         const short = p.name.split(' ').pop() ?? p.name
-        return `<button type="button" class="pitch-player ${sel} ${mismatch ? 'mismatch' : ''}" data-slot="${i}" style="left:${pos.x}%;top:${pos.y}%" title="${p.name} · ${slot} · OVR ${p.overall}">
+        return `<div class="pitch-player ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role} (${ROLE_FULL[slot.role]}) · OVR ${p.overall}">
+          <span class="pitch-role">${slot.role}</span>
           <span class="pitch-ovr">${p.overall}</span>
           ${formArrowHtml(p.form)}
           <span class="pitch-name">${short}</span>
-          <span class="pitch-role">${slot}</span>
-        </button>`
+        </div>`
       })
       .join('')
 
     const renderBenchBtn = (id: string, dim = false) => {
       const p = map.get(id)!
-      return `<button type="button" class="bench-chip ${dim ? 'dim' : ''}" data-bench="${id}" title="${p.name}">
+      return `<div class="bench-chip ${dim ? 'dim' : ''}" draggable="true" data-drag="bench" data-id="${id}" title="${p.name} · ${p.position}">
         <span class="slot-pos">${p.position}</span>
         <span class="bench-chip-body">
           <strong>${p.name.split(' ').pop()}</strong>
           <span class="muted">${p.overall} ${formArrowHtml(p.form)}</span>
         </span>
-      </button>`
+      </div>`
     }
 
     const bench = team.benchIds.map((id) => renderBenchBtn(id)).join('')
@@ -367,38 +362,49 @@ export class App {
 
     return this.shell(
       `
-      <section class="panel">
-        <h2>Skład i taktyka</h2>
-        <div class="tactics-row">
-          ${formations
-            .map(
-              (f) =>
-                `<button class="btn ghost ${team.tactics.formation === f ? 'active' : ''}" data-form="${f}">${f}</button>`,
-            )
-            .join('')}
+      <section class="panel lineup-panel">
+        <div class="lineup-toolbar">
+          <div>
+            <h2>Skład i taktyka</h2>
+            <p class="muted">Przeciągnij zawodników · LP = lewy pomocnik, ŚN = środkowy napastnik itd.</p>
+          </div>
+          <div class="lineup-toolbar-actions">
+            <div class="tactics-row">
+              ${formations
+                .map(
+                  (f) =>
+                    `<button class="btn ghost ${team.tactics.formation === f ? 'active' : ''}" data-form="${f}">${f}</button>`,
+                )
+                .join('')}
+            </div>
+            <div class="tactics-row">
+              ${styles
+                .map(
+                  (st) =>
+                    `<button class="btn ghost ${team.tactics.style === st ? 'active' : ''}" data-style="${st}">${styleLabel(st)}</button>`,
+                )
+                .join('')}
+            </div>
+            <div class="actions compact">
+              <button class="btn ghost" id="btn-auto">Auto</button>
+              <button class="btn ghost" id="btn-back-hub">Wróć</button>
+              <button class="btn primary" id="btn-play">Graj mecz</button>
+            </div>
+          </div>
         </div>
-        <div class="tactics-row">
-          ${styles
-            .map(
-              (st) =>
-                `<button class="btn ghost ${team.tactics.style === st ? 'active' : ''}" data-style="${st}">${styleLabel(st)}</button>`,
-            )
-            .join('')}
-        </div>
-        <p class="muted">Kliknij zawodnika na boisku, potem kogoś z ławki. ▲ forma · czerwony slot = zła pozycja.</p>
-        <div class="pitch" aria-label="Formacja ${team.tactics.formation}">
-          <div class="pitch-markings"></div>
-          ${pitchPlayers}
-        </div>
-        <h3 class="hub-sub">Ławka</h3>
-        <div class="bench-strip">${bench}${rest}</div>
-        <div class="actions">
-          <button class="btn ghost" id="btn-auto">Auto skład</button>
-          <button class="btn ghost" id="btn-back-hub">Wróć</button>
-          <button class="btn primary" id="btn-play">Graj mecz</button>
+        <div class="lineup-layout">
+          <div class="pitch" aria-label="Formacja ${team.tactics.formation}">
+            <div class="pitch-markings"></div>
+            ${pitchPlayers}
+          </div>
+          <aside class="bench-panel">
+            <h3>Ławka</h3>
+            <div class="bench-strip vertical" data-drop="bench">${bench}${rest}</div>
+          </aside>
         </div>
       </section>`,
       'Skład',
+      true,
     )
   }
 
@@ -413,27 +419,80 @@ export class App {
         this.go(() => setStyle(this.state, btn.dataset.style as TacticalStyle))
       })
     })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-slot]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const i = Number(btn.dataset.slot)
-        this.selectedSlot = this.selectedSlot === i ? null : i
-        this.render()
-      })
+
+    let dragPayload: { kind: 'slot' | 'bench'; slot?: number; id: string } | null = null
+
+    const onDragStart = (el: HTMLElement, e: DragEvent) => {
+      const kind = el.dataset.drag as 'slot' | 'bench'
+      const id = el.dataset.id!
+      const slot = el.dataset.slot != null ? Number(el.dataset.slot) : undefined
+      dragPayload = { kind, id, slot }
+      el.classList.add('dragging')
+      e.dataTransfer?.setData('text/plain', id)
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+    }
+
+    const onDragEnd = (el: HTMLElement) => {
+      el.classList.remove('dragging')
+      dragPayload = null
+      this.root.querySelectorAll('.drag-over').forEach((n) => n.classList.remove('drag-over'))
+    }
+
+    this.root.querySelectorAll<HTMLElement>('[data-drag]').forEach((el) => {
+      el.addEventListener('dragstart', (e) => onDragStart(el, e))
+      el.addEventListener('dragend', () => onDragEnd(el))
     })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-bench]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.bench!
-        if (this.selectedSlot == null) {
-          // wybierz pierwszy slot niedopasowany / najsłabszy — zamień slot 0 jeśli nic
-          this.selectedSlot = 0
-        }
-        const slot = this.selectedSlot
+
+    this.root.querySelectorAll<HTMLElement>('[data-slot]').forEach((el) => {
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault()
+        el.classList.add('drag-over')
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+      })
+      el.addEventListener('dragleave', () => el.classList.remove('drag-over'))
+      el.addEventListener('drop', (e) => {
+        e.preventDefault()
+        el.classList.remove('drag-over')
+        const targetSlot = Number(el.dataset.slot)
+        if (!dragPayload || Number.isNaN(targetSlot)) return
+        if (dragPayload.kind === 'slot' && dragPayload.slot === targetSlot) return
         this.go(() => {
-          assignSlot(this.state, slot, id)
-          this.selectedSlot = null
+          if (dragPayload!.kind === 'slot' && dragPayload!.slot != null) {
+            const team = this.state.team!
+            const a = dragPayload!.slot
+            const b = targetSlot
+            const tmp = team.startingIds[a]!
+            team.startingIds[a] = team.startingIds[b]!
+            team.startingIds[b] = tmp
+          } else {
+            assignSlot(this.state, targetSlot, dragPayload!.id)
+          }
         })
       })
     })
+
+    const benchDrop = this.root.querySelector<HTMLElement>('[data-drop="bench"]')
+    benchDrop?.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      benchDrop.classList.add('drag-over')
+    })
+    benchDrop?.addEventListener('dragleave', () => benchDrop.classList.remove('drag-over'))
+    benchDrop?.addEventListener('drop', (e) => {
+      e.preventDefault()
+      benchDrop.classList.remove('drag-over')
+      if (!dragPayload || dragPayload.kind !== 'slot' || dragPayload.slot == null) return
+      const fromSlot = dragPayload.slot
+      const fromId = dragPayload.id
+      this.go(() => {
+        const team = this.state.team!
+        const benchId = team.benchIds[0]
+        if (!benchId) return
+        assignSlot(this.state, fromSlot, benchId)
+        // assignSlot puts fromId on bench; ensure order
+        void fromId
+      })
+    })
+
     this.root.querySelector('#btn-auto')?.addEventListener('click', () => {
       this.go(() => autoPickLineup(this.state))
     })

@@ -52,6 +52,12 @@ body {
   padding: 0 16px 32px;
   display: flex;
   flex-direction: column;
+  width: 100%;
+}
+
+.app-shell.wide {
+  max-width: min(1280px, 100%);
+  padding: 0 20px 20px;
 }
 
 .topbar {
@@ -865,45 +871,93 @@ h3 {
     );
 }
 
-.pitch-markings {
-  position: absolute;
-  inset: 8%;
-  border: 2px solid rgba(244, 247, 245, 0.28);
-  border-radius: 4px;
-  pointer-events: none;
+.lineup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
 }
 
-.pitch-markings::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  border-top: 2px solid rgba(244, 247, 245, 0.28);
+.lineup-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
 }
 
-.pitch-markings::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 22%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border: 2px solid rgba(244, 247, 245, 0.28);
-  border-radius: 50%;
+.lineup-toolbar h2 {
+  margin: 0 0 4px;
+}
+
+.lineup-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.actions.compact {
+  margin: 0;
+}
+
+.lineup-layout {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 16px;
+  align-items: stretch;
+  min-height: calc(100dvh - 200px);
+}
+
+.lineup-layout .pitch {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 560px;
+  max-height: none;
+  margin: 0;
+}
+
+.bench-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.bench-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.bench-strip.vertical {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow: auto;
+  flex: 1;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.18);
+  min-height: 200px;
+}
+
+.bench-strip.vertical.drag-over {
+  border-color: var(--accent);
+  background: rgba(200, 245, 96, 0.08);
 }
 
 .pitch-player {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 4.4rem;
+  width: 4.8rem;
   padding: 6px 4px 5px;
   border-radius: 12px;
   border: 1px solid rgba(244, 247, 245, 0.35);
-  background: rgba(10, 28, 20, 0.88);
+  background: rgba(10, 28, 20, 0.9);
   color: var(--text);
-  cursor: pointer;
+  cursor: grab;
   font: inherit;
   display: flex;
   flex-direction: column;
@@ -911,6 +965,19 @@ h3 {
   gap: 1px;
   line-height: 1.15;
   z-index: 2;
+  user-select: none;
+}
+
+.pitch-player:active,
+.pitch-player.dragging,
+.bench-chip.dragging {
+  cursor: grabbing;
+  opacity: 0.7;
+}
+
+.pitch-player.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(200, 245, 96, 0.5);
 }
 
 .pitch-player.selected {
@@ -939,15 +1006,10 @@ h3 {
 }
 
 .pitch-role {
-  font-size: 0.58rem;
-  color: var(--muted);
-  letter-spacing: 0.04em;
-}
-
-.bench-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.03em;
 }
 
 .bench-chip {
@@ -959,9 +1021,61 @@ h3 {
   border: 1px solid var(--line);
   background: rgba(0, 0, 0, 0.22);
   color: var(--text);
-  cursor: pointer;
+  cursor: grab;
   font: inherit;
-  min-width: 7.5rem;
+  min-width: 0;
+  width: 100%;
+  user-select: none;
+}
+
+@media (max-width: 860px) {
+  .lineup-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .lineup-layout .pitch {
+    min-height: 420px;
+  }
+
+  .bench-strip.vertical {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: 220px;
+  }
+
+  .bench-chip {
+    width: auto;
+    min-width: 7.5rem;
+  }
+}
+
+.pitch-markings {
+  position: absolute;
+  inset: 8%;
+  border: 2px solid rgba(244, 247, 245, 0.28);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.pitch-markings::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 2px solid rgba(244, 247, 245, 0.28);
+}
+
+.pitch-markings::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(244, 247, 245, 0.28);
+  border-radius: 50%;
 }
 
 .bench-chip.dim {
