@@ -3,6 +3,7 @@ import type {
   GameState,
   LeagueFixture,
   LiveMatchState,
+  LivePitchSlot,
   ManagerMatchResult,
   MatchEvent,
   MatchSpeed,
@@ -22,18 +23,34 @@ const MAX_SUBS = 3
 
 export type MotivationId = 'calm' | 'push' | 'defend'
 
-function pushEvent(live: LiveMatchState, kind: MatchEvent['kind'], text: string, side?: 'you' | 'them'): void {
+function shortName(name: string): string {
+  return name.split(' ').pop() ?? name
+}
+
+function pushEvent(
+  live: LiveMatchState,
+  kind: MatchEvent['kind'],
+  text: string,
+  side?: 'you' | 'them',
+  extra?: { playerName?: string; playerId?: string },
+): void {
   live.events.unshift({
     minute: live.minute,
     kind,
     text,
     side,
+    playerName: extra?.playerName,
+    playerId: extra?.playerId,
   })
   if (live.events.length > 40) live.events.length = 40
 }
 
 function mapPlayers(state: GameState): Map<string, SquadPlayer> {
   return new Map(state.team!.squad.map((p) => [p.id, p]))
+}
+
+function pitchIds(live: LiveMatchState): string[] {
+  return live.onPitchIds.filter((id): id is string => Boolean(id))
 }
 
 function effectiveOvr(p: SquadPlayer, fatigue: number): number {
@@ -44,16 +61,21 @@ function effectiveOvr(p: SquadPlayer, fatigue: number): number {
 export function liveTeamPower(state: GameState, live: LiveMatchState): number {
   const team = state.team!
   const map = mapPlayers(state)
-  const xs = live.onPitchIds.map((id) => map.get(id)).filter(Boolean) as SquadPlayer[]
-  if (!xs.length) return 40
+  const ids = pitchIds(live)
+  const xs = ids.map((id) => map.get(id)).filter(Boolean) as SquadPlayer[]
+  if (!xs.length) return 28
   const avg =
     xs.reduce((s, p) => s + effectiveOvr(p, live.fatigue[p.id] ?? 50), 0) / xs.length
-  const fit = formationFit({ ...team, startingIds: live.onPitchIds })
+  const fit =
+    ids.length === 11
+      ? (formationFit({ ...team, startingIds: ids }) - 0.65) * 6
+      : ((ids.length / 11) - 0.65) * 6
   const chem = (team.teamChemistry - 50) * 0.05
   const styleBias =
     team.tactics.style === 'attack' ? 1.2 : team.tactics.style === 'defend' ? -0.4 : 0.3
   const morale = live.moraleBoost * 1.4
-  return avg + (fit - 0.65) * 6 + chem + styleBias + morale
+  const menDown = (11 - xs.length) * 3.8
+  return avg + fit + chem + styleBias + morale - menDown
 }
 
 function drainPerMinute(state: GameState, live: LiveMatchState): number {
@@ -73,18 +95,18 @@ function addGoal(live: LiveMatchState, forYou: boolean, clubId: string, scorerNa
   if (forYou) {
     if (isHome) live.homeGoals += 1
     else live.awayGoals += 1
-    pushEvent(live, 'goal', `GOL! ${scorerName} — ${live.homeGoals}:${live.awayGoals}`, 'you')
+    pushEvent(live, 'goal', `${scorerName}`, 'you', { playerName: scorerName })
   } else {
     if (isHome) live.awayGoals += 1
     else live.homeGoals += 1
     const opp = getClub(live.opponentId).short
-    pushEvent(live, 'goal', `Gol dla ${opp} — ${live.homeGoals}:${live.awayGoals}`, 'them')
+    pushEvent(live, 'goal', `Gol dla ${opp}`, 'them', { playerName: opp })
   }
 }
 
 function pickScorer(state: GameState, live: LiveMatchState): string {
   const map = mapPlayers(state)
-  const pool = live.onPitchIds
+  const pool = pitchIds(live)
     .map((id) => map.get(id)!)
     .filter(Boolean)
     .map((p) => ({
@@ -101,6 +123,104 @@ function pickScorer(state: GameState, live: LiveMatchState): string {
     if (r <= 0) return x.p.name
   }
   return pool[0]?.p.name ?? 'Zawodnik'
+}
+
+function pickPitchPlayer(state: GameState, live: LiveMatchState): SquadPlayer | null {
+  const map = mapPlayers(state)
+  const pool = pitchIds(live)
+    .map((id) => map.get(id))
+    .filter(Boolean) as SquadPlayer[]
+  if (!pool.length) return null
+  return pool[rngInt(pool.length)]!
+}
+
+/** Usuwa zawodnika z boiska (czerwona / kontuzja). */
+function removeFromPitch(
+  state: GameState,
+  live: LiveMatchState,
+  playerId: string,
+  reason: 'red' | 'injury',
+): void {
+  const slot = live.onPitchIds.indexOf(playerId)
+  if (slot < 0) return
+  live.onPitchIds[slot] = null
+  if (reason === 'red') live.redLockedSlots[slot] = true
+  const p = mapPlayers(state).get(playerId)
+  if (reason === 'red' && p) {
+    p.suspensionMatchesLeft = Math.max(p.suspensionMatchesLeft ?? 0, 1)
+  }
+  if (reason === 'injury' && p) {
+    p.injuryMatchesLeft = Math.max(p.injuryMatchesLeft ?? 0, 1 + rngInt(3))
+  }
+  // startingIds zostawiamy — sync po meczu / zmianie
+}
+
+function issueYellow(state: GameState, live: LiveMatchState, p: SquadPlayer): void {
+  const prev = live.yellows[p.id] ?? 0
+  const next = prev + 1
+  live.yellows[p.id] = next
+  if (next >= 2) {
+    pushEvent(live, 'red', `${shortName(p.name)} — druga żółta`, 'you', {
+      playerName: p.name,
+      playerId: p.id,
+    })
+    removeFromPitch(state, live, p.id, 'red')
+    return
+  }
+  pushEvent(live, 'yellow', `${shortName(p.name)}`, 'you', {
+    playerName: p.name,
+    playerId: p.id,
+  })
+}
+
+function issueRed(state: GameState, live: LiveMatchState, p: SquadPlayer): void {
+  live.yellows[p.id] = 2
+  pushEvent(live, 'red', `${shortName(p.name)} — czerwona kartka`, 'you', {
+    playerName: p.name,
+    playerId: p.id,
+  })
+  removeFromPitch(state, live, p.id, 'red')
+}
+
+function issueInjury(state: GameState, live: LiveMatchState, p: SquadPlayer): void {
+  pushEvent(live, 'injury', `${shortName(p.name)} — kontuzja`, 'you', {
+    playerName: p.name,
+    playerId: p.id,
+  })
+  removeFromPitch(state, live, p.id, 'injury')
+  live.paused = true
+}
+
+function maybeDisciplineAndInjuries(state: GameState, live: LiveMatchState): void {
+  // Rywal — tylko narracja
+  if (chance(0.012)) {
+    const opp = getClub(live.opponentId).short
+    pushEvent(live, 'yellow', `Żółta dla ${opp}`, 'them', { playerName: opp })
+  } else if (chance(0.0025)) {
+    const opp = getClub(live.opponentId).short
+    pushEvent(live, 'red', `Czerwona dla ${opp}`, 'them', { playerName: opp })
+  } else if (chance(0.003)) {
+    const opp = getClub(live.opponentId).short
+    pushEvent(live, 'injury', `Kontuzja u ${opp}`, 'them', { playerName: opp })
+  }
+
+  const p = pickPitchPlayer(state, live)
+  if (!p) return
+
+  const fat = live.fatigue[p.id] ?? 50
+  const injuryChance = 0.0035 + (fat < 35 ? 0.006 : fat < 50 ? 0.002 : 0)
+  if (chance(injuryChance)) {
+    issueInjury(state, live, p)
+    return
+  }
+
+  if (chance(0.011)) {
+    issueYellow(state, live, p)
+    return
+  }
+  if (chance(0.0018)) {
+    issueRed(state, live, p)
+  }
 }
 
 /** Start live po ustawieniu składu; AI już powinno być odpalone w rundzie. */
@@ -128,10 +248,12 @@ export function createLiveMatch(state: GameState, fixture: LeagueFixture): LiveM
     half: '1',
     homeGoals: 0,
     awayGoals: 0,
-    onPitchIds: [...team.startingIds],
+    onPitchIds: [...team.startingIds] as LivePitchSlot[],
     benchIds: [...team.benchIds],
     subsUsed: 0,
     fatigue,
+    yellows: {},
+    redLockedSlots: Array(11).fill(false),
     moraleBoost: 0,
     drainMod: 1,
     motivationDone: false,
@@ -156,31 +278,55 @@ export function setMatchPaused(state: GameState, paused: boolean): void {
   state.liveMatch.paused = paused
 }
 
-/** Zmiana: outId z boiska, inId z ławki. Wymaga pauzy lub przerwy. */
-export function liveSubstitute(state: GameState, outId: string, inId: string): string | null {
+/** Zmiana: outId z boiska (null = pusty slot), inId z ławki. slotIndex wymagany gdy outId null. */
+export function liveSubstitute(
+  state: GameState,
+  outId: string | null,
+  inId: string,
+  slotIndex?: number,
+): string | null {
   const live = state.liveMatch
   if (!live) return 'Brak meczu'
   if (live.half !== 'ht' && !live.paused) return 'Zmiany tylko w pauzie lub przerwie'
   if (live.subsUsed >= MAX_SUBS) return 'Limit 3 zmian wyczerpany'
-  if (!live.onPitchIds.includes(outId)) return 'Zawodnik nie jest na boisku'
   if (!live.benchIds.includes(inId)) return 'Zawodnik nie jest na ławce'
 
   const map = mapPlayers(state)
-  const outP = map.get(outId)
   const inP = map.get(inId)
-  live.onPitchIds = live.onPitchIds.map((id) => (id === outId ? inId : id))
+  if (!inP) return 'Nieznany zawodnik'
+  if ((inP.injuryMatchesLeft ?? 0) > 0) return 'Zawodnik kontuzjowany'
+  if ((inP.suspensionMatchesLeft ?? 0) > 0) return 'Zawodnik zawieszony'
+
+  let slot =
+    slotIndex != null && slotIndex >= 0 && slotIndex <= 10
+      ? slotIndex
+      : outId
+        ? live.onPitchIds.indexOf(outId)
+        : live.onPitchIds.findIndex((id, i) => id == null && !live.redLockedSlots[i])
+  if (slot < 0) return 'Zawodnik nie jest na boisku'
+  if (live.redLockedSlots[slot]) return 'Po czerwonej nie wolno uzupełnić tego slotu'
+  if (outId && live.onPitchIds[slot] !== outId) return 'Zawodnik nie jest na boisku'
+  if (!outId && live.onPitchIds[slot] != null) return 'Slot zajęty'
+
+  const prev = live.onPitchIds[slot]
+  const outP = prev ? map.get(prev) : null
+  live.onPitchIds[slot] = inId
   live.benchIds = live.benchIds.filter((id) => id !== inId)
-  if (!live.benchIds.includes(outId)) live.benchIds.unshift(outId)
+  if (prev && outP && (outP.injuryMatchesLeft ?? 0) === 0 && (live.yellows[prev] ?? 0) < 2) {
+    if (!live.benchIds.includes(prev)) live.benchIds.unshift(prev)
+  }
   live.subsUsed += 1
   live.fatigue[inId] = clampFloat(88 + Math.random() * 8, 80, 98)
   if (!live.playedIds.includes(inId)) live.playedIds.push(inId)
   pushEvent(
     live,
     'sub',
-    `Zmiana: ${outP?.name.split(' ').pop() ?? 'OUT'} ↓ → ${inP?.name.split(' ').pop() ?? 'IN'} ↑ (${live.subsUsed}/${MAX_SUBS})`,
+    prev
+      ? `${shortName(outP?.name ?? 'OUT')} ↓ → ${shortName(inP.name)} ↑`
+      : `${shortName(inP.name)} wchodzi na boisko`,
+    'you',
+    { playerName: inP.name, playerId: inId },
   )
-  // sync team starting for chemistry display
-  state.team!.startingIds = [...live.onPitchIds]
   state.team!.benchIds = [...live.benchIds]
   return null
 }
@@ -191,10 +337,11 @@ export function liveSwapOnPitch(state: GameState, slotA: number, slotB: number):
   if (!live) return
   if (live.half !== 'ht' && !live.paused) return
   if (slotA < 0 || slotB < 0 || slotA > 10 || slotB > 10 || slotA === slotB) return
-  const tmp = live.onPitchIds[slotA]!
-  live.onPitchIds[slotA] = live.onPitchIds[slotB]!
+  if (live.redLockedSlots[slotA] || live.redLockedSlots[slotB]) return
+  const tmp = live.onPitchIds[slotA] ?? null
+  live.onPitchIds[slotA] = live.onPitchIds[slotB] ?? null
   live.onPitchIds[slotB] = tmp
-  state.team!.startingIds = [...live.onPitchIds]
+  state.team!.startingIds = live.onPitchIds.map((id, i) => id ?? state.team!.startingIds[i] ?? '')
 }
 
 export function applyHalftimeMotivation(state: GameState, choice: MotivationId): void {
@@ -251,12 +398,15 @@ export function tickLiveMinute(state: GameState): boolean {
   // Zmęczenie
   const drain = drainPerMinute(state, live)
   const map = mapPlayers(state)
-  for (const id of live.onPitchIds) {
+  for (const id of pitchIds(live)) {
     const p = map.get(id)
     const extra = p && p.attrs.stamina < 55 ? 0.12 : 0
     live.fatigue[id] = clampFloat((live.fatigue[id] ?? 50) - drain - extra, 8, 100)
     if (live.fatigue[id]! < 25 && chance(0.08)) {
-      pushEvent(live, 'fatigue', `${p?.name.split(' ').pop() ?? 'Zawodnik'} ledwo stoi na nogach.`)
+      pushEvent(live, 'fatigue', `${shortName(p?.name ?? 'Zawodnik')} ledwo stoi na nogach.`, 'you', {
+        playerName: p?.name,
+        playerId: id,
+      })
     }
   }
 
@@ -279,6 +429,8 @@ export function tickLiveMinute(state: GameState): boolean {
   } else if (!scored && chance(0.04)) {
     pushEvent(live, 'chance', chance(0.5) ? 'Groźna okazja — obrona na miejscu.' : 'Strzał obok słupka.')
   }
+
+  if (!live.paused) maybeDisciplineAndInjuries(state, live)
 
   // Koniec regulaminowego czasu → doliczony
   if (live.stoppageUntil == null && live.minute === halfEnd) {
@@ -326,7 +478,6 @@ export function finishLiveMatch(state: GameState): void {
   else if (drawn) season.record.drawn += 1
   else season.record.lost += 1
 
-  // Fitness z live fatigue
   for (const p of team.squad) {
     if (live.playedIds.includes(p.id)) {
       const fat = live.fatigue[p.id] ?? 50
@@ -338,25 +489,58 @@ export function finishLiveMatch(state: GameState): void {
       p.fitness = clamp(p.fitness + 4 + rngInt(3), 25, 100)
     }
   }
+
+  const redThisMatch = new Set(
+    live.events.filter((e) => e.kind === 'red' && e.side === 'you' && e.playerId).map((e) => e.playerId!),
+  )
+  const injThisMatch = new Set(
+    live.events.filter((e) => e.kind === 'injury' && e.side === 'you' && e.playerId).map((e) => e.playerId!),
+  )
+  for (const p of team.squad) {
+    if ((p.suspensionMatchesLeft ?? 0) > 0 && !redThisMatch.has(p.id)) {
+      p.suspensionMatchesLeft = Math.max(0, p.suspensionMatchesLeft - 1)
+    }
+    if ((p.injuryMatchesLeft ?? 0) > 0 && !injThisMatch.has(p.id)) {
+      p.injuryMatchesLeft = Math.max(0, p.injuryMatchesLeft - 1)
+    }
+  }
+
+  // Uzupełnij XI na kolejny mecz (bez dziur / niedostępnych)
+  const available = team.squad.filter(
+    (p) => (p.injuryMatchesLeft ?? 0) === 0 && (p.suspensionMatchesLeft ?? 0) === 0,
+  )
+  const keep = pitchIds(live).filter((id) => available.some((p) => p.id === id))
+  const fill = available
+    .filter((p) => !keep.includes(p.id))
+    .sort((a, b) => b.overall - a.overall)
+  while (keep.length < 11 && fill.length) keep.push(fill.shift()!.id)
+  team.startingIds = keep.slice(0, 11)
+  team.benchIds = available
+    .filter((p) => !team.startingIds.includes(p.id))
+    .sort((a, b) => b.overall - a.overall)
+    .slice(0, 7)
+    .map((p) => p.id)
+
   team.teamChemistry = clamp(
     team.teamChemistry + (won ? 2 : drawn ? 0 : -2) + (rngInt(3) - 1),
     20,
     100,
   )
   season.teamChemistry = team.teamChemistry
-  team.startingIds = [...live.onPitchIds]
-  team.benchIds = [...live.benchIds]
 
-  // Tymczasowo ustaw startingIds dla key ratings
   const ratings = keyPlayerRatings(state)
 
   const home = getClub(live.homeId)
   const away = getClub(live.awayId)
+  const yourReds = live.events.filter((e) => e.kind === 'red' && e.side === 'you').length
+  const yourInj = live.events.filter((e) => e.kind === 'injury' && e.side === 'you').length
   let narrative = `${home.short} ${live.homeGoals}:${live.awayGoals} ${away.short}. `
   if (won) narrative += 'Wygrana! '
   else if (drawn) narrative += 'Remis. '
   else narrative += 'Porażka. '
   narrative += `Zmiany: ${live.subsUsed}/3.`
+  if (yourReds) narrative += ` Czerwone: ${yourReds}.`
+  if (yourInj) narrative += ` Kontuzje: ${yourInj}.`
 
   const result: ManagerMatchResult = {
     homeId: live.homeId,
@@ -384,4 +568,14 @@ export function intervalMsForSpeed(speed: MatchSpeed): number {
   if (speed === 1) return 420
   if (speed === 4) return 110
   return 210
+}
+
+export function playerUnavailableReason(p: SquadPlayer): string | null {
+  if ((p.injuryMatchesLeft ?? 0) > 0) {
+    return `Kontuzja · ${p.injuryMatchesLeft} mecz${p.injuryMatchesLeft === 1 ? '' : 'e'}`
+  }
+  if ((p.suspensionMatchesLeft ?? 0) > 0) {
+    return `Zawieszenie · ${p.suspensionMatchesLeft} mecz${p.suspensionMatchesLeft === 1 ? '' : 'e'}`
+  }
+  return null
 }

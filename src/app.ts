@@ -15,6 +15,7 @@ import {
   openLineup,
   playNextMatchFromHub,
   polishLeagues,
+  playerUnavailableReason,
   selectClub,
   setFormation,
   setMatchPaused,
@@ -37,6 +38,7 @@ import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type {
   Formation,
   GameState,
+  MatchEvent,
   MatchSpeed,
   TacticalStyle,
 } from './state/types'
@@ -372,7 +374,8 @@ export class App {
         const short = p.name.split(' ').pop() ?? p.name
         const fit = Math.round(p.fitness)
         const fitCls = fit < 30 ? 'crit' : fit < 55 ? 'low' : ''
-        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · slot ${slot.role} (${ROLE_FULL[slot.role]}) · naturalnie ${p.role} · kondycja ${fit}%">
+        const unavailable = playerUnavailableReason(p)
+        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''} ${unavailable ? 'unavailable' : ''}" draggable="${unavailable ? 'false' : 'true'}" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · slot ${slot.role} (${ROLE_FULL[slot.role]}) · naturalnie ${p.role} · kondycja ${fit}%${unavailable ? ` · ${unavailable}` : ''}">
           <div class="fifa-badge">
             <span class="fifa-ovr">${p.overall}</span>
             <span class="fifa-pos">${slot.role}</span>
@@ -382,6 +385,7 @@ export class App {
             <span class="fifa-name">${short}</span>
             ${formArrowHtml(p.form)}
           </div>
+          ${unavailable ? `<span class="fifa-status">${(p.injuryMatchesLeft ?? 0) > 0 ? 'KONT' : 'ZAW'}</span>` : ''}
         </div>`
       })
       .join('')
@@ -389,10 +393,11 @@ export class App {
     const renderBenchBtn = (id: string, dim = false) => {
       const p = map.get(id)!
       const fit = Math.round(p.fitness)
-      return `<div class="fifa-bench-row ${dim ? 'dim' : ''}" draggable="true" data-drag="bench" data-id="${id}" title="${p.name} · ${ROLE_FULL[p.role]} · kondycja ${fit}%">
+      const unavailable = playerUnavailableReason(p)
+      return `<div class="fifa-bench-row ${dim || unavailable ? 'dim' : ''} ${unavailable ? 'unavailable' : ''}" draggable="${unavailable ? 'false' : 'true'}" data-drag="bench" data-id="${id}" title="${p.name} · ${ROLE_FULL[p.role]} · kondycja ${fit}%${unavailable ? ` · ${unavailable}` : ''}">
         <span class="fifa-bench-role">${p.role}</span>
         <span class="fifa-bench-ovr">${p.overall}</span>
-        <span class="fifa-bench-name">${p.name.split(' ').pop()}</span>
+        <span class="fifa-bench-name">${p.name.split(' ').pop()}${unavailable ? ` · ${(p.injuryMatchesLeft ?? 0) > 0 ? 'KONT' : 'ZAW'}` : ''}</span>
         <span class="fifa-bench-fat"><i style="width:${fit}%"></i></span>
         ${formArrowHtml(p.form)}
       </div>`
@@ -589,7 +594,7 @@ export class App {
         `
         <section class="lineup-fifa live-pause-lineup">
           ${scoreboard}
-          <p class="muted pause-hint">Przeciągnij: ławka ↔ boisko = zmiana (${3 - live.subsUsed} pozostało) · slot ↔ slot = przestawienie</p>
+          <p class="muted pause-hint">Przeciągnij: ławka ↔ boisko = zmiana (${3 - live.subsUsed} pozostało) · slot ↔ slot = przestawienie${live.onPitchIds.some((id, i) => !id && !live.redLockedSlots[i]) ? ' · uzupełnij pusty slot po kontuzji' : ''}${live.redLockedSlots.some(Boolean) ? ' · czerwona blokuje slot' : ''}</p>
           ${this.liveFifaLineupInner()}
         </section>`,
         'Pauza',
@@ -598,11 +603,8 @@ export class App {
     }
 
     const feed = live.events
-      .slice(0, 14)
-      .map(
-        (e) =>
-          `<li class="live-event ${e.side ?? ''}"><span class="live-min">${e.minute}'</span> ${e.text}</li>`,
-      )
+      .slice(0, 12)
+      .map((e, i) => this.eventCardHtml(e, i === 0))
       .join('')
 
     return this.shell(
@@ -612,13 +614,51 @@ export class App {
         <div class="live-grid single">
           <div class="live-main">
             <h3>Przebieg</h3>
-            <ul class="live-feed">${feed || '<li class="muted">Mecz się zaczyna…</li>'}</ul>
+            <div class="event-feed">${feed || '<p class="muted">Mecz się zaczyna…</p>'}</div>
           </div>
         </div>
       </section>`,
       'Mecz',
       'fifa',
     )
+  }
+
+  private eventCardHtml(e: MatchEvent, featured = false): string {
+    const labels: Record<MatchEvent['kind'], string> = {
+      goal: 'GOL',
+      yellow: 'ŻÓŁTA',
+      red: 'CZERWONA',
+      injury: 'KONTUZJA',
+      sub: 'ZMIANA',
+      chance: 'OKAZJA',
+      fatigue: 'ZMĘCZENIE',
+      kickoff: 'START',
+      ht: 'PRZERWA',
+      ft: 'KONIEC',
+      motivation: 'MOTYWACJA',
+    }
+    const short = e.playerName ? (e.playerName.split(' ').pop() ?? e.playerName) : ''
+    const headlineKinds: MatchEvent['kind'][] = ['goal', 'yellow', 'red', 'injury', 'sub']
+    const title = short && headlineKinds.includes(e.kind) ? short : e.text
+    let detail = ''
+    if (e.kind === 'goal' && e.side === 'you' && this.state.liveMatch) {
+      detail = `${this.state.liveMatch.homeGoals} : ${this.state.liveMatch.awayGoals}`
+    } else if (e.kind === 'goal' && e.side === 'them') {
+      detail = e.text
+    } else if (e.kind === 'yellow' || e.kind === 'red' || e.kind === 'injury') {
+      detail = e.side === 'them' ? e.text : e.kind === 'red' && e.text.includes('druga') ? 'Druga żółta' : ''
+    } else if (title !== e.text) {
+      detail = e.text
+    }
+
+    return `<article class="event-card kind-${e.kind} ${e.side ?? ''} ${featured ? 'featured' : ''}">
+      <div class="event-card-tag">${labels[e.kind]}</div>
+      <div class="event-card-body">
+        <div class="event-card-title">${title}</div>
+        ${detail ? `<div class="event-card-detail">${detail}</div>` : ''}
+      </div>
+      <div class="event-card-min">${e.minute}'</div>
+    </article>`
   }
 
   /** Boisko + ławka z paskami zmęczenia (pauza / przerwa). */
@@ -630,17 +670,28 @@ export class App {
 
     const pitchPlayers = live.onPitchIds
       .map((id, i) => {
-        const p = map.get(id)!
         const slot = plan[i]!
+        if (!id) {
+          const locked = live.redLockedSlots[i]
+          return `<div class="fifa-card empty ${locked ? 'red-lock' : 'injury-hole'}" data-slot="${i}" style="left:${slot.x}%;top:${slot.y}%" title="${locked ? 'Czerwona — slot zablokowany' : 'Pusty slot — przeciągnij z ławki'}">
+            <div class="fifa-badge empty-badge">
+              <span class="fifa-pos">${slot.role}</span>
+              <span class="fifa-empty-label">${locked ? 'CZERW.' : 'PUSTY'}</span>
+            </div>
+          </div>`
+        }
+        const p = map.get(id)!
         const mismatch = slotMismatch(p, slot)
         const short = p.name.split(' ').pop() ?? p.name
         const fat = Math.round(live.fatigue[id] ?? 50)
         const fatCls = fat < 30 ? 'crit' : fat < 55 ? 'low' : ''
-        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role} · zmęczenie ${fat}%">
+        const y = live.yellows[id] ?? 0
+        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role} · zmęczenie ${fat}%${y ? ` · żółte ${y}` : ''}">
           <div class="fifa-badge">
             <span class="fifa-ovr">${p.overall}</span>
             <span class="fifa-pos">${slot.role}</span>
           </div>
+          ${y ? `<span class="fifa-card-mark yellow" title="Żółta kartka">YK</span>` : ''}
           <div class="fifa-fatigue ${fatCls}" title="Zmęczenie ${fat}%"><i style="width:${fat}%"></i></div>
           <div class="fifa-meta">
             <span class="fifa-name">${short}</span>
@@ -734,8 +785,8 @@ export class App {
           if (dragPayload!.kind === 'slot' && dragPayload!.slot != null) {
             liveSwapOnPitch(this.state, dragPayload!.slot, targetSlot)
           } else if (dragPayload!.kind === 'bench') {
-            const outId = this.state.liveMatch!.onPitchIds[targetSlot]!
-            const err = liveSubstitute(this.state, outId, dragPayload!.id)
+            const outId = this.state.liveMatch!.onPitchIds[targetSlot] ?? null
+            const err = liveSubstitute(this.state, outId, dragPayload!.id, targetSlot)
             if (err) pushTempAlert(err)
           }
           if (this.state.liveMatch && this.state.liveMatch.half !== 'ht') {

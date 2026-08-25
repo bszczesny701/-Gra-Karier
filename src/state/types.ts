@@ -85,6 +85,10 @@ export interface SquadPlayer {
   form: number
   fitness: number
   morale: number
+  /** Mecze do opuszczenia przez kontuzję (0 = zdrowy) */
+  injuryMatchesLeft: number
+  /** Mecze zawieszenia po czerwonej (0 = dostępny) */
+  suspensionMatchesLeft: number
 }
 
 export interface Tactics {
@@ -143,16 +147,24 @@ export type MatchEventKind =
   | 'ft'
   | 'motivation'
   | 'chance'
+  | 'yellow'
+  | 'red'
+  | 'injury'
 
 export interface MatchEvent {
   minute: number
   kind: MatchEventKind
   text: string
   side?: 'you' | 'them'
+  playerName?: string
+  playerId?: string
 }
 
 export type LiveHalf = '1' | 'ht' | '2' | 'done'
 export type MatchSpeed = 1 | 2 | 4
+
+/** Slot boiska w meczu — null = pusty (czerwona / kontuzja bez zmiany). */
+export type LivePitchSlot = string | null
 
 export interface LiveMatchState {
   homeId: string
@@ -162,11 +174,15 @@ export interface LiveMatchState {
   half: LiveHalf
   homeGoals: number
   awayGoals: number
-  onPitchIds: string[]
+  onPitchIds: LivePitchSlot[]
   benchIds: string[]
   /** Max 3 */
   subsUsed: number
   fatigue: Record<string, number>
+  /** Żółte w tym meczu (Twoi) */
+  yellows: Record<string, number>
+  /** Slot zablokowany po czerwonej (nie wolno uzupełnić) */
+  redLockedSlots: boolean[]
   /** Po motywacji: -1 bronić, 0 plan, +1 atak */
   moraleBoost: number
   /** Mnożnik zmęczenia w 2. połowie */
@@ -250,7 +266,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 102
+export const SAVE_VERSION = 103
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

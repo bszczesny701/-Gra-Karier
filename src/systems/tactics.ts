@@ -63,7 +63,10 @@ export function validateLineup(team: TeamState): string | null {
   const set = new Set(team.startingIds)
   if (set.size !== 11) return 'Duplikaty w składzie.'
   for (const id of team.startingIds) {
-    if (!team.squad.some((p) => p.id === id)) return 'Nieznany zawodnik w składzie.'
+    const p = team.squad.find((x) => x.id === id)
+    if (!p) return 'Nieznany zawodnik w składzie.'
+    if ((p.injuryMatchesLeft ?? 0) > 0) return `${p.name.split(' ').pop()} jest kontuzjowany.`
+    if ((p.suspensionMatchesLeft ?? 0) > 0) return `${p.name.split(' ').pop()} jest zawieszony.`
   }
   const unfit = team.squad.filter((p) => team.startingIds.includes(p.id) && p.fitness < 35)
   if (unfit.length >= 4) return 'Za wielu zmęczonych — daj odpocząć kilku.'

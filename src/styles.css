@@ -1530,33 +1530,157 @@ h3 {
   overflow: auto;
 }
 
-.live-feed {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 280px;
+.event-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(52vh, 420px);
   overflow: auto;
+  padding-right: 2px;
 }
 
-.live-feed li {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.92rem;
+.event-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  animation: event-in 0.35s ease-out;
 }
 
-.live-event.you {
+.event-card.featured {
+  border-color: rgba(200, 245, 96, 0.35);
+  background: rgba(200, 245, 96, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.event-card-tag {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--muted);
+  min-width: 4.6rem;
+  text-align: center;
+}
+
+.event-card.kind-goal .event-card-tag {
+  background: rgba(200, 245, 96, 0.2);
   color: var(--accent);
 }
 
-.live-event.them {
+.event-card.kind-yellow .event-card-tag {
+  background: rgba(232, 212, 74, 0.25);
+  color: #e8d44a;
+}
+
+.event-card.kind-red .event-card-tag {
+  background: rgba(255, 122, 110, 0.22);
+  color: var(--danger);
+}
+
+.event-card.kind-injury .event-card-tag {
+  background: rgba(255, 176, 138, 0.2);
   color: #ffb08a;
 }
 
-.live-min {
-  display: inline-block;
-  min-width: 2.4rem;
-  color: var(--muted);
+.event-card.kind-sub .event-card-tag {
+  background: rgba(120, 180, 255, 0.18);
+  color: #9ec5ff;
+}
+
+.event-card.them {
+  opacity: 0.92;
+}
+
+.event-card-title {
   font-weight: 700;
+  font-size: 1rem;
+}
+
+.event-card-detail {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.event-card-min {
+  font-weight: 800;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes event-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fifa-card.unavailable {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.fifa-status {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: var(--danger);
+  color: #1a0a08;
+  z-index: 3;
+}
+
+.fifa-card-mark {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -40%);
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 4px;
+  z-index: 3;
+}
+
+.fifa-card-mark.yellow {
+  background: #e8d44a;
+  color: #1a1600;
+}
+
+.fifa-card.empty {
+  cursor: default;
+}
+
+.fifa-card.empty .fifa-badge.empty-badge {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.fifa-card.red-lock .fifa-badge {
+  border-color: var(--danger);
+}
+
+.fifa-empty-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.04em;
 }
 
 .live-xi {

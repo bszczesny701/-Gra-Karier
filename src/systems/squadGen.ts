@@ -62,6 +62,8 @@ function makePlayer(
     form: 48 + (h % 20),
     fitness: 78 + (h % 18),
     morale: 50 + (h % 25),
+    injuryMatchesLeft: 0,
+    suspensionMatchesLeft: 0,
   }
 }
 
@@ -77,6 +79,7 @@ function relatedPos(a: Position, b: Position): boolean {
 }
 
 function fitScore(p: SquadPlayer, slot: FormationSlot): number {
+  if ((p.injuryMatchesLeft ?? 0) > 0 || (p.suspensionMatchesLeft ?? 0) > 0) return -999
   let s = p.overall + (p.form - 50) / 5 + (p.fitness - 70) / 8
   if (p.role === slot.role) s += 14
   else if (p.position === slot.base) s += 7
@@ -96,7 +99,12 @@ export function pickDefaultLineup(
 
   for (const slot of plan) {
     const candidates = squad
-      .filter((p) => !used.has(p.id))
+      .filter(
+        (p) =>
+          !used.has(p.id) &&
+          (p.injuryMatchesLeft ?? 0) === 0 &&
+          (p.suspensionMatchesLeft ?? 0) === 0,
+      )
       .map((p) => ({ p, score: fitScore(p, slot) }))
       .sort((a, b) => b.score - a.score)
     const pick = candidates[0]?.p
@@ -107,7 +115,12 @@ export function pickDefaultLineup(
   }
 
   const benchIds = squad
-    .filter((p) => !used.has(p.id))
+    .filter(
+      (p) =>
+        !used.has(p.id) &&
+        (p.injuryMatchesLeft ?? 0) === 0 &&
+        (p.suspensionMatchesLeft ?? 0) === 0,
+    )
     .sort((a, b) => b.overall - a.overall)
     .slice(0, 7)
     .map((p) => p.id)

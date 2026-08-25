@@ -17,6 +17,7 @@ import {
   applyHalftimeMotivation,
   liveSubstitute,
   liveSwapOnPitch,
+  playerUnavailableReason,
   setMatchPaused,
   setMatchSpeed,
   startSecondHalf,
@@ -33,6 +34,7 @@ export {
   applyHalftimeMotivation,
   liveSubstitute,
   liveSwapOnPitch,
+  playerUnavailableReason,
   setMatchPaused,
   setMatchSpeed,
   startSecondHalf,
@@ -106,6 +108,10 @@ export function setStyle(state: GameState, style: TacticalStyle): void {
 export function assignSlot(state: GameState, slotIndex: number, playerId: string): void {
   const team = state.team
   if (!team || slotIndex < 0 || slotIndex > 10) return
+  const incoming = team.squad.find((p) => p.id === playerId)
+  if (!incoming) return
+  if ((incoming.injuryMatchesLeft ?? 0) > 0 || (incoming.suspensionMatchesLeft ?? 0) > 0) return
+
   const prev = team.startingIds[slotIndex]
   if (prev === playerId) return
 
@@ -113,7 +119,6 @@ export function assignSlot(state: GameState, slotIndex: number, playerId: string
   const otherSlot = team.startingIds.indexOf(playerId)
 
   if (otherSlot >= 0) {
-    // swap w XI
     team.startingIds[otherSlot] = prev!
     team.startingIds[slotIndex] = playerId
     return
@@ -125,7 +130,6 @@ export function assignSlot(state: GameState, slotIndex: number, playerId: string
     return
   }
 
-  // spoza 11+ławki — zamień
   if (prev) team.benchIds = [prev, ...team.benchIds.filter((id) => id !== playerId)].slice(0, 7)
   team.startingIds[slotIndex] = playerId
 }
