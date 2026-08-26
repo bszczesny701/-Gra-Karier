@@ -2300,10 +2300,44 @@ h3 {
   border-radius: 14px;
   padding: 10px 12px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
-  max-height: 280px;
+  max-height: 320px;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.career-inbox {
+  max-height: 380px;
+}
+
+.career-inbox .mail-letter.compact {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 140px;
+  overflow: auto;
+}
+
+.career-inbox .mail-letter.compact h4 {
+  font-size: 0.9rem;
+}
+
+.career-inbox .mail-letter.compact .mail-letter-body {
+  font-size: 0.78rem;
+  margin-top: 6px;
+}
+
+.compact-inbox {
+  max-height: 160px;
+}
+
+.office-news-list {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.news-office-panel {
+  grid-column: 1 / -1;
 }
 
 .career-news-head {
