@@ -461,25 +461,18 @@ export class App {
 
     let main = ''
     if (this.hubTab === 'squad') {
-      if (!this.state.mailbox) this.state.mailbox = []
-      const mails = this.state.mailbox
-      const unread = unreadMailCount(this.state)
-      const openMail = mails.find((x) => x.id === this.openMailId) ?? null
-      const mailList =
-        mails
-          .slice(0, 10)
-          .map((mail) => {
-            const active = openMail?.id === mail.id
-            return `<button type="button" class="mail-row ${mail.read ? '' : 'unread'} ${active ? 'active' : ''}" data-mail="${mail.id}">
-              <span class="mail-row-kind kind-${mail.kind}">${mailKindLabel(mail.kind)}</span>
-              <span class="mail-row-main">
-                <strong>${mail.subject}</strong>
-                <span class="muted">${mail.from}</span>
-              </span>
-              ${mail.read ? '' : '<span class="mail-dot" title="Nieprzeczytane"></span>'}
-            </button>`
-          })
-          .join('') || `<p class="muted">Skrzynka pusta — maile po meczach.</p>`
+      if (!this.state.news) this.state.news = []
+      const newsHtml =
+        this.state.news
+          .slice(0, 5)
+          .map(
+            (n) => `<article class="news-item kind-${n.kind}">
+              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
+              <strong class="news-item-head">${n.headline}</strong>
+              <p class="news-item-body">${n.body}</p>
+            </article>`,
+          )
+          .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
 
       main = `
         <div class="career-grid">
@@ -532,28 +525,19 @@ export class App {
                 <span class="tile-title">Taktyka</span>
                 <span class="tile-sub">${planLabel(tac.plan)} · ${widthLabel(tac.width)} · press ${pressLabel(tac.press)}</span>
               </button>
-              <button type="button" class="career-tile tile-office" data-hub-tab="office">
-                <span class="tile-title">Biuro</span>
-                <span class="tile-sub">Wiadomości ligowe · zaufanie ${trust}%</span>
-              </button>
+              <div class="career-tile tile-office tile-office-news" aria-label="Biuro — wiadomości">
+                <div class="tile-office-head">
+                  <div>
+                    <span class="tile-title">Biuro</span>
+                    <span class="tile-sub">Wiadomości · zaufanie ${trust}%</span>
+                  </div>
+                  <button type="button" class="btn ghost compact" data-hub-tab="office">Skrzynka${
+                    unreadMailCount(this.state) > 0 ? ` · ${unreadMailCount(this.state)}` : ''
+                  }</button>
+                </div>
+                <div class="tile-news-list">${newsHtml}</div>
+              </div>
             </div>
-            <aside class="career-news career-inbox" aria-label="Biuro — skrzynka">
-              <header class="career-news-head">
-                <h3>Biuro${unread ? ` · ${unread} nowe` : ''}</h3>
-                ${mails.length ? `<button type="button" class="btn ghost compact" id="btn-mail-read-all">Przeczytane</button>` : `<span class="muted">Skrzynka</span>`}
-              </header>
-              <div class="career-news-list mail-list compact-inbox">${mailList}</div>
-              ${
-                openMail
-                  ? `<article class="mail-letter compact kind-${openMail.kind}">
-                      <div class="mail-letter-tag">${mailKindLabel(openMail.kind)}</div>
-                      <h4>${openMail.subject}</h4>
-                      <p class="muted">Od: ${openMail.from}</p>
-                      <div class="mail-letter-body">${openMail.body.replace(/\n/g, '<br>')}</div>
-                    </article>`
-                  : ''
-              }
-            </aside>
           </div>
         </div>`
     } else if (this.hubTab === 'season') {
@@ -648,27 +632,56 @@ export class App {
           </section>
         </div>`
     } else {
-      if (!this.state.news) this.state.news = []
-      const newsHtml =
-        this.state.news
-          .slice(0, 12)
-          .map(
-            (n) => `<article class="news-item kind-${n.kind}">
-              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
-              <strong class="news-item-head">${n.headline}</strong>
-              <p class="news-item-body">${n.body}</p>
-            </article>`,
-          )
-          .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
+      if (!this.state.mailbox) this.state.mailbox = []
+      const mails = this.state.mailbox
+      const unread = unreadMailCount(this.state)
+      const openMail = mails.find((x) => x.id === this.openMailId) ?? null
+      const mailList =
+        mails
+          .map((mail) => {
+            const active = openMail?.id === mail.id
+            const meta = [
+              mailKindLabel(mail.kind),
+              mail.round != null ? `kol. ${mail.round}` : null,
+              mail.year != null ? `${mail.year}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+            return `<button type="button" class="mail-row ${mail.read ? '' : 'unread'} ${active ? 'active' : ''}" data-mail="${mail.id}">
+              <span class="mail-row-kind kind-${mail.kind}">${mailKindLabel(mail.kind)}</span>
+              <span class="mail-row-main">
+                <strong>${mail.subject}</strong>
+                <span class="muted">${mail.from} · ${meta}</span>
+              </span>
+              ${mail.read ? '' : '<span class="mail-dot" title="Nieprzeczytane"></span>'}
+            </button>`
+          })
+          .join('') || `<p class="muted">Skrzynka pusta — maile pojawią się po meczach.</p>`
 
       main = `
         <div class="career-office">
-          <section class="career-panel mail-panel news-office-panel">
+          <section class="career-panel mail-panel">
             <div class="mail-panel-head">
-              <h3>Wiadomości</h3>
-              <span class="muted">Liga i kuluary</span>
+              <h3>Skrzynka pocztowa${unread ? ` · ${unread} nowe` : ''}</h3>
+              ${mails.length ? `<button type="button" class="btn ghost compact" id="btn-mail-read-all">Oznacz przeczytane</button>` : ''}
             </div>
-            <div class="career-news-list office-news-list">${newsHtml}</div>
+            <div class="mail-layout">
+              <div class="mail-list">${mailList}</div>
+              <div class="mail-reader">
+                ${
+                  openMail
+                    ? `<article class="mail-letter kind-${openMail.kind}">
+                        <header>
+                          <div class="mail-letter-tag">${mailKindLabel(openMail.kind)}</div>
+                          <h4>${openMail.subject}</h4>
+                          <p class="muted">Od: ${openMail.from}${openMail.round != null ? ` · kolejka ${openMail.round}` : ''}</p>
+                        </header>
+                        <div class="mail-letter-body">${openMail.body.replace(/\n/g, '<br>')}</div>
+                      </article>`
+                    : `<p class="muted mail-empty">Wybierz wiadomość ze skrzynki.</p>`
+                }
+              </div>
+            </div>
           </section>
           <section class="career-panel board-panel-compact">
             <h3>Zarząd · ${club.name}</h3>
