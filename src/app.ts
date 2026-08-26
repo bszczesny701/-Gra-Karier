@@ -462,16 +462,20 @@ export class App {
     let main = ''
     if (this.hubTab === 'squad') {
       if (!this.state.news) this.state.news = []
+      const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
       const topNews = this.state.news.slice(0, 2)
       const newsPreview =
         topNews.length > 0
           ? topNews
-              .map((n) => {
-                const h = n.headline.length > 36 ? `${n.headline.slice(0, 34)}…` : n.headline
-                return `<span class="tile-news-line">${h}</span>`
-              })
+              .map(
+                (n) => `<article class="news-mini kind-${n.kind}">
+                  <span class="news-mini-tag">${newsKindLabel(n.kind)}</span>
+                  <strong class="news-mini-head">${clip(n.headline, 42)}</strong>
+                  <span class="news-mini-body">${clip(n.body, 48)}</span>
+                </article>`,
+              )
               .join('')
-          : `<span class="tile-news-line muted">Brak nowych wiadomości</span>`
+          : `<span class="tile-news-empty">Brak nowych wiadomości</span>`
 
       main = `
         <div class="career-grid">
@@ -526,7 +530,7 @@ export class App {
               </button>
               <button type="button" class="career-tile tile-news" data-hub-tab="news">
                 <span class="tile-title">Wiadomości</span>
-                <span class="tile-sub tile-news-preview">${newsPreview}</span>
+                <div class="tile-news-cards">${newsPreview}</div>
               </button>
             </div>
           </div>
@@ -537,10 +541,10 @@ export class App {
         this.state.news
           .slice(0, 20)
           .map(
-            (n) => `<article class="news-item kind-${n.kind}">
-              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
-              <strong class="news-item-head">${n.headline}</strong>
-              <p class="news-item-body">${n.body}</p>
+            (n) => `<article class="news-card kind-${n.kind}">
+              <div class="news-card-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
+              <strong class="news-card-head">${n.headline}</strong>
+              <p class="news-card-body">${n.body}</p>
             </article>`,
           )
           .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
@@ -553,7 +557,7 @@ export class App {
               <button type="button" class="btn ghost compact" data-hub-tab="squad">Wróć</button>
             </div>
             <p class="muted" style="margin:0 0 10px">Liga, forma i kuluary transferowe</p>
-            <div class="career-news-list news-screen-list">${newsHtml}</div>
+            <div class="news-card-grid">${newsHtml}</div>
           </section>
         </div>`
     } else if (this.hubTab === 'season') {

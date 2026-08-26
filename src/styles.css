@@ -2405,6 +2405,10 @@ h3 {
   color: #f0a090;
 }
 
+.news-item.kind-league .news-item-tag {
+  color: #7eb8e8;
+}
+
 .news-item-head {
   display: block;
   font-size: 0.88rem;
@@ -2696,29 +2700,85 @@ h3 {
     #122536;
   justify-content: flex-start;
   gap: 8px;
+  padding: 12px;
 }
 
 .tile-news .tile-title {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  flex-shrink: 0;
 }
 
-.tile-news-preview {
+.tile-news-cards {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   margin-top: auto;
+  width: 100%;
+  min-height: 0;
+  pointer-events: none;
 }
 
-.tile-news-line {
-  display: block;
-  font-size: 0.72rem;
+.news-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(6, 12, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+
+.news-mini-tag {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8eb4d0;
+  line-height: 1.2;
+}
+
+.news-mini.kind-match .news-mini-tag {
+  color: #7dcea0;
+}
+
+.news-mini.kind-form .news-mini-tag {
+  color: #f0c94d;
+}
+
+.news-mini.kind-club .news-mini-tag {
+  color: #9ec3e8;
+}
+
+.news-mini.kind-transfer .news-mini-tag {
+  color: #f0a090;
+}
+
+.news-mini.kind-league .news-mini-tag {
+  color: #7eb8e8;
+}
+
+.news-mini-head {
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #f4f8fc;
+}
+
+.news-mini-body {
+  font-size: 0.68rem;
   line-height: 1.25;
-  color: rgba(230, 240, 250, 0.9);
+  color: #8fa6bb;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.tile-news-line.muted {
+.tile-news-empty {
+  font-size: 0.75rem;
   color: rgba(180, 200, 220, 0.65);
+  font-weight: 600;
 }
 
 .career-news-screen {
@@ -2738,11 +2798,73 @@ h3 {
   height: 100%;
 }
 
-.news-screen-list {
+.news-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  max-height: none;
+  align-content: start;
+  padding-right: 2px;
+}
+
+.news-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 132px;
+  padding: 12px 13px;
+  border-radius: 12px;
+  background: rgba(6, 12, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.news-card-tag {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8eb4d0;
+}
+
+.news-card.kind-match .news-card-tag {
+  color: #7dcea0;
+}
+
+.news-card.kind-form .news-card-tag {
+  color: #f0c94d;
+}
+
+.news-card.kind-club .news-card-tag {
+  color: #9ec3e8;
+}
+
+.news-card.kind-transfer .news-card-tag {
+  color: #f0a090;
+}
+
+.news-card.kind-league .news-card-tag {
+  color: #7eb8e8;
+}
+
+.news-card-head {
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: #f4f8fc;
+}
+
+.news-card-body {
+  margin: 0;
+  margin-top: auto;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #8fa6bb;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .news-office-panel {
