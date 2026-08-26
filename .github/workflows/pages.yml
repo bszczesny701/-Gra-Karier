@@ -1,8 +1,8 @@
-name: Deploy to GitHub Pages
+name: Pages
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -10,35 +10,25 @@ permissions:
   pages: write
   id-token: write
 
-# Nowa grupa — stare „zombie” runy w `pages` nie blokują kolejki
 concurrency:
-  group: pages-deploy-v2
+  group: github-pages-${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install
-        run: npm ci
-
-      - name: Build
+      - run: npm ci
+      - run: npm run build
         env:
           GITHUB_PAGES: 'true'
-        run: npm run build
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
@@ -50,6 +40,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
