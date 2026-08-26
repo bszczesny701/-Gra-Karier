@@ -1,19 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Source+Sans+3:wght@400;600;700&display=swap');
 
 :root {
-  --bg-0: #071a14;
-  --bg-1: #0c2a1f;
-  --bg-2: #123528;
-  --pitch: #1f6b4a;
+  --bg-0: #050c12;
+  --bg-1: #0a1520;
+  --bg-2: #12283c;
+  --pitch: #1a6b45;
   --pitch-deep: #0b3d2e;
-  --line: rgba(244, 247, 245, 0.12);
-  --text: #f2f6f3;
-  --muted: #9bb5a8;
-  --accent: #c8f560;
-  --accent-ink: #132016;
+  --line: rgba(215, 230, 245, 0.12);
+  --text: #eef5fb;
+  --muted: #8fa8bf;
+  --accent: #f0c94d;
+  --accent-ink: #1a1408;
+  --accent-blue: #7ec8f5;
+  --accent-blue-soft: #b8d7ef;
   --danger: #ff7a6e;
-  --card: rgba(18, 53, 40, 0.85);
-  --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  --card: rgba(14, 28, 44, 0.92);
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   --radius: 18px;
   --font-display: 'Bebas Neue', Impact, sans-serif;
   --font-body: 'Source Sans 3', system-ui, sans-serif;
@@ -32,9 +34,9 @@ body {
   font-family: var(--font-body);
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(200, 245, 96, 0.12), transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, rgba(31, 107, 74, 0.35), transparent 50%),
-    linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, #06140f);
+    radial-gradient(900px 500px at 80% 10%, rgba(90, 160, 220, 0.16), transparent 55%),
+    radial-gradient(700px 400px at 10% 90%, rgba(20, 60, 100, 0.28), transparent 50%),
+    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 45%, #04080e 100%);
 }
 
 body {
@@ -85,7 +87,7 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 0 12px;
-  background: linear-gradient(180deg, rgba(7, 26, 20, 0.95), rgba(7, 26, 20, 0.75) 70%, transparent);
+  background: linear-gradient(180deg, rgba(5, 12, 18, 0.95), rgba(5, 12, 18, 0.75) 70%, transparent);
   backdrop-filter: blur(8px);
 }
 
@@ -121,7 +123,7 @@ body {
 .hero-panel {
   margin-top: 24px;
   background:
-    linear-gradient(145deg, rgba(31, 107, 74, 0.35), transparent 50%),
+    linear-gradient(145deg, rgba(90, 160, 220, 0.18), transparent 50%),
     var(--card);
 }
 
@@ -227,7 +229,7 @@ h3 {
 
 .field input:focus,
 .field select:focus {
-  outline: 2px solid rgba(200, 245, 96, 0.45);
+  outline: 2px solid rgba(240, 201, 77, 0.5);
   outline-offset: 1px;
 }
 
@@ -384,8 +386,8 @@ h3 {
 
 .choice:hover,
 .choice:focus-visible {
-  border-color: rgba(200, 245, 96, 0.55);
-  background: rgba(31, 107, 74, 0.35);
+  border-color: rgba(240, 201, 77, 0.55);
+  background: rgba(60, 120, 180, 0.35);
   outline: none;
 }
 
@@ -417,7 +419,7 @@ h3 {
   padding: 16px;
   border-radius: 16px;
   background:
-    linear-gradient(90deg, rgba(31, 107, 74, 0.45), rgba(11, 61, 46, 0.7)),
+    linear-gradient(90deg, rgba(60, 120, 180, 0.45), rgba(11, 61, 46, 0.7)),
     repeating-linear-gradient(
       90deg,
       transparent,
@@ -458,7 +460,7 @@ h3 {
   margin: 14px 0;
   padding: 14px;
   border-radius: 14px;
-  border: 1px dashed rgba(200, 245, 96, 0.35);
+  border: 1px dashed rgba(240, 201, 77, 0.35);
   background: rgba(0, 0, 0, 0.18);
 }
 
@@ -532,7 +534,7 @@ h3 {
   place-items: center;
   font-weight: 700;
   background: linear-gradient(145deg, #2a6b4e, #184a36);
-  border: 2px solid rgba(200, 245, 96, 0.35);
+  border: 2px solid rgba(240, 201, 77, 0.35);
   color: var(--accent);
   flex-shrink: 0;
 }
@@ -573,8 +575,8 @@ h3 {
 
 .chat-reply {
   text-align: left;
-  border: 1px solid rgba(200, 245, 96, 0.28);
-  background: rgba(200, 245, 96, 0.08);
+  border: 1px solid rgba(240, 201, 77, 0.28);
+  background: rgba(240, 201, 77, 0.08);
   color: var(--text);
   border-radius: 14px 14px 4px 14px;
   padding: 12px 14px;
@@ -587,7 +589,7 @@ h3 {
 }
 
 .chat-reply:hover {
-  background: rgba(200, 245, 96, 0.16);
+  background: rgba(240, 201, 77, 0.16);
 }
 
 .chat-reply:active {
@@ -733,7 +735,7 @@ h3 {
 .pow-bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #7ab87a, var(--accent));
+  background: linear-gradient(90deg, #c9a227, var(--accent));
 }
 
 .pow-bar.them i {
@@ -818,8 +820,8 @@ h3 {
 
 .cup-step.done {
   color: var(--text);
-  border-color: rgba(200, 245, 96, 0.4);
-  background: rgba(200, 245, 96, 0.14);
+  border-color: rgba(240, 201, 77, 0.4);
+  background: rgba(240, 201, 77, 0.14);
 }
 
 .cup-step.now {
@@ -871,10 +873,12 @@ h3 {
 }
 
 .league-tabs .btn.active,
-.tactics-row .btn.active {
-  background: var(--accent);
-  color: var(--accent-ink);
+.tactics-row .btn.active,
+.live-controls .btn.active {
+  background: var(--accent-blue-soft);
+  color: #102030;
   border-color: transparent;
+  box-shadow: inset 0 0 0 2px var(--accent-blue);
 }
 
 .club-list {
@@ -902,7 +906,7 @@ h3 {
 }
 
 .club-pick:hover {
-  border-color: rgba(200, 245, 96, 0.45);
+  border-color: rgba(240, 201, 77, 0.45);
 }
 
 .tactics-row {
@@ -964,7 +968,7 @@ h3 {
 
 .xi-slot.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(200, 245, 96, 0.35);
+  box-shadow: 0 0 0 1px rgba(240, 201, 77, 0.35);
 }
 
 .xi-slot.mismatch .slot-pos {
@@ -994,7 +998,7 @@ h3 {
     linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 30%),
     repeating-linear-gradient(
       90deg,
-      rgba(31, 107, 74, 0.95) 0 12%,
+      rgba(26, 107, 69, 0.95) 0 12%,
       rgba(27, 96, 66, 0.95) 12% 24%
     );
 }
@@ -1140,8 +1144,8 @@ h3 {
   gap: 0;
   background:
     radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.2), transparent 50%),
-    linear-gradient(160deg, #1e3a2c, #0d1f16);
-  border: 3px solid #d4f06a;
+    linear-gradient(160deg, #1c4d8a, #0d2540);
+  border: 3px solid var(--accent);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 
@@ -1233,8 +1237,8 @@ h3 {
 }
 
 .fifa-bench-row:hover {
-  background: rgba(200, 245, 96, 0.08);
-  border-color: rgba(200, 245, 96, 0.25);
+  background: rgba(240, 201, 77, 0.08);
+  border-color: rgba(240, 201, 77, 0.25);
 }
 
 .fifa-bench-row.dim {
@@ -1309,7 +1313,7 @@ h3 {
 
 .bench-strip.vertical.drag-over {
   border-color: var(--accent);
-  background: rgba(200, 245, 96, 0.08);
+  background: rgba(240, 201, 77, 0.08);
 }
 
 .pitch-player {
@@ -1341,12 +1345,12 @@ h3 {
 
 .pitch-player.drag-over {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(200, 245, 96, 0.5);
+  box-shadow: 0 0 0 2px rgba(240, 201, 77, 0.5);
 }
 
 .pitch-player.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(200, 245, 96, 0.45);
+  box-shadow: 0 0 0 2px rgba(240, 201, 77, 0.45);
   z-index: 3;
 }
 
@@ -1465,11 +1469,11 @@ h3 {
 }
 
 .form-up-strong {
-  color: #b8f04a;
+  color: #ffe08a;
 }
 
 .form-up {
-  color: #c8f560;
+  color: var(--accent);
 }
 
 .form-flat {
@@ -1513,7 +1517,7 @@ h3 {
 .fifa-fatigue i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #ff7a6e, #e8d44a, #c8f560);
+  background: linear-gradient(90deg, #ff7a6e, #e8d44a, var(--accent));
 }
 
 .fifa-fatigue.low i {
@@ -1536,7 +1540,7 @@ h3 {
 .fifa-bench-fat i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #ff7a6e, #c8f560);
+  background: linear-gradient(90deg, #ff7a6e, var(--accent));
 }
 
 .live-pause-lineup .live-scoreboard.compact {
@@ -1618,12 +1622,6 @@ h3 {
   align-items: center;
 }
 
-.live-controls .btn.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: transparent;
-}
-
 .live-grid {
   display: grid;
   grid-template-columns: 1.4fr 0.9fr;
@@ -1663,8 +1661,8 @@ h3 {
 }
 
 .event-card.featured {
-  border-color: rgba(200, 245, 96, 0.35);
-  background: rgba(200, 245, 96, 0.08);
+  border-color: rgba(240, 201, 77, 0.35);
+  background: rgba(240, 201, 77, 0.08);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
@@ -1685,7 +1683,7 @@ h3 {
 }
 
 .event-card.kind-goal .event-card-tag {
-  background: rgba(200, 245, 96, 0.2);
+  background: rgba(240, 201, 77, 0.2);
   color: var(--accent);
 }
 
@@ -1826,7 +1824,7 @@ h3 {
 
 .live-xi-chip.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(200, 245, 96, 0.4);
+  box-shadow: 0 0 0 1px rgba(240, 201, 77, 0.4);
 }
 
 .live-fat {
@@ -1841,7 +1839,7 @@ h3 {
 .live-fat i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #ff7a6e, #c8f560);
+  background: linear-gradient(90deg, #ff7a6e, var(--accent));
 }
 
 @media (max-width: 900px) {
@@ -1857,10 +1855,7 @@ h3 {
   min-height: 100dvh;
   padding: 0;
   margin: 0;
-  background:
-    radial-gradient(900px 500px at 80% 10%, rgba(90, 160, 220, 0.18), transparent 55%),
-    radial-gradient(700px 400px at 10% 90%, rgba(20, 60, 100, 0.35), transparent 50%),
-    linear-gradient(180deg, #0a1520 0%, #071018 45%, #050c12 100%);
+  background: transparent;
 }
 
 .career-top {
@@ -1893,7 +1888,7 @@ h3 {
   font-family: var(--font-display);
   letter-spacing: 0.1em;
   font-size: 1.35rem;
-  color: #f0c94d;
+  color: var(--accent);
   text-align: center;
 }
 
@@ -1917,7 +1912,7 @@ h3 {
 }
 
 .career-profile-text span {
-  color: #8fa8bf;
+  color: var(--muted);
 }
 
 .career-rating {
@@ -1929,7 +1924,7 @@ h3 {
   font-family: var(--font-display);
   font-size: 1.25rem;
   background: linear-gradient(160deg, #1e3a55, #0d1c2a);
-  border: 2px solid #f0c94d;
+  border: 2px solid var(--accent);
   color: #fff;
 }
 
@@ -1950,7 +1945,7 @@ h3 {
   font-size: 0.82rem;
   padding: 10px 18px;
   border-radius: 999px;
-  background: #b8d7ef;
+  background: var(--accent-blue-soft);
   color: #102030;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1961,7 +1956,7 @@ h3 {
 
 .career-tab.active {
   background: #0d1a28;
-  color: #7ec8f5;
+  color: var(--accent-blue);
   box-shadow: inset 0 0 0 2px #3aa0e0;
 }
 
@@ -2060,6 +2055,14 @@ h3 {
   background: linear-gradient(90deg, #e8b40a, #f5d24a);
 }
 
+.sheet-meter:nth-child(2) .sheet-meter-track i {
+  background: linear-gradient(90deg, #4a9ad4, var(--accent-blue));
+}
+
+.sheet-meter:nth-child(3) .sheet-meter-track i {
+  background: linear-gradient(90deg, #e8a070, #f0c49a);
+}
+
 .sheet-pitch-wrap {
   flex: 1;
   min-height: 280px;
@@ -2100,7 +2103,7 @@ h3 {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.25), transparent 40%),
     linear-gradient(160deg, #1c4d8a, #0d2540);
-  border: 2px solid #f0c94d;
+  border: 2px solid var(--accent);
   display: grid;
   place-items: center;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
@@ -2202,7 +2205,7 @@ h3 {
 }
 
 .tile-rival-row span {
-  color: #f0c94d;
+  color: var(--accent);
   font-family: var(--font-display);
   font-size: 1.2rem;
 }
