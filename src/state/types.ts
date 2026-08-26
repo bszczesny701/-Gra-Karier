@@ -297,6 +297,20 @@ export interface SeasonReport {
   sacked?: boolean
 }
 
+export type MailKind = 'discipline' | 'medical' | 'board' | 'system'
+
+export interface MailMessage {
+  id: string
+  kind: MailKind
+  from: string
+  subject: string
+  body: string
+  round?: number
+  year?: number
+  read: boolean
+  createdAt: number
+}
+
 export interface GameState {
   version: number
   screen: Screen
@@ -310,10 +324,12 @@ export interface GameState {
   /** clubId → leagueId (ruchome awanse/spadki) */
   clubLeagueIds: Record<string, string>
   log: string[]
+  /** Skrzynka pocztowa w Biurze */
+  mailbox: MailMessage[]
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 108
+export const SAVE_VERSION = 109
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -335,6 +351,7 @@ export function createEmptyState(): GameState {
     liveMatch: null,
     clubLeagueIds: {},
     log: [],
+    mailbox: [],
   }
 }
 

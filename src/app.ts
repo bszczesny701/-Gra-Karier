@@ -43,6 +43,12 @@ import {
   trustLabel,
   WARN_TRUST_THRESHOLD,
 } from './systems/board'
+import {
+  mailKindLabel,
+  markAllMailRead,
+  markMailRead,
+  unreadMailCount,
+} from './systems/mailbox'
 import { clubForm, clubPowerPreview, clubTopPlayers, nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
 import { averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
@@ -78,6 +84,9 @@ export class App {
   private matchTimer: number | null = null
   /** Widok hubu w stylu FIFA Career */
   private hubTab: 'squad' | 'season' | 'office' = 'squad'
+
+  /** Otwarty mail w skrzynce (Biuro) */
+  private openMailId: string | null = null
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -503,30 +512,34 @@ export class App {
             </button>
             <button type="button" class="career-tile tile-office" data-hub-tab="office">
               <span class="tile-title">Biuro</span>
-              <span class="tile-sub">Zaufanie ${trust}% · ${trustLabel(trust)}</span>
+              <span class="tile-sub">${
+                unreadMailCount(this.state) > 0
+                  ? `Skrzynka · ${unreadMailCount(this.state)} nowe`
+                  : `Zaufanie ${trust}% · ${trustLabel(trust)}`
+              }</span>
             </button>
           </div>
         </div>`
     } else if (this.hubTab === 'season') {
       main = `
         <div class="career-season">
-          <section class="career-panel">
+          <section class="career-panel career-panel-table">
+            <h3>Tabela · ${league.name}</h3>
+            <table class="mini-table full-table names-full">
+              <thead><tr><th>#</th><th>Klub</th><th>M</th><th>W-R-P</th><th>+/−</th><th>Pkt</th></tr></thead>
+              <tbody>${fullTable}</tbody>
+            </table>
+          </section>
+          <section class="career-panel board-panel-compact">
             <h3>Cel zarządu</h3>
-            <div class="board-progress ${goalProg.onTrack ? 'on-track' : 'off-track'}">
+            <div class="board-progress compact ${goalProg.onTrack ? 'on-track' : 'off-track'}">
               <div class="board-progress-head">
                 <strong>${goalProg.exp.label}</strong>
                 <span>${place}. / cel ${goalProg.exp.targetPlace}.</span>
               </div>
-              <p class="muted">${goalProg.exp.detail}</p>
               <p class="board-status">${goalProg.statusText}</p>
-              <div class="trust-bar ${trustCls}" title="Zaufanie zarządu">
-                <i style="width:${trust}%"></i>
-              </div>
-              <p class="muted trust-caption">Zaufanie: ${trust}% · ${trustLabel(trust)}${
-                trust < WARN_TRUST_THRESHOLD
-                  ? ` · poniżej ${SACK_TRUST_THRESHOLD}% grozi zwolnienie po sezonie`
-                  : ''
-              }</p>
+              <div class="trust-bar ${trustCls}" title="Zaufanie zarządu"><i style="width:${trust}%"></i></div>
+              <p class="muted trust-caption">Zaufanie ${trust}% · ${trustLabel(trust)}</p>
             </div>
           </section>
           <section class="career-panel">
@@ -597,31 +610,72 @@ export class App {
               }
             </div>
           </section>
-          <section class="career-panel">
-            <h3>Tabela · ${league.name}</h3>
-            <table class="mini-table full-table names-full">
-              <thead><tr><th>#</th><th>Klub</th><th>M</th><th>W-R-P</th><th>+/−</th><th>Pkt</th></tr></thead>
-              <tbody>${fullTable}</tbody>
-            </table>
-          </section>
         </div>`
     } else {
+      if (!this.state.mailbox) this.state.mailbox = []
+      const mails = this.state.mailbox
+      const unread = unreadMailCount(this.state)
+      const openMail = mails.find((x) => x.id === this.openMailId) ?? null
+      const mailList =
+        mails
+          .map((mail) => {
+            const active = openMail?.id === mail.id
+            const meta = [
+              mailKindLabel(mail.kind),
+              mail.round != null ? `kol. ${mail.round}` : null,
+              mail.year != null ? `${mail.year}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+            return `<button type="button" class="mail-row ${mail.read ? '' : 'unread'} ${active ? 'active' : ''}" data-mail="${mail.id}">
+              <span class="mail-row-kind kind-${mail.kind}">${mailKindLabel(mail.kind)}</span>
+              <span class="mail-row-main">
+                <strong>${mail.subject}</strong>
+                <span class="muted">${mail.from} · ${meta}</span>
+              </span>
+              ${mail.read ? '' : '<span class="mail-dot" title="Nieprzeczytane"></span>'}
+            </button>`
+          })
+          .join('') || `<p class="muted">Skrzynka pusta — maile pojawią się po meczach.</p>`
+
       main = `
         <div class="career-office">
-          <section class="career-panel">
+          <section class="career-panel mail-panel">
+            <div class="mail-panel-head">
+              <h3>Skrzynka pocztowa${unread ? ` · ${unread} nowe` : ''}</h3>
+              ${mails.length ? `<button type="button" class="btn ghost compact" id="btn-mail-read-all">Oznacz przeczytane</button>` : ''}
+            </div>
+            <div class="mail-layout">
+              <div class="mail-list">${mailList}</div>
+              <div class="mail-reader">
+                ${
+                  openMail
+                    ? `<article class="mail-letter kind-${openMail.kind}">
+                        <header>
+                          <div class="mail-letter-tag">${mailKindLabel(openMail.kind)}</div>
+                          <h4>${openMail.subject}</h4>
+                          <p class="muted">Od: ${openMail.from}${openMail.round != null ? ` · kolejka ${openMail.round}` : ''}</p>
+                        </header>
+                        <div class="mail-letter-body">${openMail.body.replace(/\n/g, '<br>')}</div>
+                      </article>`
+                    : `<p class="muted mail-empty">Wybierz wiadomość ze skrzynki.</p>`
+                }
+              </div>
+            </div>
+          </section>
+          <section class="career-panel board-panel-compact">
             <h3>Zarząd · ${club.name}</h3>
-            <div class="board-progress ${trustCls}">
+            <div class="board-progress compact ${trustCls}">
               <div class="board-progress-head">
                 <strong>${goalProg.exp.label}</strong>
                 <span>${trustLabel(trust)}</span>
               </div>
-              <p>${goalProg.exp.detail}</p>
               <div class="trust-bar ${trustCls}"><i style="width:${trust}%"></i></div>
-              <p class="muted trust-caption">Zaufanie zarządu: <strong>${trust}%</strong> · Ocena po sezonie vs cel top ${goalProg.exp.targetPlace}.</p>
+              <p class="muted trust-caption">Zaufanie <strong>${trust}%</strong> · cel top ${goalProg.exp.targetPlace}.</p>
               ${
                 trust < WARN_TRUST_THRESHOLD
-                  ? `<p class="board-warn">Uwaga: kolejne niepowodzenie może oznaczać zwolnienie (próg ${SACK_TRUST_THRESHOLD}%).</p>`
-                  : `<p class="muted">Spełniaj cele, a zaufanie rośnie — i Twoja reputacja też.</p>`
+                  ? `<p class="board-warn">Poniżej ${SACK_TRUST_THRESHOLD}% po sezonie — zwolnienie.</p>`
+                  : ''
               }
             </div>
           </section>
@@ -629,12 +683,8 @@ export class App {
             <h3>Profil trenera</h3>
             <p class="meta">${m.name} · reputacja ${m.reputation} · sezony ${m.seasonsManaged}</p>
             <p class="muted">${club.name} · budżet ${Math.round(team.budget).toLocaleString('pl-PL')}</p>
-            <p class="muted">Taktyka: ${tac.formation} · ${planLabel(tac.plan)} · tempo ${tempoLabel(tac.tempo)}</p>
-            <p class="muted">Bilans sezonu: ${s.record.won}-${s.record.drawn}-${s.record.lost} · ${place}. miejsce</p>
-          </section>
-          <section class="career-panel">
-            <h3>Dziennik</h3>
-            <ul class="log">${log || '<li class="muted">Brak wpisów</li>'}</ul>
+            <p class="muted">Bilans: ${s.record.won}-${s.record.drawn}-${s.record.lost} · ${place}. miejsce</p>
+            <ul class="log compact">${log || '<li class="muted">Brak wpisów</li>'}</ul>
             <div class="actions" style="margin-top:12px">
               <button class="btn ghost danger" id="btn-reset">Nowa kariera</button>
             </div>
@@ -698,7 +748,18 @@ export class App {
       this.state = createEmptyState()
       this.state.screen = 'home'
       this.hubTab = 'squad'
+      this.openMailId = null
       this.render()
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-mail]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.mail!
+        this.openMailId = id
+        this.go(() => markMailRead(this.state, id))
+      })
+    })
+    this.root.querySelector('#btn-mail-read-all')?.addEventListener('click', () => {
+      this.go(() => markAllMailRead(this.state))
     })
   }
 

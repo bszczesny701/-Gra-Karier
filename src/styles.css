@@ -2558,8 +2558,185 @@ h3 {
 .career-season,
 .career-office {
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
+  grid-template-columns: minmax(220px, 0.9fr) 1.2fr;
   gap: 14px;
+  align-items: start;
+}
+
+.career-panel-table {
+  grid-column: 1 / -1;
+}
+
+.mail-panel {
+  grid-column: 1 / -1;
+}
+
+.board-panel-compact {
+  padding: 10px 12px;
+}
+
+.board-panel-compact h3 {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+}
+
+.board-progress.compact {
+  gap: 4px;
+}
+
+.board-progress.compact .board-status {
+  font-size: 0.85rem;
+}
+
+.board-progress.compact .trust-bar {
+  height: 8px;
+}
+
+.board-progress.compact .trust-caption {
+  font-size: 0.78rem;
+}
+
+.mail-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mail-panel-head h3 {
+  margin: 0;
+}
+
+.btn.compact {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+.mail-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.95fr) 1.15fr;
+  gap: 12px;
+  min-height: 220px;
+}
+
+.mail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.mail-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mail-row.unread {
+  border-color: rgba(240, 201, 77, 0.35);
+  background: rgba(240, 201, 77, 0.06);
+}
+
+.mail-row.active {
+  border-color: rgba(61, 126, 166, 0.55);
+  background: rgba(61, 126, 166, 0.15);
+}
+
+.mail-row-kind {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.mail-row-kind.kind-discipline {
+  color: #f0a090;
+}
+
+.mail-row-kind.kind-medical {
+  color: #7dcea0;
+}
+
+.mail-row-kind.kind-board {
+  color: #f0c94d;
+}
+
+.mail-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mail-row-main strong {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold, #f0c94d);
+}
+
+.mail-reader {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 12px 14px;
+  min-height: 180px;
+}
+
+.mail-letter-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gold, #f0c94d);
+  margin-bottom: 6px;
+}
+
+.mail-letter h4 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.mail-letter-body {
+  margin-top: 12px;
+  line-height: 1.5;
+  color: #d7e6f5;
+  white-space: pre-wrap;
+}
+
+.mail-empty {
+  margin: 0;
+}
+
+ul.log.compact {
+  max-height: 120px;
+  overflow: auto;
+  margin-top: 8px;
 }
 
 .career-panel {
@@ -2588,6 +2765,10 @@ h3 {
   .career-grid,
   .career-season,
   .career-office {
+    grid-template-columns: 1fr;
+  }
+
+  .mail-layout {
     grid-template-columns: 1fr;
   }
 

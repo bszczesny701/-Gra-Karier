@@ -106,6 +106,7 @@ export function selectClub(state: GameState, clubId: string): void {
   state.season.teamChemistry = state.team.teamChemistry
   state.seasonReport = null
   state.liveMatch = null
+  state.mailbox = []
   state.screen = 'hub'
   pushLog(
     state,
