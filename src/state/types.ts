@@ -329,7 +329,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 109
+export const SAVE_VERSION = 110
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -487,47 +487,47 @@ export function formationPlan(formation: Formation): FormationSlot[] {
   })
   if (formation === '4-3-3') {
     return [
-      s('LO', 12, 84),
-      s('ŚO', 36, 86),
-      s('ŚO', 64, 86),
-      s('PO', 88, 84),
-      s('LP', 18, 54),
-      s('DP', 42, 58),
-      s('ŚP', 58, 52),
-      s('PP', 82, 54),
-      s('LN', 20, 22),
-      s('ŚN', 50, 18),
-      s('PN', 80, 22),
+      s('BR', 50, 94),
+      s('LO', 12, 80),
+      s('ŚO', 36, 82),
+      s('ŚO', 64, 82),
+      s('PO', 88, 80),
+      s('DP', 38, 56),
+      s('ŚP', 50, 50),
+      s('ŚP', 62, 56),
+      s('LN', 18, 22),
+      s('ŚN', 50, 16),
+      s('PN', 82, 22),
     ]
   }
   if (formation === '3-5-2') {
     return [
-      s('ŚO', 28, 86),
-      s('ŚO', 50, 88),
-      s('ŚO', 72, 86),
-      s('LP', 8, 54),
-      s('DP', 32, 58),
-      s('ŚP', 50, 56),
-      s('PP', 92, 54),
-      s('PO', 78, 58),
-      s('OP', 50, 36),
-      s('LN', 36, 20),
-      s('PN', 64, 20),
+      s('BR', 50, 94),
+      s('ŚO', 28, 82),
+      s('ŚO', 50, 84),
+      s('ŚO', 72, 82),
+      s('LP', 8, 52),
+      s('DP', 32, 56),
+      s('ŚP', 50, 54),
+      s('PP', 92, 52),
+      s('OP', 50, 34),
+      s('LN', 36, 18),
+      s('PN', 64, 18),
     ]
   }
   // 4-4-2
   return [
-    s('LO', 12, 84),
-    s('ŚO', 36, 86),
-    s('ŚO', 64, 86),
-    s('PO', 88, 84),
-    s('LP', 14, 54),
-    s('DP', 38, 56),
-    s('ŚP', 62, 56),
-    s('PP', 86, 54),
-    s('LN', 36, 20),
-    s('PN', 64, 20),
-    s('OP', 50, 34),
+    s('BR', 50, 94),
+    s('LO', 12, 80),
+    s('ŚO', 36, 82),
+    s('ŚO', 64, 82),
+    s('PO', 88, 80),
+    s('LP', 14, 52),
+    s('DP', 38, 54),
+    s('ŚP', 62, 54),
+    s('PP', 86, 52),
+    s('LN', 36, 18),
+    s('PN', 64, 18),
   ]
 }
 
@@ -540,6 +540,9 @@ export function visualFormationPlan(
   const scale = width === 1 ? 0.62 : width === 3 ? 1.22 : 1
   const yShift = defLine === 1 ? 4 : defLine === 3 ? -5 : 0
   return formationPlan(formation).map((slot) => {
+    if (slot.role === 'BR') {
+      return { ...slot, x: clampCoord(slot.x), y: clampCoord(slot.y + yShift * 0.15) }
+    }
     const isBack =
       slot.role === 'ŚO' ||
       slot.role === 'ŚOL' ||

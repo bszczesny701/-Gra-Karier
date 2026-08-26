@@ -104,8 +104,12 @@ function relatedPos(a: Position, b: Position): boolean {
 }
 
 function fitScore(p: SquadPlayer, slot: FormationSlot): number {
-  if (p.role === 'BR') return -999
   if ((p.injuryMatchesLeft ?? 0) > 0 || (p.suspensionMatchesLeft ?? 0) > 0) return -999
+  if (slot.role === 'BR') {
+    if (p.role !== 'BR') return -999
+    return p.overall + (p.form - 50) / 5 + (p.fitness - 70) / 8 + 20
+  }
+  if (p.role === 'BR') return -999
   let s = p.overall + (p.form - 50) / 5 + (p.fitness - 70) / 8
   const cb = (r: string) => r === 'ŚO' || r === 'ŚOL' || r === 'ŚOP'
   if (p.role === slot.role || (cb(p.role) && cb(slot.role))) s += 14

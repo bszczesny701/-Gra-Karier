@@ -98,28 +98,36 @@ export function deliverPostMatchMail(state: GameState): void {
   const prog = seasonGoalProgress(season)
   const trust = manager.boardTrust ?? 50
 
-  let kind: MailKind = 'board'
+  // Zarząd nie ocenia po każdym meczu — tylko co 5. kolejkę albo w kryzysie
+  const checkpoint = round % 5 === 0
+  const crisis = lost && !prog.onTrack && trust < 45
+  if (!checkpoint && !crisis) return
+
   let subject: string
   let body: string
 
-  if (won && prog.onTrack) {
-    subject = 'Pozytywna ocena po meczu'
-    body = `Szanowny Trenerze,\n\nwynik ${yours}:${theirs} i pozycja w tabeli (${prog.place}.) wyglądają dobrze względem celu „${prog.exp.label}”. Kontynuujcie w tym kierunku.\n\n— Zarząd ${club.name}`
-  } else if (won && !prog.onTrack) {
-    subject = 'Wygrana, ale cele wciąż odległe'
-    body = `Szanowny Trenerze,\n\nwygrana ${yours}:${theirs} cieszy, jednak jesteśmy ${prog.place}. miejscem — poniżej oczekiwań (cel top ${prog.exp.targetPlace}). Potrzebujemy serii wyników, nie pojedynczych błysków.\n\n— Zarząd ${club.name}`
-  } else if (lost && !prog.onTrack) {
+  if (crisis) {
     subject = 'Niepokój zarządu'
     body = `Szanowny Trenerze,\n\nporażka ${yours}:${theirs} przy ${prog.place}. miejscu budzi poważny niepokój. Cel sezonu: ${prog.exp.label}. Zaufanie wynosi obecnie ${Math.round(trust)}%.\n\n— Zarząd ${club.name}`
-  } else if (lost) {
-    subject = 'Komentarz po porażce'
-    body = `Szanowny Trenerze,\n\nwynik ${yours}:${theirs} jest rozczarowujący, ale wciąż jesteście w strefie akceptowalnej względem celu „${prog.exp.label}”. Oczekujemy szybkiej odpowiedzi boiskowej.\n\n— Zarząd ${club.name}`
+  } else if (won && prog.onTrack) {
+    subject = 'Okresowa ocena — pozytywnie'
+    body = `Szanowny Trenerze,\n\npo ${round}. kolejce jesteśmy ${prog.place}. miejscem — na kursie celu „${prog.exp.label}”. Dobry kierunek, kontynuujcie.\n\n— Zarząd ${club.name}`
+  } else if (!prog.onTrack) {
+    subject = 'Okresowa ocena — poniżej oczekiwań'
+    body = `Szanowny Trenerze,\n\npo ${round}. kolejce pozycja ${prog.place}. jest poniżej celu (top ${prog.exp.targetPlace}). Oczekujemy poprawy w kolejnych meczach.\n\n— Zarząd ${club.name}`
   } else {
-    subject = 'Ocena remisu'
-    body = `Szanowny Trenerze,\n\nremis ${yours}:${theirs}. Aktualnie ${prog.place}. miejsce — ${prog.onTrack ? 'na kursie celu' : 'poniżej oczekiwań'}. Liczymy na trzy punkty w kolejce.\n\n— Zarząd ${club.name}`
+    subject = 'Okresowa ocena zarządu'
+    body = `Szanowny Trenerze,\n\npodsumowanie po ${round}. kolejce: ${prog.place}. miejsce, cel „${prog.exp.label}”. Sytuacja akceptowalna — utrzymujcie poziom.\n\n— Zarząd ${club.name}`
   }
 
-  pushMail(state, { kind, from: `Zarząd · ${club.short}`, subject, body, round, year })
+  pushMail(state, {
+    kind: 'board',
+    from: `Zarząd · ${club.short}`,
+    subject,
+    body,
+    round,
+    year,
+  })
 }
 
 export function mailKindLabel(kind: MailKind): string {

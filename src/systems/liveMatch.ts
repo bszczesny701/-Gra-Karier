@@ -159,7 +159,7 @@ function pickScorer(state: GameState, live: LiveMatchState): string {
   const map = mapPlayers(state)
   const pool = pitchIds(live)
     .map((id) => map.get(id)!)
-    .filter(Boolean)
+    .filter((p) => p && p.role !== 'BR')
     .map((p) => ({
       p,
       w:
@@ -259,7 +259,9 @@ function maybeDisciplineAndInjuries(state: GameState, live: LiveMatchState): voi
   if (!p) return
 
   const fat = live.fatigue[p.id] ?? 50
-  const injuryChance = 0.0035 + (fat < 35 ? 0.006 : fat < 50 ? 0.002 : 0)
+  // Im niższa świeżość (fatigue), tym większa szansa kontuzji
+  const tiredFactor = Math.pow((100 - fat) / 100, 1.45)
+  const injuryChance = clampFloat(0.0018 + tiredFactor * 0.032 + (fat < 30 ? 0.01 : 0), 0.0018, 0.045)
   if (chance(injuryChance)) {
     issueInjury(state, live, p)
     return
@@ -446,7 +448,7 @@ export function tickLiveMinute(state: GameState): boolean {
 
   live.minute += 1
 
-  // Zmęczenie
+  // Zmęczenie na boisku + odpoczynek na ławce
   const drain = drainPerMinute(state, live)
   const map = mapPlayers(state)
   for (const id of pitchIds(live)) {
@@ -459,6 +461,9 @@ export function tickLiveMinute(state: GameState): boolean {
         playerId: id,
       })
     }
+  }
+  for (const id of live.benchIds) {
+    live.fatigue[id] = clampFloat((live.fatigue[id] ?? 80) + 0.22, 45, 100)
   }
 
   const mods = tacticAttackMods(state)
@@ -537,8 +542,12 @@ export function finishLiveMatch(state: GameState): void {
       p.fitness = clamp(p.fitness - loss, 20, 100)
       p.form = clamp(p.form + (won ? 2 + rngInt(2) : drawn ? 0 : -(1 + rngInt(2))), 25, 90)
       p.morale = clamp(p.morale + (won ? 2 : drawn ? 0 : -2), 20, 100)
+    } else if (live.benchIds.includes(p.id)) {
+      // Ławka — regeneracja kondycji
+      p.fitness = clamp(p.fitness + 7 + rngInt(5), 30, 100)
+      p.morale = clamp(p.morale + (won ? 1 : 0), 20, 100)
     } else {
-      p.fitness = clamp(p.fitness + 4 + rngInt(3), 25, 100)
+      p.fitness = clamp(p.fitness + 5 + rngInt(4), 30, 100)
     }
   }
 
