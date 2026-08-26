@@ -285,7 +285,8 @@ export function tickSquadAfterMatch(state: GameState, playedIds: string[], won: 
       p.form = clamp(p.form + (won ? 2 + rngInt(2) : drawn ? 0 : -(1 + rngInt(2))), 25, 90)
       p.morale = clamp(p.morale + (won ? 2 : drawn ? 0 : -2), 20, 100)
     } else {
-      p.fitness = clamp(p.fitness + 4 + rngInt(3), 25, 100)
+      // Odpoczynek poza XI: ~2 mecze → pełna kondycja
+      p.fitness = clamp(p.fitness + 50 + rngInt(6), 20, 100)
       if (rngInt(3) === 0) p.form = clamp(p.form - 1, 25, 90)
     }
   }

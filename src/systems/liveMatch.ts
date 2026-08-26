@@ -585,10 +585,11 @@ export function finishLiveMatch(state: GameState): void {
       p.form = clamp(p.form + (won ? 2 + rngInt(2) : drawn ? 0 : -(1 + rngInt(2))), 25, 90)
       p.morale = clamp(p.morale + (won ? 2 : drawn ? 0 : -2), 20, 100)
     } else if (live.benchIds.includes(p.id)) {
-      p.fitness = clamp(p.fitness + 7 + rngInt(5), 30, 100)
+      // ~2 mecze na ławce = pełna kondycja (nawet z ~20%)
+      p.fitness = clamp(p.fitness + 50 + rngInt(6), 20, 100)
       p.morale = clamp(p.morale + (won ? 1 : 0), 20, 100)
     } else {
-      p.fitness = clamp(p.fitness + 5 + rngInt(4), 30, 100)
+      p.fitness = clamp(p.fitness + 52 + rngInt(6), 20, 100)
       if (!isCup) p.morale = clamp(p.morale - 1, 20, 100)
     }
   }
