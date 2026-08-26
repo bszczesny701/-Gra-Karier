@@ -9,6 +9,13 @@ import {
 } from './leagueSim'
 import { createLiveMatch } from './liveMatch'
 import { publishRoundNews } from './news'
+import { chargeWeeklyWages } from './finance'
+import {
+  isTransferWindowOpen,
+  maybeAiBuyOffers,
+  onTransferWindowOpened,
+  tickLoans,
+} from './transfers'
 
 export { canAdvanceWeek, nextUserMatch }
 
@@ -98,6 +105,7 @@ export function advanceWeek(state: GameState): string | null {
   if (season.phase !== 'playing') return 'Sezon zakończony'
   if (nextUserMatch(season)) return 'Najpierw rozegraj swój mecz w tym tygodniu'
 
+  const prevOpen = isTransferWindowOpen(state)
   simOtherMatchesInWeek(state, null)
   season.calendar.weekIndex += 1
 
@@ -107,6 +115,13 @@ export function advanceWeek(state: GameState): string | null {
   } else {
     syncLeagueRoundProgress(season)
   }
+
+  chargeWeeklyWages(state)
+  tickLoans(state)
+  const nowOpen = isTransferWindowOpen(state)
+  if (nowOpen && !prevOpen) onTransferWindowOpened(state)
+  else if (nowOpen && Math.random() < 0.35) maybeAiBuyOffers(state)
+
   state.screen = 'hub'
   return null
 }

@@ -35,6 +35,22 @@ import {
   advanceWeek,
   nextUserMatch,
   canAdvanceWeek,
+  makeBuyOffer,
+  acceptCounterOffer,
+  rejectOffer,
+  listOwnPlayer,
+  unlistOwnPlayer,
+  activateReleaseClause,
+  acceptSellOffer,
+  makeLoanOffer,
+  loanOutPlayer,
+  exerciseLoanBuyOption,
+  isTransferWindowOpen,
+  refreshListingsIfNeeded,
+  renewContract,
+  suggestRenewTerms,
+  playerMarketValue,
+  weeklyWageBill,
   type MotivationId,
 } from './systems/managerCareer'
 import { intervalMsForSpeed } from './systems/liveMatch'
@@ -93,7 +109,7 @@ export class App {
   private pickLeagueId: string | null = null
   private matchTimer: number | null = null
   /** Widok hubu w stylu FIFA Career */
-  private hubTab: 'squad' | 'season' | 'office' | 'news' | 'calendar' = 'squad'
+  private hubTab: 'squad' | 'season' | 'office' | 'news' | 'calendar' | 'transfers' = 'squad'
 
   /** Otwarty mail w skrzynce (Biuro) */
   private openMailId: string | null = null
@@ -466,6 +482,7 @@ export class App {
     const tabs = [
       { id: 'squad' as const, label: 'Główny' },
       { id: 'calendar' as const, label: 'Kalendarz' },
+      { id: 'transfers' as const, label: 'Transfery' },
       { id: 'season' as const, label: 'Sezon' },
       { id: 'office' as const, label: 'Biuro' },
     ]
@@ -778,7 +795,7 @@ export class App {
             }
           </section>
         </div>`
-    } else {
+    } else if (this.hubTab === 'office') {
       if (!this.state.mailbox) this.state.mailbox = []
       const mails = this.state.mailbox
       const unread = unreadMailCount(this.state)
@@ -847,14 +864,112 @@ export class App {
             </div>
           </section>
           <section class="career-panel">
+            <h3>Finanse</h3>
+            <p class="meta">Budżet <strong>${Math.round(team.budget).toLocaleString('pl-PL')} zł</strong></p>
+            <p class="muted">Płace: ${weeklyWageBill(team).toLocaleString('pl-PL')} zł / tyg. · ${team.squad.length} zawodników</p>
+            <p class="muted">Sezon: +${Math.round(team.seasonIncome ?? 0).toLocaleString('pl-PL')} / −${Math.round(team.seasonExpense ?? 0).toLocaleString('pl-PL')}</p>
+            <p class="muted">${isTransferWindowOpen(this.state) ? 'Okienko transferowe otwarte' : 'Okienko zamknięte — możesz przedłużać kontrakty'}</p>
+            <div class="actions" style="margin-top:10px">
+              <button type="button" class="btn ghost compact" data-hub-tab="transfers">Transfery</button>
+            </div>
+          </section>
+          <section class="career-panel">
             <h3>Profil trenera</h3>
             <p class="meta">${m.name} · reputacja ${m.reputation} · sezony ${m.seasonsManaged}</p>
-            <p class="muted">${club.name} · budżet ${Math.round(team.budget).toLocaleString('pl-PL')}</p>
+            <p class="muted">${club.name}</p>
             <p class="muted">Bilans: ${s.record.won}-${s.record.drawn}-${s.record.lost} · ${place}. miejsce</p>
             <ul class="log compact">${log || '<li class="muted">Brak wpisów</li>'}</ul>
             <div class="actions" style="margin-top:12px">
               <button class="btn ghost danger" id="btn-reset">Nowa kariera</button>
             </div>
+          </section>
+        </div>`
+    } else if (this.hubTab === 'transfers') {
+      refreshListingsIfNeeded(this.state)
+      const market = this.state.market
+      const windowOpen = isTransferWindowOpen(this.state)
+      const listings = (market?.listings ?? [])
+        .map((l) => {
+          const found = this.state.team?.squad.find((p) => p.id === l.playerId)
+            ? { player: this.state.team!.squad.find((p) => p.id === l.playerId)!, clubId: this.state.team!.clubId }
+            : (() => {
+                for (const [cid, sq] of Object.entries(market.aiSquads ?? {})) {
+                  const p = sq.find((x) => x.id === l.playerId)
+                  if (p) return { player: p, clubId: cid }
+                }
+                return null
+              })()
+          if (!found) return ''
+          const p = found.player
+          const own = found.clubId === s.clubId
+          const val = playerMarketValue(p)
+          return `<article class="transfer-row">
+            <div>
+              <strong>${p.name}</strong>
+              <span class="muted"> · ${ROLE_FULL[p.role]} · ${p.overall} OVR · ${getClub(found.clubId).short}</span>
+              <p class="muted" style="margin:4px 0 0">Wartość ~${val.toLocaleString('pl-PL')} · cena ${l.askingPrice.toLocaleString('pl-PL')}${p.releaseClause ? ` · klauzula ${p.releaseClause.toLocaleString('pl-PL')}` : ''}</p>
+            </div>
+            <div class="transfer-row-actions">
+              ${
+                own
+                  ? `<button type="button" class="btn ghost compact" data-unlist="${p.id}">Zdejmij</button>`
+                  : windowOpen
+                    ? `<button type="button" class="btn primary compact" data-buy="${p.id}" data-ask="${l.askingPrice}">Kup</button>
+                       <button type="button" class="btn ghost compact" data-loan="${p.id}">Wypożycz</button>
+                       ${p.releaseClause ? `<button type="button" class="btn ghost compact" data-clause="${p.id}">Klauzula</button>` : ''}`
+                    : `<span class="muted">Zamknięte</span>`
+              }
+            </div>
+          </article>`
+        })
+        .join('') || `<p class="muted">${windowOpen ? 'Brak ofert na rynku — wróć w kolejnym tygodniu okienka.' : 'Okienko zamknięte.'}</p>`
+
+      const offers = (market?.offers ?? [])
+        .filter((o) => o.status === 'pending' || o.status === 'countered')
+        .slice(0, 12)
+        .map((o) => {
+          const name = (() => {
+            const f = this.state.team?.squad.find((p) => p.id === o.playerId)
+            if (f) return f.name
+            for (const sq of Object.values(market.aiSquads ?? {})) {
+              const p = sq.find((x) => x.id === o.playerId)
+              if (p) return p.name
+            }
+            return o.playerId
+          })()
+          return `<article class="transfer-offer ${o.status}">
+            <div>
+              <strong>${o.kind === 'sell' ? 'Oferta kupna' : o.kind === 'loan' ? 'Wypożyczenie' : 'Negocjacja'}: ${name}</strong>
+              <p class="muted" style="margin:4px 0 0">${o.fee.toLocaleString('pl-PL')} zł · ${o.wageOffer.toLocaleString('pl-PL')}/tyg. · ${o.yearsOffer || '—'} lat · ${o.status}${o.counter ? ` · kontrpropozycja ${o.counter.fee.toLocaleString('pl-PL')}` : ''}</p>
+            </div>
+            <div class="transfer-row-actions">
+              ${
+                o.status === 'countered'
+                  ? `<button type="button" class="btn primary compact" data-accept-counter="${o.id}">Akceptuj kontrę</button>
+                     <button type="button" class="btn ghost compact" data-reject-offer="${o.id}">Odrzuć</button>`
+                  : o.kind === 'sell' && o.fromAi
+                    ? `<button type="button" class="btn primary compact" data-accept-sell="${o.id}">Sprzedaj</button>
+                       <button type="button" class="btn ghost compact" data-reject-offer="${o.id}">Odrzuć</button>`
+                    : `<button type="button" class="btn ghost compact" data-reject-offer="${o.id}">Odrzuć</button>`
+              }
+            </div>
+          </article>`
+        })
+        .join('') || `<p class="muted">Brak aktywnych ofert.</p>`
+
+      main = `
+        <div class="career-transfers">
+          <section class="career-panel">
+            <div class="mail-panel-head">
+              <h3>Rynek PL</h3>
+              <span class="cal-window-badge ${windowOpen ? 'open' : ''}">${windowOpen ? 'Okienko otwarte' : 'Okienko zamknięte'}</span>
+            </div>
+            <p class="muted" style="margin:0 0 10px">Budżet ${Math.round(team.budget).toLocaleString('pl-PL')} zł · kadra ${team.squad.length}/30</p>
+            <div class="transfer-list">${listings}</div>
+          </section>
+          <section class="career-panel">
+            <h3>Oferty</h3>
+            <div class="transfer-list">${offers}</div>
           </section>
         </div>`
     }
@@ -865,7 +980,7 @@ export class App {
           <div class="career-status">
             <div class="career-pill">Sezon ${s.year}</div>
             <div class="career-pill">${league.name}</div>
-            <div class="career-pill money-pill">${formatStars(club.stars)}</div>
+            <div class="career-pill money-pill">${Math.round(team.budget / 1000)}k zł</div>
           </div>
           <div class="career-brand">GRA TRENERA</div>
           <div class="career-profile">
@@ -888,7 +1003,13 @@ export class App {
   private bindHub(): void {
     this.root.querySelectorAll<HTMLButtonElement>('[data-hub-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.hubTab = btn.dataset.hubTab as 'squad' | 'season' | 'office' | 'news' | 'calendar'
+        this.hubTab = btn.dataset.hubTab as
+          | 'squad'
+          | 'season'
+          | 'office'
+          | 'news'
+          | 'calendar'
+          | 'transfers'
         this.render()
       })
     })
@@ -949,6 +1070,67 @@ export class App {
     })
     this.root.querySelector('#btn-mail-read-all')?.addEventListener('click', () => {
       this.go(() => markAllMailRead(this.state))
+    })
+
+    this.root.querySelectorAll<HTMLButtonElement>('[data-buy]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.buy!
+        const ask = Number(btn.dataset.ask || 0)
+        this.go(() => {
+          const found =
+            this.state.team?.squad.find((p) => p.id === id) ??
+            Object.values(this.state.market?.aiSquads ?? {})
+              .flat()
+              .find((p) => p.id === id)
+          if (!found) return
+          const wage = Math.max(found.wage, Math.round(playerMarketValue(found) / 80))
+          const err = makeBuyOffer(this.state, id, ask, wage, 3, found.releaseClause)
+          if (err) pushTempAlert(err)
+        })
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-loan]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.loan!
+        this.go(() => {
+          const err = makeLoanOffer(this.state, id, 12, null, 0)
+          if (err) pushTempAlert(err)
+        })
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-clause]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => {
+          const err = activateReleaseClause(this.state, btn.dataset.clause!)
+          if (err) pushTempAlert(err)
+        })
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-unlist]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => unlistOwnPlayer(this.state, btn.dataset.unlist!))
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-accept-counter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => {
+          const err = acceptCounterOffer(this.state, btn.dataset.acceptCounter!)
+          if (err) pushTempAlert(err)
+        })
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-accept-sell]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => {
+          const err = acceptSellOffer(this.state, btn.dataset.acceptSell!)
+          if (err) pushTempAlert(err)
+        })
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-reject-offer]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => rejectOffer(this.state, btn.dataset.rejectOffer!))
+      })
     })
   }
 
@@ -1043,8 +1225,25 @@ export class App {
                 <strong>${profile.contractYears} ${profile.contractYears === 1 ? 'sezon' : profile.contractYears < 5 ? 'sezony' : 'sezonów'}</strong>
                 <span class="muted">·</span>
                 <strong>${Math.round(profile.wage).toLocaleString('pl-PL')} / tyg.</strong>
+                ${profile.releaseClause ? `<span class="muted">· klauzula ${profile.releaseClause.toLocaleString('pl-PL')}</span>` : ''}
+                ${profile.loanFromClubId ? `<span class="muted">· wypożyczony z ${getClub(profile.loanFromClubId).short}${profile.loanWeeksLeft != null ? ` · ${profile.loanWeeksLeft} tyg.` : ''}</span>` : ''}
               </div>
-              <button type="button" class="btn ghost" id="btn-close-profile">Zamknij</button>
+              <div class="actions" style="margin-top:4px">
+                ${
+                  !profile.loanFromClubId
+                    ? `<button type="button" class="btn primary compact" id="btn-renew">Przedłuż</button>
+                       ${
+                         isTransferWindowOpen(this.state)
+                           ? `<button type="button" class="btn ghost compact" id="btn-list-player">Wystaw</button>
+                              <button type="button" class="btn ghost compact" id="btn-loan-out">Wypożycz</button>`
+                           : ''
+                       }`
+                    : isTransferWindowOpen(this.state) && profile.loanBuyOption != null
+                      ? `<button type="button" class="btn primary compact" id="btn-loan-buy">Wykup (${profile.loanBuyOption.toLocaleString('pl-PL')})</button>`
+                      : ''
+                }
+                <button type="button" class="btn ghost" id="btn-close-profile">Zamknij</button>
+              </div>
             </article>
           </div>`
         })()
@@ -1286,6 +1485,48 @@ export class App {
     this.root.querySelector('#btn-close-profile')?.addEventListener('click', () => {
       this.profilePlayerId = null
       this.render()
+    })
+    this.root.querySelector('#btn-renew')?.addEventListener('click', () => {
+      const id = this.profilePlayerId
+      if (!id) return
+      const p = this.state.team?.squad.find((x) => x.id === id)
+      if (!p) return
+      const sug = suggestRenewTerms(p)
+      this.go(() => {
+        const err = renewContract(this.state, id, sug.years, sug.wage, sug.clause)
+        if (err) pushTempAlert(err)
+        else this.profilePlayerId = null
+      })
+    })
+    this.root.querySelector('#btn-list-player')?.addEventListener('click', () => {
+      const id = this.profilePlayerId
+      if (!id) return
+      this.go(() => {
+        const err = listOwnPlayer(this.state, id)
+        if (err) pushTempAlert(err)
+        else {
+          this.profilePlayerId = null
+          this.hubTab = 'transfers'
+        }
+      })
+    })
+    this.root.querySelector('#btn-loan-out')?.addEventListener('click', () => {
+      const id = this.profilePlayerId
+      if (!id) return
+      this.go(() => {
+        const err = loanOutPlayer(this.state, id, 12, null)
+        if (err) pushTempAlert(err)
+        else this.profilePlayerId = null
+      })
+    })
+    this.root.querySelector('#btn-loan-buy')?.addEventListener('click', () => {
+      const id = this.profilePlayerId
+      if (!id) return
+      this.go(() => {
+        const err = exerciseLoanBuyOption(this.state, id)
+        if (err) pushTempAlert(err)
+        else this.profilePlayerId = null
+      })
     })
     this.root.querySelector('#profile-overlay')?.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).id === 'profile-overlay') {
@@ -1729,6 +1970,7 @@ export class App {
             : ''
         }
         <p>${r.narrative}</p>
+        ${r.financeSummary ? `<p class="meta">Finanse: ${r.financeSummary}</p>` : ''}
         ${
           r.sacked
             ? `<p class="meta down">Zarząd rozwiązał kontrakt. Szukaj nowego klubu.</p>`

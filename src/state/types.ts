@@ -116,11 +116,19 @@ export interface SquadPlayer {
   suspensionMatchesLeft: number
   /** Pozostałe sezony kontraktu */
   contractYears: number
-  /** Pensja tygodniowa (stub) */
+  /** Pensja tygodniowa */
   wage: number
   seasonApps: number
   seasonGoals: number
   wantsToLeave: boolean
+  /** Klauzula odstępnego (null = brak) */
+  releaseClause: number | null
+  /** Wypożyczony DO Twojego klubu z… */
+  loanFromClubId?: string
+  /** Wypożyczony OD Ciebie do… */
+  loanToClubId?: string
+  loanWeeksLeft?: number
+  loanBuyOption?: number | null
 }
 
 export interface Tactics {
@@ -149,6 +157,8 @@ export interface TeamState {
   tactics: Tactics
   teamChemistry: number
   budget: number
+  seasonIncome: number
+  seasonExpense: number
   /** 11 id startujących (kolejność: wg slotów formacji) */
   startingIds: string[]
   benchIds: string[]
@@ -373,6 +383,7 @@ export interface SeasonReport {
   sacked?: boolean
   /** Podsumowanie Pucharu Polski */
   cupSummary?: string
+  financeSummary?: string
 }
 
 export type MailKind = 'discipline' | 'medical' | 'board' | 'system'
@@ -401,6 +412,48 @@ export interface NewsItem {
   createdAt: number
 }
 
+export type TransferOfferKind = 'buy' | 'sell' | 'loan' | 'renew'
+export type TransferOfferStatus = 'pending' | 'accepted' | 'rejected' | 'countered' | 'withdrawn'
+
+export interface TransferListing {
+  playerId: string
+  clubId: string
+  askingPrice: number
+  listedAtWeek: number
+}
+
+export interface TransferOfferCounter {
+  fee: number
+  wage: number
+  years: number
+}
+
+export interface TransferOffer {
+  id: string
+  kind: TransferOfferKind
+  playerId: string
+  fromClubId: string
+  toClubId: string
+  fee: number
+  wageOffer: number
+  yearsOffer: number
+  releaseClauseOffer?: number | null
+  loanWeeks?: number
+  loanBuyOption?: number | null
+  status: TransferOfferStatus
+  counter?: TransferOfferCounter
+  /** true = oferta od AI do gracza */
+  fromAi?: boolean
+}
+
+export interface TransferMarketState {
+  listings: TransferListing[]
+  offers: TransferOffer[]
+  /** Kadry AI klubów PL (poza graczem) */
+  aiSquads: Record<string, SquadPlayer[]>
+  seededWeek?: number
+}
+
 export interface GameState {
   version: number
   screen: Screen
@@ -418,10 +471,11 @@ export interface GameState {
   mailbox: MailMessage[]
   /** Wiadomości / gazeta na ekranie Główny */
   news: NewsItem[]
+  market: TransferMarketState
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 113
+export const SAVE_VERSION = 114
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -429,6 +483,10 @@ export function clamp(n: number, min = 1, max = 99): number {
 
 export function clampFloat(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
+}
+
+export function emptyMarket(): TransferMarketState {
+  return { listings: [], offers: [], aiSquads: {} }
 }
 
 export function createEmptyState(): GameState {
@@ -445,6 +503,7 @@ export function createEmptyState(): GameState {
     log: [],
     mailbox: [],
     news: [],
+    market: emptyMarket(),
   }
 }
 

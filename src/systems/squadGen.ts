@@ -35,10 +35,16 @@ const SQUAD_ROLES: PitchRole[] = [
   'LP', 'PP', 'DP', 'ŚOL', 'ŚN',
 ]
 
-function stubContract(age: number, overall: number, h: number): { contractYears: number; wage: number } {
+function stubContract(age: number, overall: number, h: number): {
+  contractYears: number
+  wage: number
+  releaseClause: number | null
+} {
   const years = age <= 22 ? 3 + (h % 2) : age >= 32 ? 1 + (h % 2) : 2 + (h % 3)
   const wage = Math.round(800 + overall * overall * 1.8 + (h % 400))
-  return { contractYears: clamp(years, 1, 4), wage }
+  const clause =
+    overall >= 72 ? Math.round(wage * 52 * (2.2 + (h % 10) / 10)) : h % 3 === 0 ? Math.round(wage * 40) : null
+  return { contractYears: clamp(years, 1, 4), wage, releaseClause: clause }
 }
 
 export function normalizeSquadPlayer(p: SquadPlayer): SquadPlayer {
@@ -51,6 +57,7 @@ export function normalizeSquadPlayer(p: SquadPlayer): SquadPlayer {
   p.wantsToLeave = p.wantsToLeave ?? false
   p.injuryMatchesLeft = p.injuryMatchesLeft ?? 0
   p.suspensionMatchesLeft = p.suspensionMatchesLeft ?? 0
+  if (p.releaseClause === undefined) p.releaseClause = stub.releaseClause
   return p
 }
 
@@ -105,6 +112,7 @@ function makePlayer(
     seasonApps: 0,
     seasonGoals: 0,
     wantsToLeave: false,
+    releaseClause: contract.releaseClause,
   }
 }
 
@@ -131,6 +139,7 @@ function makeFromSeed(clubId: string, index: number, seed: RealPlayerSeed): Squa
     seasonApps: 0,
     seasonGoals: 0,
     wantsToLeave: false,
+    releaseClause: contract.releaseClause,
   }
 }
 
@@ -215,6 +224,8 @@ export function createTeamState(clubId: string): TeamState {
     tactics: defaultTactics('4-4-2'),
     teamChemistry: 52,
     budget: Math.round(getClub(clubId).wage * 40 + getClub(clubId).strength * 80),
+    seasonIncome: 0,
+    seasonExpense: 0,
     startingIds,
     benchIds,
   }

@@ -8,7 +8,7 @@ import type {
   TacticAxis,
   TacticalStyle,
 } from '../state/types'
-import { formationPlan, normalizeTactics } from '../state/types'
+import { emptyMarket, formationPlan, normalizeTactics } from '../state/types'
 import { pushLog } from '../state/gameState'
 import {
   applyPromotionRelegation,
@@ -40,6 +40,14 @@ import {
 import { seedOpeningNews } from './news'
 import { cupSummaryText } from './cup'
 import { buildSeasonSchedule } from './calendar'
+import { applySeasonPrize, normalizeTeamFinance, weeklyWageBill } from './finance'
+import { processContractExpiries } from './contracts'
+import {
+  ensureAiSquads,
+  ensureMarket,
+  isTransferWindowOpen,
+  onTransferWindowOpened,
+} from './transfers'
 
 export { playerTablePosition, sortedStandings, standingsAroundPlayer }
 export { beginMatchday, advanceWeek, nextUserMatch, canAdvanceWeek }
@@ -54,6 +62,26 @@ export {
   tickLiveMinute,
 }
 export type { MotivationId }
+
+export {
+  makeBuyOffer,
+  acceptCounterOffer,
+  rejectOffer,
+  listOwnPlayer,
+  unlistOwnPlayer,
+  activateReleaseClause,
+  acceptSellOffer,
+  counterSellOffer,
+  makeLoanOffer,
+  loanOutPlayer,
+  exerciseLoanBuyOption,
+  isTransferWindowOpen,
+  refreshListingsIfNeeded,
+  ensureAiSquads,
+  findPlayerAnywhere,
+} from './transfers'
+export { renewContract, suggestRenewTerms } from './contracts'
+export { playerMarketValue, weeklyWageBill, expectedWage } from './finance'
 
 export function polishLeagues() {
   return LEAGUES.filter((l) => l.country === 'PL').sort((a, b) => b.tier - a.tier)
@@ -106,6 +134,7 @@ export function selectClub(state: GameState, clubId: string): void {
 
   state.team = createTeamState(clubId)
   normalizeTeamSquad(state.team)
+  normalizeTeamFinance(state.team)
   state.season = createManagerSeason(state, clubId, year)
   buildSeasonSchedule(state, state.season)
   state.season.teamChemistry = state.team.teamChemistry
@@ -113,6 +142,10 @@ export function selectClub(state: GameState, clubId: string): void {
   state.liveMatch = null
   state.mailbox = []
   state.news = []
+  ensureMarket(state)
+  state.market = emptyMarket()
+  ensureAiSquads(state)
+  if (isTransferWindowOpen(state)) onTransferWindowOpened(state)
   state.screen = 'hub'
   pushLog(
     state,
@@ -270,11 +303,13 @@ export function finalizeSeason(state: GameState): void {
 
   const league = getLeague(season.leagueId)
   const cupLine = cupSummaryText(season)
+  const prize = state.team ? applySeasonPrize(state, place) : 0
   let narrative = `Sezon ${season.year}: ${place}. miejsce w ${league.name} (${row?.points ?? 0} pkt). `
   if (promotion) narrative += 'Awans! '
   else if (relegation) narrative += 'Spadek. '
   else narrative += 'Zostajesz w lidze. '
   if (cupLine) narrative += ` ${cupLine}`
+  if (prize) narrative += ` Nagroda: ${prize.toLocaleString('pl-PL')} zł.`
   narrative += ` ${summary}`
   if (sacked) narrative += ' Zarząd zwalnia trenera.'
 
@@ -296,6 +331,9 @@ export function finalizeSeason(state: GameState): void {
     boardGoalLabel: exp.label,
     sacked,
     cupSummary: cupLine ?? undefined,
+    financeSummary: state.team
+      ? `Budżet ${Math.round(state.team.budget).toLocaleString('pl-PL')} · płace ${weeklyWageBill(state.team).toLocaleString('pl-PL')}/tyg. · bilans +${Math.round(state.team.seasonIncome).toLocaleString('pl-PL')} / −${Math.round(state.team.seasonExpense).toLocaleString('pl-PL')}`
+      : undefined,
   }
   state.seasonReport = report
   state.screen = 'seasonReport'
@@ -325,11 +363,14 @@ export function startNextSeason(state: GameState): void {
     p.seasonApps = 0
     p.seasonGoals = 0
     p.contractYears = Math.max(0, (p.contractYears ?? 1) - 1)
-    if (p.contractYears === 0) p.contractYears = 1
     p.wantsToLeave = false
   }
   if (manager.lastBoardReviewRound != null) manager.lastBoardReviewRound = 0
   normalizeTeamSquad(team)
+  processContractExpiries(state)
+  team.seasonIncome = 0
+  team.seasonExpense = 0
+  normalizeTeamFinance(team)
   team.teamChemistry = Math.max(40, Math.min(70, team.teamChemistry))
   const plan = formationPlan(team.tactics.formation)
   const picked = pickDefaultLineup(team.squad, plan)
@@ -340,6 +381,10 @@ export function startNextSeason(state: GameState): void {
   buildSeasonSchedule(state, state.season)
   state.season.teamChemistry = team.teamChemistry
   state.seasonReport = null
+  ensureMarket(state)
+  state.market = emptyMarket()
+  ensureAiSquads(state)
+  if (isTransferWindowOpen(state)) onTransferWindowOpened(state)
   state.screen = 'hub'
   const league = getLeague(state.season.leagueId)
   const exp = boardExpectationForClub(manager.clubId, state.season.leagueId)
