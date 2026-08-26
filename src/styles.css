@@ -1036,6 +1036,100 @@ h3 {
   margin-top: 6px;
 }
 
+.tactics-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.tactics-screen-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+.tactics-screen-head h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.tactics-screen-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(260px, 0.9fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  align-items: start;
+}
+
+.tactics-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.tactics-block h3 {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold, #f0c94d);
+}
+
+.tactics-summary {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.tactics-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.tactics-pitch {
+  width: 100%;
+  min-height: 420px;
+  height: min(62vh, 560px);
+  margin: 0;
+  pointer-events: none;
+}
+
+.tactics-preview-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.tactics-preview-card {
+  cursor: default;
+}
+
+@media (max-width: 900px) {
+  .tactics-screen-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tactics-pitch {
+    min-height: 360px;
+    height: 52vh;
+  }
+}
+
 .tactics-axis {
   display: grid;
   grid-template-columns: 5.5rem 1fr;

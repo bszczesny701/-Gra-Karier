@@ -20,9 +20,9 @@ export type PitchRole =
 export const ROLE_FULL: Record<PitchRole, string> = {
   BR: 'Bramkarz',
   LO: 'Lewy obrońca',
-  ŚOL: 'Lewy środkowy obrońca',
+  ŚOL: 'Środkowy obrońca',
   ŚO: 'Środkowy obrońca',
-  ŚOP: 'Prawy środkowy obrońca',
+  ŚOP: 'Środkowy obrońca',
   PO: 'Prawy obrońca',
   LP: 'Lewy pomocnik',
   DP: 'Defensywny pomocnik',
@@ -44,9 +44,14 @@ export function roleBase(role: PitchRole): Position {
 
 export type MatchAction = 'shoot' | 'pass' | 'tackle' | 'clear'
 export type Formation = '4-4-2' | '4-3-3' | '3-5-2'
+/** Legacy — mapowane w normalizeTactics */
 export type TacticalStyle = 'attack' | 'balanced' | 'defend'
+/** Plan gry (główny styl) */
+export type GamePlan = 'possession' | 'balanced' | 'counter' | 'press' | 'direct'
 /** 1 = nisko/wąsko/wolno, 2 = średnio, 3 = wysoko/szeroko/szybko */
 export type TacticAxis = 1 | 2 | 3
+/** Mentalność: 1 bardzo def. … 5 bardzo ofens. */
+export type Mentality = 1 | 2 | 3 | 4 | 5
 
 export type Screen =
   | 'home'
@@ -54,6 +59,7 @@ export type Screen =
   | 'pickClub'
   | 'hub'
   | 'lineup'
+  | 'tactics'
   | 'liveMatch'
   | 'halfTime'
   | 'matchMoment'
@@ -98,13 +104,22 @@ export interface SquadPlayer {
 
 export interface Tactics {
   formation: Formation
-  style: TacticalStyle
+  /** Plan gry */
+  plan: GamePlan
+  /** Mentalność 1–5 */
+  mentality: Mentality
   /** Szerokość gry */
   width: TacticAxis
   /** Intensywność pressingu */
   press: TacticAxis
   /** Tempo gry */
   tempo: TacticAxis
+  /** Linia obrony */
+  defLine: TacticAxis
+  /** Budowa akcji: krótkie / mieszane / długie */
+  buildUp: TacticAxis
+  /** Legacy — utrzymywane dla starych zapisów / UI hub */
+  style?: TacticalStyle
 }
 
 export interface TeamState {
@@ -279,7 +294,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 106
+export const SAVE_VERSION = 107
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -317,6 +332,22 @@ export function styleLabel(style: TacticalStyle): string {
   return 'Zbalansowana'
 }
 
+export function planLabel(plan: GamePlan): string {
+  if (plan === 'possession') return 'Posiadanie'
+  if (plan === 'counter') return 'Kontry'
+  if (plan === 'press') return 'Wysoki press'
+  if (plan === 'direct') return 'Gra bezpośrednia'
+  return 'Zbalansowany'
+}
+
+export function mentalityLabel(v: Mentality): string {
+  if (v === 1) return 'Bardzo def.'
+  if (v === 2) return 'Defensywa'
+  if (v === 4) return 'Ofensywa'
+  if (v === 5) return 'Bardzo ofens.'
+  return 'Zbalansowana'
+}
+
 export function widthLabel(v: TacticAxis): string {
   if (v === 1) return 'Wąsko'
   if (v === 3) return 'Szeroko'
@@ -335,18 +366,68 @@ export function tempoLabel(v: TacticAxis): string {
   return 'Normalne'
 }
 
-export function defaultTactics(formation: Formation = '4-4-2'): Tactics {
-  return { formation, style: 'balanced', width: 2, press: 2, tempo: 2 }
+export function defLineLabel(v: TacticAxis): string {
+  if (v === 1) return 'Niska'
+  if (v === 3) return 'Wysoka'
+  return 'Średnia'
 }
 
-export function normalizeTactics(t: Partial<Tactics> & Pick<Tactics, 'formation' | 'style'>): Tactics {
+export function buildUpLabel(v: TacticAxis): string {
+  if (v === 1) return 'Krótkie'
+  if (v === 3) return 'Długie'
+  return 'Mieszane'
+}
+
+export function defaultTactics(formation: Formation = '4-4-2'): Tactics {
+  return {
+    formation,
+    plan: 'balanced',
+    mentality: 3,
+    width: 2,
+    press: 2,
+    tempo: 2,
+    defLine: 2,
+    buildUp: 2,
+    style: 'balanced',
+  }
+}
+
+export function normalizeTactics(
+  t: Partial<Tactics> & Pick<Tactics, 'formation'> & { style?: TacticalStyle },
+): Tactics {
   const axis = (v: unknown): TacticAxis => (v === 1 || v === 3 ? v : 2)
+  const ment = (v: unknown): Mentality =>
+    v === 1 || v === 2 || v === 4 || v === 5 ? v : 3
+
+  let plan: GamePlan = 'balanced'
+  if (
+    t.plan === 'possession' ||
+    t.plan === 'counter' ||
+    t.plan === 'press' ||
+    t.plan === 'direct' ||
+    t.plan === 'balanced'
+  ) {
+    plan = t.plan
+  } else if (t.style === 'attack') plan = 'direct'
+  else if (t.style === 'defend') plan = 'counter'
+
+  let mentality: Mentality = ment(t.mentality)
+  if (t.mentality == null && t.style === 'attack') mentality = 4
+  if (t.mentality == null && t.style === 'defend') mentality = 2
+
+  const style: TacticalStyle =
+    mentality >= 4 ? 'attack' : mentality <= 2 ? 'defend' : 'balanced'
+
   return {
     formation: t.formation,
-    style: t.style,
+    plan,
+    mentality,
     width: axis(t.width),
     press: axis(t.press),
     tempo: axis(t.tempo),
+    defLine: axis(t.defLine),
+    buildUp: axis(t.buildUp),
+    style,
   }
 }
 
@@ -355,6 +436,10 @@ export interface FormationSlot {
   base: Position
   x: number
   y: number
+}
+
+function clampCoord(n: number): number {
+  return Math.max(8, Math.min(92, n))
 }
 
 export function formationPlan(formation: Formation): FormationSlot[] {
@@ -367,8 +452,8 @@ export function formationPlan(formation: Formation): FormationSlot[] {
   if (formation === '4-3-3') {
     return [
       s('LO', 12, 84),
-      s('ŚOL', 36, 86),
-      s('ŚOP', 64, 86),
+      s('ŚO', 36, 86),
+      s('ŚO', 64, 86),
       s('PO', 88, 84),
       s('LP', 18, 54),
       s('DP', 42, 58),
@@ -381,9 +466,9 @@ export function formationPlan(formation: Formation): FormationSlot[] {
   }
   if (formation === '3-5-2') {
     return [
-      s('ŚOL', 28, 86),
+      s('ŚO', 28, 86),
       s('ŚO', 50, 88),
-      s('ŚOP', 72, 86),
+      s('ŚO', 72, 86),
       s('LP', 8, 54),
       s('DP', 32, 58),
       s('ŚP', 50, 56),
@@ -397,8 +482,8 @@ export function formationPlan(formation: Formation): FormationSlot[] {
   // 4-4-2
   return [
     s('LO', 12, 84),
-    s('ŚOL', 36, 86),
-    s('ŚOP', 64, 86),
+    s('ŚO', 36, 86),
+    s('ŚO', 64, 86),
     s('PO', 88, 84),
     s('LP', 14, 54),
     s('DP', 38, 56),
@@ -408,6 +493,27 @@ export function formationPlan(formation: Formation): FormationSlot[] {
     s('PN', 64, 20),
     s('OP', 50, 34),
   ]
+}
+
+/** Formacja z wizualną szerokością (i lekkim przesunięciem linii). */
+export function visualFormationPlan(
+  formation: Formation,
+  width: TacticAxis = 2,
+  defLine: TacticAxis = 2,
+): FormationSlot[] {
+  const scale = width === 1 ? 0.62 : width === 3 ? 1.22 : 1
+  const yShift = defLine === 1 ? 4 : defLine === 3 ? -5 : 0
+  return formationPlan(formation).map((slot) => {
+    const isBack =
+      slot.role === 'ŚO' ||
+      slot.role === 'ŚOL' ||
+      slot.role === 'ŚOP' ||
+      slot.role === 'LO' ||
+      slot.role === 'PO'
+    const x = clampCoord(50 + (slot.x - 50) * scale)
+    const y = clampCoord(slot.y + (isBack ? yShift : yShift * 0.35))
+    return { ...slot, x, y }
+  })
 }
 
 export function formationSlots(formation: Formation): Position[] {

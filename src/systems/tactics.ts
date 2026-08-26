@@ -1,14 +1,21 @@
 import type {
   Formation,
   FormationSlot,
+  GamePlan,
+  Mentality,
+  PitchRole,
   Position,
   SquadPlayer,
   TacticalStyle,
   Tactics,
   TeamState,
 } from '../state/types'
-import { formationPlan } from '../state/types'
+import { formationPlan, normalizeTactics } from '../state/types'
 import { pickDefaultLineup, starters } from './squadGen'
+
+function isCb(role: PitchRole): boolean {
+  return role === 'ŚO' || role === 'ŚOL' || role === 'ŚOP'
+}
 
 /** Bonus taktyczny względem siły przeciwnika (różnica stylów). */
 export function styleMatchupBonus(style: TacticalStyle, opponentStrength: number, yourOvr: number): number {
@@ -38,7 +45,7 @@ export function formationFit(team: TeamState, formation: Formation = team.tactic
     const slot = plan[i]!
     const p = xi[i]
     if (!p) continue
-    if (p.role === slot.role) score += 1
+    if (p.role === slot.role || (isCb(p.role) && isCb(slot.role))) score += 1
     else if (p.position === slot.base) score += 0.7
     else if (softFit(p.position, slot.base)) score += 0.4
   }
@@ -46,20 +53,24 @@ export function formationFit(team: TeamState, formation: Formation = team.tactic
 }
 
 export function lineupPower(team: TeamState, tactics: Tactics = team.tactics): number {
+  const t = normalizeTactics(tactics)
   const xi = starters(team)
   if (!xi.length) return 40
   const ovr =
     xi.reduce((s, p) => s + p.overall + (p.form - 50) * 0.12 + (p.fitness - 70) * 0.08, 0) /
     xi.length
-  const fit = formationFit(team, tactics.formation)
+  const fit = formationFit(team, t.formation)
   const chem = (team.teamChemistry - 50) * 0.06
-  const styleBias =
-    tactics.style === 'attack' ? 1.5 : tactics.style === 'defend' ? -0.5 : 0.4
-  const width = tactics.width ?? 2
-  const press = tactics.press ?? 2
-  const tempo = tactics.tempo ?? 2
-  const axisBias = (width - 2) * 0.35 + (press - 2) * 0.2 + (tempo - 2) * 0.4
-  return ovr + (fit - 0.65) * 8 + chem + styleBias + axisBias
+  const mentBias = (t.mentality - 3) * 0.55
+  const planBias =
+    t.plan === 'press' ? 0.6 : t.plan === 'direct' ? 0.5 : t.plan === 'possession' ? -0.2 : t.plan === 'counter' ? 0.3 : 0.2
+  const axisBias =
+    (t.width - 2) * 0.35 +
+    (t.press - 2) * 0.25 +
+    (t.tempo - 2) * 0.4 +
+    (t.defLine - 2) * 0.2 +
+    (t.buildUp - 2) * 0.15
+  return ovr + (fit - 0.65) * 8 + chem + mentBias + planBias + axisBias
 }
 
 export function validateLineup(team: TeamState): string | null {
@@ -86,5 +97,16 @@ export function applyFormationDefaultOrder(team: TeamState): void {
 
 export function slotMismatch(p: SquadPlayer, slot: FormationSlot): boolean {
   if (p.role === 'BR') return true
+  if (isCb(p.role) && isCb(slot.role)) return false
   return p.role !== slot.role && p.position !== slot.base
 }
+
+export function planMatchupHint(plan: GamePlan): string {
+  if (plan === 'possession') return 'Kontrola tempa, mniej chaosu'
+  if (plan === 'counter') return 'Głęboko i szybko do przodu'
+  if (plan === 'press') return 'Wysoki pressing, więcej okazji obu stron'
+  if (plan === 'direct') return 'Szybkie ataki, większe ryzyko'
+  return 'Uniwersalny balans'
+}
+
+export type { GamePlan, Mentality }

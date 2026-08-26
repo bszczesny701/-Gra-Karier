@@ -6,7 +6,7 @@ import type {
   LeagueFixture,
   SeasonState,
 } from '../state/types'
-import { clamp } from '../state/types'
+import { clamp, normalizeTactics } from '../state/types'
 import { lineupPower, styleMatchupBonus } from './tactics'
 import { averageStarterOvr, playerName, starters } from './squadGen'
 
@@ -246,7 +246,7 @@ export function simulateYourMatchBase(
   const yourOvr = averageStarterOvr(team)
   let yourPower = lineupPower(team) + (isHome ? 1.8 : 0)
   yourPower += styleMatchupBonus(
-    team.tactics.style,
+    normalizeTactics(team.tactics).style ?? 'balanced',
     getEffectiveStrength(opponentId),
     yourOvr,
   )

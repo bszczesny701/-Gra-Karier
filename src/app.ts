@@ -13,14 +13,16 @@ import {
   liveSubstitute,
   liveSwapOnPitch,
   openLineup,
+  openTactics,
   playNextMatchFromHub,
   polishLeagues,
   playerUnavailableReason,
   selectClub,
   setFormation,
+  setGamePlan,
   setMatchPaused,
   setMatchSpeed,
-  setStyle,
+  setMentality,
   setTacticAxis,
   playerTablePosition,
   sortedStandings,
@@ -38,21 +40,25 @@ import { lineupPower, slotMismatch } from './systems/tactics'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type {
   Formation,
+  GamePlan,
   GameState,
   MatchEvent,
   MatchSpeed,
+  Mentality,
   TacticAxis,
-  TacticalStyle,
 } from './state/types'
 import {
+  buildUpLabel,
   createEmptyState,
-  formationPlan,
+  defLineLabel,
   formArrowHtml,
+  mentalityLabel,
   normalizeTactics,
+  planLabel,
   pressLabel,
   ROLE_FULL,
-  styleLabel,
   tempoLabel,
+  visualFormationPlan,
   widthLabel,
 } from './state/types'
 
@@ -187,6 +193,10 @@ export class App {
       case 'lineup':
         this.root.innerHTML = this.lineupHtml()
         this.bindLineup()
+        break
+      case 'tactics':
+        this.root.innerHTML = this.tacticsHtml()
+        this.bindTactics()
         break
       case 'liveMatch':
         this.root.innerHTML = this.liveMatchHtml()
@@ -329,7 +339,9 @@ export class App {
       xi.reduce((sum, p) => sum + p.fitness, 0) / Math.max(1, xi.length),
     )
     const skillPct = Math.min(100, Math.round((xiOvr / 85) * 100))
-    const plan = formationPlan(team.tactics.formation)
+    const tac = normalizeTactics(team.tactics)
+    team.tactics = tac
+    const plan = visualFormationPlan(tac.formation, tac.width, tac.defLine)
     const map = new Map(team.squad.map((p) => [p.id, p]))
 
     const sheetPlayers = team.startingIds
@@ -456,7 +468,7 @@ export class App {
             </button>
             <button type="button" class="career-tile tile-tactics" id="btn-lineup-tactics">
               <span class="tile-title">Taktyka</span>
-              <span class="tile-sub">${styleLabel(team.tactics.style)} · ${widthLabel(team.tactics.width ?? 2)} · press ${pressLabel(team.tactics.press ?? 2)}</span>
+              <span class="tile-sub">${planLabel(tac.plan)} · ${widthLabel(tac.width)} · press ${pressLabel(tac.press)}</span>
             </button>
             <button type="button" class="career-tile tile-office" data-hub-tab="office">
               <span class="tile-title">Biuro</span>
@@ -550,7 +562,7 @@ export class App {
             <h3>Profil trenera</h3>
             <p class="meta">${m.name} · reputacja ${m.reputation} · sezony ${m.seasonsManaged}</p>
             <p class="muted">${club.name} · budżet ${Math.round(team.budget).toLocaleString('pl-PL')}</p>
-            <p class="muted">Taktyka: ${team.tactics.formation} · ${styleLabel(team.tactics.style)} · tempo ${tempoLabel(team.tactics.tempo ?? 2)}</p>
+            <p class="muted">Taktyka: ${tac.formation} · ${planLabel(tac.plan)} · tempo ${tempoLabel(tac.tempo)}</p>
           </section>
           <section class="career-panel">
             <h3>Dziennik</h3>
@@ -596,8 +608,9 @@ export class App {
       })
     })
     const goLineup = () => this.go(() => openLineup(this.state))
+    const goTactics = () => this.go(() => openTactics(this.state))
     this.root.querySelector('#btn-lineup')?.addEventListener('click', goLineup)
-    this.root.querySelector('#btn-lineup-tactics')?.addEventListener('click', goLineup)
+    this.root.querySelector('#btn-lineup-tactics')?.addEventListener('click', goTactics)
     this.root.querySelector('#btn-sheet-lineup')?.addEventListener('click', goLineup)
     this.root.querySelector('#btn-sheet-lineup')?.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
@@ -624,28 +637,9 @@ export class App {
   private lineupHtml(): string {
     const team = this.state.team!
     team.tactics = normalizeTactics(team.tactics)
-    const plan = formationPlan(team.tactics.formation)
+    const plan = visualFormationPlan(team.tactics.formation, team.tactics.width, team.tactics.defLine)
     const map = new Map(team.squad.map((p) => [p.id, p]))
     const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
-    const styles: TacticalStyle[] = ['attack', 'balanced', 'defend']
-    const axes: TacticAxis[] = [1, 2, 3]
-
-    const axisRow = (
-      key: 'width' | 'press' | 'tempo',
-      label: string,
-      labels: Record<TacticAxis, string>,
-    ) => `
-      <div class="tactics-axis">
-        <span class="tactics-axis-label">${label}</span>
-        <div class="tactics-row compact">
-          ${axes
-            .map(
-              (v) =>
-                `<button class="btn ghost ${team.tactics[key] === v ? 'active' : ''}" data-axis="${key}" data-val="${v}">${labels[v]}</button>`,
-            )
-            .join('')}
-        </div>
-      </div>`
 
     const pitchPlayers = team.startingIds
       .map((id, i) => {
@@ -704,19 +698,6 @@ export class App {
                 )
                 .join('')}
             </div>
-            <div class="tactics-row">
-              ${styles
-                .map(
-                  (st) =>
-                    `<button class="btn ghost ${team.tactics.style === st ? 'active' : ''}" data-style="${st}">${styleLabel(st)}</button>`,
-                )
-                .join('')}
-            </div>
-            <div class="tactics-deep">
-              ${axisRow('width', 'Szerokość', { 1: 'Wąsko', 2: 'Normalnie', 3: 'Szeroko' })}
-              ${axisRow('press', 'Pressing', { 1: 'Niski', 2: 'Średni', 3: 'Wysoki' })}
-              ${axisRow('tempo', 'Tempo', { 1: 'Wolne', 2: 'Normalne', 3: 'Szybkie' })}
-            </div>
           </div>
           <div class="actions compact">
             <button class="btn ghost" id="btn-auto">Auto XI</button>
@@ -743,22 +724,160 @@ export class App {
     )
   }
 
-  private bindLineup(): void {
+  private tacticsHtml(): string {
+    const team = this.state.team!
+    team.tactics = normalizeTactics(team.tactics)
+    const t = team.tactics
+    const plan = visualFormationPlan(t.formation, t.width, t.defLine)
+    const map = new Map(team.squad.map((p) => [p.id, p]))
+    const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
+    const plans: GamePlan[] = ['possession', 'balanced', 'counter', 'press', 'direct']
+    const mentalities: Mentality[] = [1, 2, 3, 4, 5]
+    const axes: TacticAxis[] = [1, 2, 3]
+
+    const axisRow = (
+      key: 'width' | 'press' | 'tempo' | 'defLine' | 'buildUp',
+      label: string,
+      labels: Record<TacticAxis, string>,
+    ) => `
+      <div class="tactics-axis">
+        <span class="tactics-axis-label">${label}</span>
+        <div class="tactics-row compact">
+          ${axes
+            .map(
+              (v) =>
+                `<button class="btn ghost ${t[key] === v ? 'active' : ''}" data-axis="${key}" data-val="${v}">${labels[v]}</button>`,
+            )
+            .join('')}
+        </div>
+      </div>`
+
+    const previewPlayers = team.startingIds
+      .map((id, i) => {
+        const p = map.get(id)
+        const slot = plan[i]!
+        if (!p) {
+          return `<div class="fifa-card empty tactics-preview-card" style="left:${slot.x}%;top:${slot.y}%">
+            <div class="fifa-badge empty-badge"><span class="fifa-pos">${slot.role}</span></div>
+          </div>`
+        }
+        const short = p.name.split(' ').pop() ?? p.name
+        return `<div class="fifa-card tactics-preview-card" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role}">
+          <div class="fifa-badge">
+            <span class="fifa-ovr">${p.overall}</span>
+            <span class="fifa-pos">${slot.role}</span>
+          </div>
+          <div class="fifa-meta"><span class="fifa-name">${short}</span></div>
+        </div>`
+      })
+      .join('')
+
+    return this.shell(
+      `
+      <section class="tactics-screen">
+        <div class="tactics-screen-head">
+          <h2>Taktyka</h2>
+          <div class="actions compact">
+            <button class="btn ghost" id="btn-tactics-back">Wróć</button>
+            <button class="btn primary" id="btn-tactics-apply">Zastosuj</button>
+          </div>
+        </div>
+        <div class="tactics-screen-grid">
+          <div class="tactics-controls">
+            <div class="tactics-block">
+              <h3>Formacja</h3>
+              <div class="tactics-row">
+                ${formations
+                  .map(
+                    (f) =>
+                      `<button class="btn ghost ${t.formation === f ? 'active' : ''}" data-form="${f}">${f}</button>`,
+                  )
+                  .join('')}
+              </div>
+            </div>
+            <div class="tactics-block">
+              <h3>Plan gry</h3>
+              <div class="tactics-row">
+                ${plans
+                  .map(
+                    (p) =>
+                      `<button class="btn ghost ${t.plan === p ? 'active' : ''}" data-plan="${p}">${planLabel(p)}</button>`,
+                  )
+                  .join('')}
+              </div>
+            </div>
+            <div class="tactics-block">
+              <h3>Mentalność</h3>
+              <div class="tactics-row compact">
+                ${mentalities
+                  .map(
+                    (m) =>
+                      `<button class="btn ghost ${t.mentality === m ? 'active' : ''}" data-mentality="${m}">${mentalityLabel(m)}</button>`,
+                  )
+                  .join('')}
+              </div>
+            </div>
+            <div class="tactics-block tactics-deep">
+              <h3>Osie</h3>
+              ${axisRow('width', 'Szerokość', { 1: 'Wąsko', 2: 'Normalnie', 3: 'Szeroko' })}
+              ${axisRow('press', 'Pressing', { 1: 'Niski', 2: 'Średni', 3: 'Wysoki' })}
+              ${axisRow('tempo', 'Tempo', { 1: 'Wolne', 2: 'Normalne', 3: 'Szybkie' })}
+              ${axisRow('defLine', 'Linia obrony', { 1: 'Niska', 2: 'Średnia', 3: 'Wysoka' })}
+              ${axisRow('buildUp', 'Budowanie', { 1: 'Krótkie', 2: 'Mieszane', 3: 'Długie' })}
+            </div>
+            <p class="tactics-summary muted">
+              ${planLabel(t.plan)} · ${mentalityLabel(t.mentality)} · ${widthLabel(t.width)} · linia ${defLineLabel(t.defLine)} · ${buildUpLabel(t.buildUp)} · tempo ${tempoLabel(t.tempo)}
+            </p>
+          </div>
+          <div class="tactics-preview">
+            <div class="pitch fifa-pitch tactics-pitch" aria-label="Podgląd formacji ${t.formation}">
+              <div class="pitch-markings fifa-marks"></div>
+              ${previewPlayers}
+            </div>
+            <p class="muted tactics-preview-hint">Podgląd — szerokość i linia zmieniają układ na boisku</p>
+          </div>
+        </div>
+      </section>`,
+      'Taktyka',
+      'fifa',
+    )
+  }
+
+  private bindTactics(): void {
     this.root.querySelectorAll<HTMLButtonElement>('[data-form]').forEach((btn) => {
       btn.addEventListener('click', () => {
         this.go(() => setFormation(this.state, btn.dataset.form as Formation))
       })
     })
-    this.root.querySelectorAll<HTMLButtonElement>('[data-style]').forEach((btn) => {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-plan]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.go(() => setStyle(this.state, btn.dataset.style as TacticalStyle))
+        this.go(() => setGamePlan(this.state, btn.dataset.plan as GamePlan))
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-mentality]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => setMentality(this.state, Number(btn.dataset.mentality) as Mentality))
       })
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-axis]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const key = btn.dataset.axis as 'width' | 'press' | 'tempo'
+        const key = btn.dataset.axis as 'width' | 'press' | 'tempo' | 'defLine' | 'buildUp'
         const val = Number(btn.dataset.val) as TacticAxis
         this.go(() => setTacticAxis(this.state, key, val))
+      })
+    })
+    const back = () =>
+      this.go(() => {
+        this.state.screen = 'hub'
+      })
+    this.root.querySelector('#btn-tactics-back')?.addEventListener('click', back)
+    this.root.querySelector('#btn-tactics-apply')?.addEventListener('click', back)
+  }
+
+  private bindLineup(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-form]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => setFormation(this.state, btn.dataset.form as Formation))
       })
     })
 
@@ -958,8 +1077,9 @@ export class App {
   private liveFifaLineupInner(): string {
     const live = this.state.liveMatch!
     const team = this.state.team!
+    team.tactics = normalizeTactics(team.tactics)
     const map = new Map(team.squad.map((p) => [p.id, p]))
-    const plan = formationPlan(team.tactics.formation)
+    const plan = visualFormationPlan(team.tactics.formation, team.tactics.width, team.tactics.defLine)
 
     const pitchPlayers = live.onPitchIds
       .map((id, i) => {

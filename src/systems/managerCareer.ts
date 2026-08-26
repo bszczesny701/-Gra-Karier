@@ -1,7 +1,9 @@
 import { getClub, getLeague, LEAGUES, formatStars, starsLabel } from '../data/clubs'
 import type {
   Formation,
+  GamePlan,
   GameState,
+  Mentality,
   SeasonReport,
   TacticAxis,
   TacticalStyle,
@@ -95,6 +97,12 @@ export function openLineup(state: GameState): void {
   state.screen = 'lineup'
 }
 
+export function openTactics(state: GameState): void {
+  if (!state.team || !state.season) return
+  state.team.tactics = normalizeTactics(state.team.tactics)
+  state.screen = 'tactics'
+}
+
 export function setFormation(state: GameState, formation: Formation): void {
   if (!state.team) return
   state.team.tactics = normalizeTactics({ ...state.team.tactics, formation })
@@ -106,9 +114,19 @@ export function setStyle(state: GameState, style: TacticalStyle): void {
   state.team.tactics = normalizeTactics({ ...state.team.tactics, style })
 }
 
+export function setGamePlan(state: GameState, plan: GamePlan): void {
+  if (!state.team) return
+  state.team.tactics = normalizeTactics({ ...state.team.tactics, plan })
+}
+
+export function setMentality(state: GameState, mentality: Mentality): void {
+  if (!state.team) return
+  state.team.tactics = normalizeTactics({ ...state.team.tactics, mentality })
+}
+
 export function setTacticAxis(
   state: GameState,
-  key: 'width' | 'press' | 'tempo',
+  key: 'width' | 'press' | 'tempo' | 'defLine' | 'buildUp',
   value: TacticAxis,
 ): void {
   if (!state.team) return

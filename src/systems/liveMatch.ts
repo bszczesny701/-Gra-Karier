@@ -9,7 +9,7 @@ import type {
   MatchSpeed,
   SquadPlayer,
 } from '../state/types'
-import { clamp, clampFloat } from '../state/types'
+import { clamp, clampFloat, normalizeTactics } from '../state/types'
 import {
   aiClubPower,
   applyResultToStandings,
@@ -70,34 +70,69 @@ export function liveTeamPower(state: GameState, live: LiveMatchState): number {
     ids.length === 11
       ? (formationFit({ ...team, startingIds: ids }) - 0.65) * 6
       : ((ids.length / 11) - 0.65) * 6
+  const t = normalizeTactics(team.tactics)
   const chem = (team.teamChemistry - 50) * 0.05
-  const styleBias =
-    team.tactics.style === 'attack' ? 1.2 : team.tactics.style === 'defend' ? -0.4 : 0.3
+  const styleBias = (t.mentality - 3) * 0.45
+  const planBias =
+    t.plan === 'press' ? 0.5 : t.plan === 'direct' ? 0.4 : t.plan === 'possession' ? -0.15 : 0.2
   const morale = live.moraleBoost * 1.4
   const menDown = (11 - xs.length) * 3.8
-  return avg + fit + chem + styleBias + morale - menDown
+  return avg + fit + chem + styleBias + planBias + morale - menDown
 }
 
 function drainPerMinute(state: GameState, live: LiveMatchState): number {
-  const t = state.team!.tactics
-  let d = t.style === 'attack' ? 0.55 : t.style === 'defend' ? 0.32 : 0.42
-  d *= 0.88 + ((t.tempo ?? 2) - 1) * 0.11
-  d *= 0.9 + ((t.press ?? 2) - 1) * 0.1
+  const t = normalizeTactics(state.team!.tactics)
+  let d = 0.38 + (t.mentality - 3) * 0.06
+  if (t.plan === 'press') d += 0.08
+  if (t.plan === 'possession') d -= 0.05
+  if (t.plan === 'direct') d += 0.04
+  d *= 0.88 + (t.tempo - 1) * 0.11
+  d *= 0.9 + (t.press - 1) * 0.1
+  d *= 0.94 + (t.defLine - 1) * 0.06
   d *= live.half === '2' ? live.drainMod : 1
   return d
 }
 
 function tacticAttackMods(state: GameState): { you: number; them: number; chanceYou: number; chanceThem: number } {
-  const t = state.team!.tactics
-  const width = t.width ?? 2
-  const press = t.press ?? 2
-  const tempo = t.tempo ?? 2
-  return {
-    you: (width - 2) * 0.7 + (tempo - 2) * 0.55 + (press - 2) * 0.25,
-    them: (width - 2) * 0.4 + (press - 2) * 0.55 - (tempo - 2) * 0.15,
-    chanceYou: 1 + (tempo - 2) * 0.08 + (width - 2) * 0.05 + (press - 2) * 0.04,
-    chanceThem: 1 + (press - 2) * 0.09 + (width - 2) * 0.04 - (tempo - 2) * 0.02,
+  const t = normalizeTactics(state.team!.tactics)
+  const ment = t.mentality - 3
+  let you = (t.width - 2) * 0.7 + (t.tempo - 2) * 0.55 + (t.press - 2) * 0.25 + ment * 0.5
+  let them = (t.width - 2) * 0.4 + (t.press - 2) * 0.55 - (t.tempo - 2) * 0.15 - ment * 0.35
+  let chanceYou = 1 + (t.tempo - 2) * 0.08 + (t.width - 2) * 0.05 + (t.press - 2) * 0.04
+  let chanceThem = 1 + (t.press - 2) * 0.09 + (t.width - 2) * 0.04 - (t.tempo - 2) * 0.02
+
+  if (t.plan === 'possession') {
+    you -= 0.2
+    them -= 0.35
+    chanceYou *= 0.92
+    chanceThem *= 0.9
+  } else if (t.plan === 'press') {
+    you += 0.35
+    them += 0.45
+    chanceYou *= 1.08
+    chanceThem *= 1.1
+  } else if (t.plan === 'counter') {
+    you += 0.45
+    them -= 0.15
+    chanceYou *= 1.06
+  } else if (t.plan === 'direct') {
+    you += 0.55
+    them += 0.2
+    chanceYou *= 1.1
+    chanceThem *= 1.04
   }
+
+  you += (t.defLine - 2) * 0.25
+  them += (t.defLine - 2) * 0.35
+  you += (t.buildUp - 2) * 0.15
+  if (t.buildUp === 1) {
+    chanceYou *= 0.96
+    chanceThem *= 0.94
+  } else if (t.buildUp === 3) {
+    chanceYou *= 1.05
+  }
+
+  return { you, them, chanceYou, chanceThem }
 }
 
 function yourGoals(live: LiveMatchState, clubId: string): { yours: number; theirs: number } {
