@@ -132,6 +132,8 @@ export interface ClubStanding {
   goalsFor: number
   goalsAgainst: number
   points: number
+  /** Ostatnie wyniki (najnowszy na końcu), max 5 */
+  form: Array<'W' | 'D' | 'L'>
 }
 
 export interface ManagerMatchResult {
@@ -277,7 +279,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 105
+export const SAVE_VERSION = 106
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

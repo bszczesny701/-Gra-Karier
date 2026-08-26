@@ -32,7 +32,7 @@ import {
   type MotivationId,
 } from './systems/managerCareer'
 import { intervalMsForSpeed } from './systems/liveMatch'
-import { clubPowerPreview, nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
+import { clubForm, clubPowerPreview, clubTopPlayers, nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
 import { averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
@@ -370,7 +370,7 @@ export class App {
         const gdStr = gd > 0 ? `+${gd}` : `${gd}`
         return `<tr class="${you ? 'you' : ''}">
           <td>${i + 1}</td>
-          <td>${getClub(row.clubId).short}${you ? ' · Ty' : ''}</td>
+          <td class="club-full">${getClub(row.clubId).name}${you ? ' · Ty' : ''}</td>
           <td>${row.played}</td>
           <td>${row.won}-${row.drawn}-${row.lost}</td>
           <td>${gdStr}</td>
@@ -378,6 +378,17 @@ export class App {
         </tr>`
       })
       .join('')
+
+    const formPills = (form: Array<'W' | 'D' | 'L'>) => {
+      if (!form.length) return `<span class="muted">Brak meczów</span>`
+      return form
+        .map((r) => {
+          const label = r === 'W' ? 'W' : r === 'D' ? 'R' : 'P'
+          const title = r === 'W' ? 'Wygrana' : r === 'D' ? 'Remis' : 'Przegrana'
+          return `<span class="form-pill form-${r}" title="${title}">${label}</span>`
+        })
+        .join('')
+    }
 
     const log = this.state.log
       .slice(0, 6)
@@ -457,7 +468,7 @@ export class App {
       main = `
         <div class="career-season">
           <section class="career-panel">
-            <h3>Następny rywal</h3>
+            <h3>Analiza rywala</h3>
             ${
               yourFix
                 ? (() => {
@@ -466,28 +477,51 @@ export class App {
                     const oppPow = clubPowerPreview(oppId)
                     const home = yourFix.homeId === s.clubId
                     const maxPow = Math.max(yourPow, oppPow, 1)
+                    const tops = clubTopPlayers(oppId, 3)
+                    const form = clubForm(s.standings, oppId)
+                    const oppRow = s.standings.find((r) => r.clubId === oppId)
+                    const oppPlace = sortedStandings(s).findIndex((r) => r.clubId === oppId) + 1
                     return `
                     <div class="rival-preview career-rival">
                       <div class="rival-head">
-                        <span class="muted">Kolejka ${s.roundIndex + 1}/${s.rounds.length}</span>
+                        <span class="muted">Kolejka ${s.roundIndex + 1}/${s.rounds.length} · ${home ? 'U siebie' : 'Wyjazd'}</span>
                         <span class="rival-edge">${yourPow - oppPow >= 4 ? 'Faworyt' : oppPow - yourPow >= 4 ? 'Underdog' : 'Wyrównany'}</span>
                       </div>
                       <div class="rival-matchup">
                         <div class="rival-side">
                           <div class="rival-name">${club.short}</div>
                           <div class="rival-pow">${yourPow}</div>
-                          <div class="muted">${home ? 'U siebie' : 'Wyjazd'} · XI ${xiOvr}</div>
+                          <div class="muted">Twoje XI · ${xiOvr} OVR</div>
                           <div class="pow-bar"><i style="width:${Math.round((yourPow / maxPow) * 100)}%"></i></div>
                         </div>
                         <div class="rival-vs">vs</div>
                         <div class="rival-side">
                           <div class="rival-name">${opp.short}</div>
                           <div class="rival-pow">${oppPow}</div>
-                          <div class="muted">${home ? 'Wyjazd' : 'U siebie'}</div>
+                          <div class="muted">${oppPlace}. miejsce · ${oppRow ? `${oppRow.won}-${oppRow.drawn}-${oppRow.lost}` : '0-0-0'}</div>
                           <div class="pow-bar them"><i style="width:${Math.round((oppPow / maxPow) * 100)}%"></i></div>
                         </div>
                       </div>
-                      <p class="muted rival-fixture">${getClub(yourFix.homeId).name} — ${getClub(yourFix.awayId).name}</p>
+                      <p class="rival-fixture"><strong>${getClub(yourFix.homeId).name}</strong> — <strong>${getClub(yourFix.awayId).name}</strong></p>
+
+                      <div class="opp-scout">
+                        <div class="opp-block">
+                          <h4>Forma (ost. 5)</h4>
+                          <div class="form-row">${formPills(form)}</div>
+                          <p class="form-legend muted">W wygrana · R remis · P przegrana</p>
+                        </div>
+                        <div class="opp-block">
+                          <h4>Top 3 zawodników</h4>
+                          <ul class="opp-stars">
+                            ${tops
+                              .map(
+                                (p) =>
+                                  `<li><span class="opp-ovr">${p.overall}</span><span class="opp-role">${p.role}</span><span class="opp-name">${p.name}</span></li>`,
+                              )
+                              .join('')}
+                          </ul>
+                        </div>
+                      </div>
                     </div>`
                   })()
                 : `<p class="muted">${s.phase === 'done' ? 'Sezon zakończony.' : 'Brak meczu w tej kolejce.'}</p>`
@@ -503,7 +537,7 @@ export class App {
           </section>
           <section class="career-panel">
             <h3>Tabela · ${league.name}</h3>
-            <table class="mini-table full-table">
+            <table class="mini-table full-table names-full">
               <thead><tr><th>#</th><th>Klub</th><th>M</th><th>W-R-P</th><th>+/−</th><th>Pkt</th></tr></thead>
               <tbody>${fullTable}</tbody>
             </table>

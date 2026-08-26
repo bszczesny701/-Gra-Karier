@@ -666,6 +666,115 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
+.mini-table.names-full td.club-full {
+  white-space: normal;
+  font-weight: 600;
+  min-width: 11rem;
+}
+
+.opp-scout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.opp-block h4 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  color: var(--accent-blue-soft);
+  letter-spacing: 0.04em;
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.form-pill {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.form-pill.form-W {
+  background: rgba(80, 180, 120, 0.25);
+  color: #7dffa8;
+  border: 1px solid rgba(125, 255, 168, 0.35);
+}
+
+.form-pill.form-D {
+  background: rgba(180, 180, 100, 0.2);
+  color: #e8d44a;
+  border: 1px solid rgba(232, 212, 74, 0.35);
+}
+
+.form-pill.form-L {
+  background: rgba(255, 122, 110, 0.2);
+  color: #ff9a90;
+  border: 1px solid rgba(255, 122, 110, 0.35);
+}
+
+.form-legend {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+}
+
+.opp-stars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.opp-stars li {
+  display: grid;
+  grid-template-columns: 2.4rem 2.2rem 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+
+.opp-ovr {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--accent);
+}
+
+.opp-role {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--accent-blue);
+}
+
+.opp-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.rival-fixture {
+  margin: 10px 0 0;
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .opp-scout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .rival-preview {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,5 @@
 import { getClub, getEffectiveStrength, getLeague, LEAGUES } from '../data/clubs'
+import { EKSTRAKLASA_SQUADS } from '../data/ekstraklasaSquads'
 import type {
   ClubStanding,
   GameState,
@@ -7,7 +8,7 @@ import type {
 } from '../state/types'
 import { clamp } from '../state/types'
 import { lineupPower, styleMatchupBonus } from './tactics'
-import { averageStarterOvr, starters } from './squadGen'
+import { averageStarterOvr, playerName, starters } from './squadGen'
 
 export function rngInt(n: number): number {
   return Math.floor(Math.random() * n)
@@ -29,15 +30,20 @@ export function updateStanding(row: ClubStanding, gf: number, ga: number): void 
   row.played += 1
   row.goalsFor += gf
   row.goalsAgainst += ga
+  if (!row.form) row.form = []
   if (gf > ga) {
     row.won += 1
     row.points += 3
+    row.form.push('W')
   } else if (gf === ga) {
     row.drawn += 1
     row.points += 1
+    row.form.push('D')
   } else {
     row.lost += 1
+    row.form.push('L')
   }
+  if (row.form.length > 5) row.form = row.form.slice(-5)
 }
 
 /** Terminarz: każdy z każdym home+away, pogrupowany w kolejki. */
@@ -104,6 +110,7 @@ export function emptyStanding(clubId: string): ClubStanding {
     goalsFor: 0,
     goalsAgainst: 0,
     points: 0,
+    form: [],
   }
 }
 
@@ -168,6 +175,31 @@ export function aiClubPower(clubId: string, mods: Record<string, number> = {}): 
 /** Stabilny podgląd mocy klubu (bez losu) — do UI. */
 export function clubPowerPreview(clubId: string): number {
   return Math.round(getEffectiveStrength(clubId))
+}
+
+export type ScoutPlayer = { name: string; overall: number; role: string }
+
+/** Top zawodnicy klubu (realny skład Ekstraklasy albo estymacja). */
+export function clubTopPlayers(clubId: string, count = 3): ScoutPlayer[] {
+  const real = EKSTRAKLASA_SQUADS[clubId]
+  if (real?.length) {
+    return [...real]
+      .sort((a, b) => b.overall - a.overall)
+      .slice(0, count)
+      .map((p) => ({ name: p.name, overall: p.overall, role: p.role }))
+  }
+  const club = getClub(clubId)
+  const roles = ['ŚN', 'OP', 'ŚP', 'ŚO', 'PO'] as const
+  return Array.from({ length: count }, (_, i) => ({
+    name: playerName(`${clubId}-scout-${i}`),
+    overall: clamp(club.strength + 3 - i * 2, 38, 88),
+    role: roles[i] ?? 'ŚP',
+  }))
+}
+
+export function clubForm(standings: ClubStanding[], clubId: string): Array<'W' | 'D' | 'L'> {
+  const row = standings.find((s) => s.clubId === clubId)
+  return row?.form?.slice(-5) ?? []
 }
 
 export function simulateAiMatch(
