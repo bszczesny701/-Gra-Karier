@@ -19,11 +19,14 @@ import {
   keyPlayerRatings,
   rngInt,
 } from './leagueSim'
-import { deliverPostMatchMail } from './mailbox'
+import { deliverPostMatchMail, deliverBoardReviewMail } from './mailbox'
 import { publishYourMatchNews } from './news'
 import { formationFit } from './tactics'
 import { applyCupMatchResult } from './cup'
 import { nextUserMatch } from './calendar'
+import { maybeBoardReview } from './board'
+import { updateWantsToLeave, normalizeSquadPlayer } from './squadGen'
+import { pushLog } from '../state/gameState'
 
 const MAX_SUBS = 3
 
@@ -573,7 +576,9 @@ export function finishLiveMatch(state: GameState): void {
   const drawn = !isCup && yours === theirs
 
   for (const p of team.squad) {
+    normalizeSquadPlayer(p)
     if (live.playedIds.includes(p.id)) {
+      p.seasonApps = (p.seasonApps ?? 0) + 1
       const fat = live.fatigue[p.id] ?? 50
       const loss = clamp(Math.round((100 - fat) * 0.35 + 4), 4, 22)
       p.fitness = clamp(p.fitness - loss, 20, 100)
@@ -584,6 +589,16 @@ export function finishLiveMatch(state: GameState): void {
       p.morale = clamp(p.morale + (won ? 1 : 0), 20, 100)
     } else {
       p.fitness = clamp(p.fitness + 5 + rngInt(4), 30, 100)
+      if (!isCup) p.morale = clamp(p.morale - 1, 20, 100)
+    }
+  }
+
+  for (const e of live.events) {
+    if (e.kind !== 'goal' || e.side !== 'you' || !e.playerId) continue
+    const scorer = team.squad.find((p) => p.id === e.playerId)
+    if (scorer) {
+      normalizeSquadPlayer(scorer)
+      scorer.seasonGoals = (scorer.seasonGoals ?? 0) + 1
     }
   }
 
@@ -686,6 +701,19 @@ export function finishLiveMatch(state: GameState): void {
 
   deliverPostMatchMail(state)
   publishYourMatchNews(state, live.homeId, live.awayId, live.homeGoals, live.awayGoals)
+
+  if (!isCup) {
+    const review = maybeBoardReview(state)
+    if (review) {
+      deliverBoardReviewMail(state, review)
+      pushLog(
+        state,
+        `Przegląd zarządu: ${review.summary} Zaufanie ${Math.round(review.before)}% → ${Math.round(review.after)}%.`,
+      )
+    }
+  }
+
+  updateWantsToLeave(team, season.roundIndex)
 
   state.liveMatch = null
   state.screen = 'matchResult'

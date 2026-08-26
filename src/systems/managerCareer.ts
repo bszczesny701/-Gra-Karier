@@ -27,7 +27,7 @@ import {
   tickLiveMinute,
   type MotivationId,
 } from './liveMatch'
-import { createTeamState, pickDefaultLineup } from './squadGen'
+import { createTeamState, pickDefaultLineup, normalizeTeamSquad } from './squadGen'
 import { applyFormationDefaultOrder, validateLineup } from './tactics'
 import { playerTablePosition, sortedStandings, standingsAroundPlayer } from './standings'
 import {
@@ -105,6 +105,7 @@ export function selectClub(state: GameState, clubId: string): void {
   }
 
   state.team = createTeamState(clubId)
+  normalizeTeamSquad(state.team)
   state.season = createManagerSeason(state, clubId, year)
   buildSeasonSchedule(state, state.season)
   state.season.teamChemistry = state.team.teamChemistry
@@ -321,7 +322,14 @@ export function startNextSeason(state: GameState): void {
       p.overall = Math.max(32, p.overall - 1)
     }
     p.age += 1
+    p.seasonApps = 0
+    p.seasonGoals = 0
+    p.contractYears = Math.max(0, (p.contractYears ?? 1) - 1)
+    if (p.contractYears === 0) p.contractYears = 1
+    p.wantsToLeave = false
   }
+  if (manager.lastBoardReviewRound != null) manager.lastBoardReviewRound = 0
+  normalizeTeamSquad(team)
   team.teamChemistry = Math.max(40, Math.min(70, team.teamChemistry))
   const plan = formationPlan(team.tactics.formation)
   const picked = pickDefaultLineup(team.squad, plan)

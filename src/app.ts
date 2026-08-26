@@ -60,7 +60,7 @@ import {
   transferWindowLabel,
   weekdayLabel,
 } from './systems/calendar'
-import { averageStarterOvr, starters } from './systems/squadGen'
+import { normalizeSquadPlayer, updateWantsToLeave, averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type {
@@ -97,6 +97,9 @@ export class App {
 
   /** Otwarty mail w skrzynce (Biuro) */
   private openMailId: string | null = null
+  /** Profil zawodnika w składzie */
+  private profilePlayerId: string | null = null
+  private lineupDidDrag = false
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -952,6 +955,9 @@ export class App {
   private lineupHtml(): string {
     const team = this.state.team!
     team.tactics = normalizeTactics(team.tactics)
+    const season = this.state.season
+    if (season) updateWantsToLeave(team, season.roundIndex)
+    else for (const p of team.squad) normalizeSquadPlayer(p)
     const plan = visualFormationPlan(team.tactics.formation, team.tactics.width, team.tactics.defLine)
     const map = new Map(team.squad.map((p) => [p.id, p]))
     const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
@@ -965,7 +971,7 @@ export class App {
         const fit = Math.round(p.fitness)
         const fitCls = fit < 30 ? 'crit' : fit < 55 ? 'low' : ''
         const unavailable = playerUnavailableReason(p)
-        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''} ${unavailable ? 'unavailable' : ''}" draggable="${unavailable ? 'false' : 'true'}" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · slot ${slot.role} (${ROLE_FULL[slot.role]}) · naturalnie ${p.role} · kondycja ${fit}%${unavailable ? ` · ${unavailable}` : ''}">
+        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''} ${unavailable ? 'unavailable' : ''}" draggable="${unavailable ? 'false' : 'true'}" data-drag="slot" data-slot="${i}" data-id="${id}" data-profile="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · slot ${slot.role} (${ROLE_FULL[slot.role]}) · naturalnie ${p.role} · kondycja ${fit}%${unavailable ? ` · ${unavailable}` : ''}">
           <div class="fifa-badge">
             <span class="fifa-ovr">${p.overall}</span>
             <span class="fifa-pos">${slot.role}</span>
@@ -976,6 +982,7 @@ export class App {
             ${formArrowHtml(p.form)}
           </div>
           ${unavailable ? `<span class="fifa-status">${(p.injuryMatchesLeft ?? 0) > 0 ? 'KONT' : 'ZAW'}</span>` : ''}
+          ${p.wantsToLeave ? '<span class="fifa-leave" title="Chce odejść">!</span>' : ''}
         </div>`
       })
       .join('')
@@ -984,10 +991,10 @@ export class App {
       const p = map.get(id)!
       const fit = Math.round(p.fitness)
       const unavailable = playerUnavailableReason(p)
-      return `<div class="fifa-bench-row ${dim || unavailable ? 'dim' : ''} ${unavailable ? 'unavailable' : ''}" draggable="${unavailable ? 'false' : 'true'}" data-drag="bench" data-id="${id}" title="${p.name} · ${ROLE_FULL[p.role]} · kondycja ${fit}%${unavailable ? ` · ${unavailable}` : ''}">
+      return `<div class="fifa-bench-row ${dim || unavailable ? 'dim' : ''} ${unavailable ? 'unavailable' : ''}" draggable="${unavailable ? 'false' : 'true'}" data-drag="bench" data-id="${id}" data-profile="${id}" title="${p.name} · ${ROLE_FULL[p.role]} · kondycja ${fit}%${unavailable ? ` · ${unavailable}` : ''}">
         <span class="fifa-bench-role">${p.role}</span>
         <span class="fifa-bench-ovr">${p.overall}</span>
-        <span class="fifa-bench-name">${p.name.split(' ').pop()}${unavailable ? ` · ${(p.injuryMatchesLeft ?? 0) > 0 ? 'KONT' : 'ZAW'}` : ''}</span>
+        <span class="fifa-bench-name">${p.name.split(' ').pop()}${unavailable ? ` · ${(p.injuryMatchesLeft ?? 0) > 0 ? 'KONT' : 'ZAW'}` : ''}${p.wantsToLeave ? ' · !' : ''}</span>
         <span class="fifa-bench-fat"><i style="width:${fit}%"></i></span>
         ${formArrowHtml(p.form)}
       </div>`
@@ -998,6 +1005,50 @@ export class App {
       .filter((p) => !team.startingIds.includes(p.id) && !team.benchIds.includes(p.id))
       .map((p) => renderBenchBtn(p.id, true))
       .join('')
+
+    const profile = this.profilePlayerId ? map.get(this.profilePlayerId) : null
+    const profileModal = profile
+      ? (() => {
+          normalizeSquadPlayer(profile)
+          const unavail = playerUnavailableReason(profile)
+          const attrRow = (label: string, v: number) =>
+            `<div class="player-attr"><span>${label}</span><div class="player-attr-track"><i style="width:${v}%"></i></div><strong>${v}</strong></div>`
+          return `
+          <div class="player-profile-overlay" id="profile-overlay">
+            <article class="player-profile-card" role="dialog" aria-label="Profil ${profile.name}">
+              <header class="player-profile-head">
+                <div>
+                  <p class="muted">${ROLE_FULL[profile.role]} · ${profile.age} lat</p>
+                  <h3>${profile.name}</h3>
+                </div>
+                <div class="player-profile-ovr">${profile.overall}</div>
+              </header>
+              ${profile.wantsToLeave ? '<p class="player-leave-badge">Chce odejść</p>' : ''}
+              ${unavail ? `<p class="player-status-warn">${unavail}</p>` : ''}
+              <div class="player-profile-meters">
+                ${attrRow('Tempo', profile.attrs.pace)}
+                ${attrRow('Strzał', profile.attrs.shooting)}
+                ${attrRow('Podania', profile.attrs.passing)}
+                ${attrRow('Obrona', profile.attrs.defending)}
+                ${attrRow('Wytrzymałość', profile.attrs.stamina)}
+              </div>
+              <div class="player-profile-stats">
+                <div><span class="muted">Forma</span><strong>${Math.round(profile.form)}</strong></div>
+                <div><span class="muted">Morale</span><strong>${Math.round(profile.morale)}</strong></div>
+                <div><span class="muted">Kondycja</span><strong>${Math.round(profile.fitness)}%</strong></div>
+                <div><span class="muted">Sezon</span><strong>${profile.seasonApps} mecz. · ${profile.seasonGoals} gol.</strong></div>
+              </div>
+              <div class="player-profile-contract">
+                <span class="muted">Kontrakt</span>
+                <strong>${profile.contractYears} ${profile.contractYears === 1 ? 'sezon' : profile.contractYears < 5 ? 'sezony' : 'sezonów'}</strong>
+                <span class="muted">·</span>
+                <strong>${Math.round(profile.wage).toLocaleString('pl-PL')} / tyg.</strong>
+              </div>
+              <button type="button" class="btn ghost" id="btn-close-profile">Zamknij</button>
+            </article>
+          </div>`
+        })()
+      : ''
 
     return this.shell(
       `
@@ -1028,11 +1079,12 @@ export class App {
           <aside class="bench-panel fifa-squad">
             <div class="fifa-squad-head">
               <h3>Rezerwa</h3>
-              <span class="muted">Przeciągnij na boisko</span>
+              <span class="muted">Przeciągnij · klik = profil</span>
             </div>
             <div class="bench-strip vertical fifa-list" data-drop="bench">${bench}${rest}</div>
           </aside>
         </div>
+        ${profileModal}
       </section>`,
       'Skład',
       'fifa',
@@ -1203,6 +1255,7 @@ export class App {
       const id = el.dataset.id!
       const slot = el.dataset.slot != null ? Number(el.dataset.slot) : undefined
       dragPayload = { kind, id, slot }
+      this.lineupDidDrag = false
       el.classList.add('dragging')
       e.dataTransfer?.setData('text/plain', id)
       if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
@@ -1211,12 +1264,34 @@ export class App {
     const onDragEnd = (el: HTMLElement) => {
       el.classList.remove('dragging')
       dragPayload = null
+      this.lineupDidDrag = true
       this.root.querySelectorAll('.drag-over').forEach((n) => n.classList.remove('drag-over'))
     }
 
     this.root.querySelectorAll<HTMLElement>('[data-drag]').forEach((el) => {
       el.addEventListener('dragstart', (e) => onDragStart(el, e))
       el.addEventListener('dragend', () => onDragEnd(el))
+    })
+
+    this.root.querySelectorAll<HTMLElement>('[data-profile]').forEach((el) => {
+      el.addEventListener('click', () => {
+        if (this.lineupDidDrag) {
+          this.lineupDidDrag = false
+          return
+        }
+        this.profilePlayerId = el.dataset.profile ?? null
+        this.render()
+      })
+    })
+    this.root.querySelector('#btn-close-profile')?.addEventListener('click', () => {
+      this.profilePlayerId = null
+      this.render()
+    })
+    this.root.querySelector('#profile-overlay')?.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).id === 'profile-overlay') {
+        this.profilePlayerId = null
+        this.render()
+      }
     })
 
     this.root.querySelectorAll<HTMLElement>('[data-slot]').forEach((el) => {
@@ -1273,6 +1348,7 @@ export class App {
       this.go(() => autoPickLineup(this.state))
     })
     this.root.querySelector('#btn-back-hub')?.addEventListener('click', () => {
+      this.profilePlayerId = null
       this.go(() => {
         this.state.screen = 'hub'
       })

@@ -1981,6 +1981,143 @@ h3 {
   z-index: 3;
 }
 
+.fifa-leave {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #c47a3a;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 900;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  z-index: 2;
+}
+
+.player-profile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(4, 10, 18, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.player-profile-card {
+  width: min(420px, 100%);
+  background: rgba(12, 24, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.player-profile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.player-profile-head h3 {
+  margin: 2px 0 0;
+  font-size: 1.35rem;
+  color: #f2f7fb;
+}
+
+.player-profile-ovr {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.player-leave-badge {
+  margin: 0;
+  display: inline-block;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(196, 122, 58, 0.25);
+  border: 1px solid rgba(196, 122, 58, 0.55);
+  color: #f0c49a;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.player-status-warn {
+  margin: 0;
+  color: #f0a090;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.player-profile-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.player-attr {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 2rem;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #b8c9da;
+}
+
+.player-attr-track {
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.player-attr-track i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #3aa0e0, var(--accent));
+}
+
+.player-attr strong {
+  text-align: right;
+  color: #eef5fb;
+}
+
+.player-profile-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.player-profile-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.player-profile-contract {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.9rem;
+}
+
 .fifa-card-mark {
   position: absolute;
   top: 0;

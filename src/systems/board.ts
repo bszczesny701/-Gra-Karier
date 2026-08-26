@@ -1,5 +1,5 @@
 import { getClub, getLeague, LEAGUES } from '../data/clubs'
-import type { BoardExpectation, BoardGoalId, SeasonState } from '../state/types'
+import type { BoardExpectation, BoardGoalId, GameState, SeasonState } from '../state/types'
 import { clamp } from '../state/types'
 
 const GOAL_META: Record<
@@ -177,4 +177,71 @@ export function seasonGoalProgress(season: SeasonState): {
       : `W strefie akceptowalnej (${place}. / max ${exp.minAcceptablePlace}.)`
     : `Poniżej oczekiwań (${place}. — cel top ${exp.targetPlace})`
   return { place, exp, onTrack, statusText }
+}
+
+/** Przegląd zarządu mid-season: ±trust + mail. Nie zwalnia. */
+export function maybeBoardReview(state: GameState): BoardReviewResult | null {
+  const season = state.season
+  const manager = state.manager
+  if (!season || !manager) return null
+
+  const round = season.roundIndex
+  if (round <= 0) return null
+  if (manager.lastBoardReviewRound === round) return null
+
+  const row = season.standings.find((r) => r.clubId === season.clubId)
+  const form = row?.form ?? []
+  const last3 = form.slice(-3)
+  const prog = seasonGoalProgress(season)
+  const crisis = last3.length >= 3 && last3.every((x) => x === 'L') && !prog.onTrack
+  const checkpoint = round > 0 && round % 5 === 0
+  if (!checkpoint && !crisis) return null
+
+  const recent = form.slice(-5)
+  const wins = recent.filter((x) => x === 'W').length
+  const losses = recent.filter((x) => x === 'L').length
+
+  let delta = 0
+  let summary = ''
+
+  if (crisis) {
+    delta = -(10 + Math.min(5, losses))
+    summary = `Kryzys formy (3 porażki z rzędu) przy ${prog.place}. miejscu — poniżej celu „${prog.exp.label}”.`
+  } else if (prog.onTrack && wins >= 2 && losses <= 1) {
+    delta = 4 + Math.min(4, wins)
+    summary = `Dobra passa i kurs na cel „${prog.exp.label}” (${prog.place}.).`
+  } else if (prog.onTrack) {
+    delta = wins > losses ? 2 : 0
+    summary = `Sytuacja akceptowalna — ${prog.place}. miejsce, cel „${prog.exp.label}”.`
+  } else if (losses >= 3) {
+    delta = -(8 + Math.min(4, losses))
+    summary = `Słaba seria i pozycja ${prog.place}. poniżej oczekiwań (cel top ${prog.exp.targetPlace}).`
+  } else {
+    delta = -(6 + Math.min(4, Math.max(0, prog.place - prog.exp.minAcceptablePlace)))
+    summary = `Poniżej oczekiwań zarządu (${prog.place}. / cel top ${prog.exp.targetPlace}).`
+  }
+
+  const before = manager.boardTrust
+  manager.boardTrust = applyBoardTrust(before, delta)
+  manager.lastBoardReviewRound = round
+
+  return {
+    delta,
+    before,
+    after: manager.boardTrust,
+    summary,
+    crisis,
+    place: prog.place,
+    goalLabel: prog.exp.label,
+  }
+}
+
+export interface BoardReviewResult {
+  delta: number
+  before: number
+  after: number
+  summary: string
+  crisis: boolean
+  place: number
+  goalLabel: string
 }

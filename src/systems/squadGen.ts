@@ -35,6 +35,40 @@ const SQUAD_ROLES: PitchRole[] = [
   'LP', 'PP', 'DP', 'ŚOL', 'ŚN',
 ]
 
+function stubContract(age: number, overall: number, h: number): { contractYears: number; wage: number } {
+  const years = age <= 22 ? 3 + (h % 2) : age >= 32 ? 1 + (h % 2) : 2 + (h % 3)
+  const wage = Math.round(800 + overall * overall * 1.8 + (h % 400))
+  return { contractYears: clamp(years, 1, 4), wage }
+}
+
+export function normalizeSquadPlayer(p: SquadPlayer): SquadPlayer {
+  const h = hash(p.id)
+  const stub = stubContract(p.age, p.overall, h)
+  p.contractYears = p.contractYears ?? stub.contractYears
+  p.wage = p.wage ?? stub.wage
+  p.seasonApps = p.seasonApps ?? 0
+  p.seasonGoals = p.seasonGoals ?? 0
+  p.wantsToLeave = p.wantsToLeave ?? false
+  p.injuryMatchesLeft = p.injuryMatchesLeft ?? 0
+  p.suspensionMatchesLeft = p.suspensionMatchesLeft ?? 0
+  return p
+}
+
+export function normalizeTeamSquad(team: TeamState): void {
+  for (const p of team.squad) normalizeSquadPlayer(p)
+}
+
+/** Aktualizuje flagę „chce odejść” wg morale / gry / kontuzji. */
+export function updateWantsToLeave(team: TeamState, leagueRoundsPlayed: number): void {
+  for (const p of team.squad) {
+    normalizeSquadPlayer(p)
+    const longInjury = (p.injuryMatchesLeft ?? 0) >= 3 && p.morale < 45
+    const unusedStar = p.seasonApps === 0 && p.overall >= 70 && leagueRoundsPlayed >= 8
+    const lowMorale = p.morale < 35
+    p.wantsToLeave = lowMorale || unusedStar || longInjury
+  }
+}
+
 function makePlayer(
   clubId: string,
   index: number,
@@ -52,6 +86,7 @@ function makePlayer(
   const jitter = keys[h % keys.length]!
   attrs[jitter] = clamp(attrs[jitter] + ((h % 5) - 2))
   const finalOvr = calcOverall(attrs, position)
+  const contract = stubContract(age, finalOvr, h)
   return {
     id: `${clubId}-p${index}`,
     name: playerName(seed),
@@ -65,6 +100,11 @@ function makePlayer(
     morale: 50 + (h % 25),
     injuryMatchesLeft: 0,
     suspensionMatchesLeft: 0,
+    contractYears: contract.contractYears,
+    wage: contract.wage,
+    seasonApps: 0,
+    seasonGoals: 0,
+    wantsToLeave: false,
   }
 }
 
@@ -72,6 +112,7 @@ function makeFromSeed(clubId: string, index: number, seed: RealPlayerSeed): Squa
   const position = roleBase(seed.role)
   const attrs = attrsFromOverall(position, seed.overall)
   const h = hash(`${clubId}-${seed.name}-${index}`)
+  const contract = stubContract(seed.age, seed.overall, h)
   return {
     id: `${clubId}-r${index}`,
     name: seed.name,
@@ -85,6 +126,11 @@ function makeFromSeed(clubId: string, index: number, seed: RealPlayerSeed): Squa
     morale: 50 + (h % 25),
     injuryMatchesLeft: 0,
     suspensionMatchesLeft: 0,
+    contractYears: contract.contractYears,
+    wage: contract.wage,
+    seasonApps: 0,
+    seasonGoals: 0,
+    wantsToLeave: false,
   }
 }
 

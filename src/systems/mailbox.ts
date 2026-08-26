@@ -1,6 +1,7 @@
 import { getClub } from '../data/clubs'
 import type { GameState, MailKind, MailMessage } from '../state/types'
-import { seasonGoalProgress } from './board'
+import type { BoardReviewResult } from './board'
+import { SACK_TRUST_THRESHOLD, WARN_TRUST_THRESHOLD } from './board'
 
 let mailSeq = 0
 
@@ -43,13 +44,12 @@ function matchesWord(n: number): string {
   return `${n} meczów`
 }
 
-/** Maile po meczu: dyscyplina, medycyna, zarząd. */
+/** Maile po meczu: dyscyplina, medycyna. */
 export function deliverPostMatchMail(state: GameState): void {
   const live = state.liveMatch
   const season = state.season
   const team = state.team
-  const manager = state.manager
-  if (!live || !season || !team || !manager) return
+  if (!live || !season || !team) return
 
   const round = Math.max(1, season.roundIndex)
   const year = season.year
@@ -84,40 +84,29 @@ export function deliverPostMatchMail(state: GameState): void {
       year,
     })
   }
+}
 
+export function deliverBoardReviewMail(state: GameState, review: BoardReviewResult): void {
+  const season = state.season
+  const manager = state.manager
+  if (!season || !manager) return
   const club = getClub(season.clubId)
-  const { yours, theirs } = (() => {
-    const isHome = live.homeId === season.clubId
-    return {
-      yours: isHome ? live.homeGoals : live.awayGoals,
-      theirs: isHome ? live.awayGoals : live.homeGoals,
-    }
-  })()
-  const won = yours > theirs
-  const lost = yours < theirs
-  const prog = seasonGoalProgress(season)
-  const trust = manager.boardTrust ?? 50
-
-  // Zarząd nie ocenia po każdym meczu — tylko co 5. kolejkę albo w kryzysie
-  const checkpoint = round % 5 === 0
-  const crisis = lost && !prog.onTrack && trust < 45
-  if (!checkpoint && !crisis) return
-
+  const deltaStr = `${review.delta > 0 ? '+' : ''}${review.delta}`
   let subject: string
   let body: string
 
-  if (crisis) {
-    subject = 'Niepokój zarządu'
-    body = `Szanowny Trenerze,\n\nporażka ${yours}:${theirs} przy ${prog.place}. miejscu budzi poważny niepokój. Cel sezonu: ${prog.exp.label}. Zaufanie wynosi obecnie ${Math.round(trust)}%.\n\n— Zarząd ${club.name}`
-  } else if (won && prog.onTrack) {
-    subject = 'Okresowa ocena — pozytywnie'
-    body = `Szanowny Trenerze,\n\npo ${round}. kolejce jesteśmy ${prog.place}. miejscem — na kursie celu „${prog.exp.label}”. Dobry kierunek, kontynuujcie.\n\n— Zarząd ${club.name}`
-  } else if (!prog.onTrack) {
-    subject = 'Okresowa ocena — poniżej oczekiwań'
-    body = `Szanowny Trenerze,\n\npo ${round}. kolejce pozycja ${prog.place}. jest poniżej celu (top ${prog.exp.targetPlace}). Oczekujemy poprawy w kolejnych meczach.\n\n— Zarząd ${club.name}`
+  if (review.crisis || review.after < SACK_TRUST_THRESHOLD) {
+    subject = 'Zarząd rozważa przyszłość'
+    body = `Szanowny Trenerze,\n\n${review.summary}\n\nZaufanie: ${Math.round(review.before)}% → ${Math.round(review.after)}% (${deltaStr}). Przy utrzymaniu tego kursu możemy rozważyć zmiany po sezonie.\n\n— Zarząd ${club.name}`
+  } else if (review.delta > 0) {
+    subject = 'Przegląd zarządu — pozytywnie'
+    body = `Szanowny Trenerze,\n\n${review.summary}\n\nZaufanie: ${Math.round(review.before)}% → ${Math.round(review.after)}% (${deltaStr}). Kontynuujcie.\n\n— Zarząd ${club.name}`
+  } else if (review.delta < 0 || review.after < WARN_TRUST_THRESHOLD) {
+    subject = 'Przegląd zarządu — napięcie'
+    body = `Szanowny Trenerze,\n\n${review.summary}\n\nZaufanie: ${Math.round(review.before)}% → ${Math.round(review.after)}% (${deltaStr}). Oczekujemy poprawy wyników względem celu „${review.goalLabel}”.\n\n— Zarząd ${club.name}`
   } else {
-    subject = 'Okresowa ocena zarządu'
-    body = `Szanowny Trenerze,\n\npodsumowanie po ${round}. kolejce: ${prog.place}. miejsce, cel „${prog.exp.label}”. Sytuacja akceptowalna — utrzymujcie poziom.\n\n— Zarząd ${club.name}`
+    subject = 'Okresowy przegląd zarządu'
+    body = `Szanowny Trenerze,\n\n${review.summary}\n\nZaufanie pozostaje na poziomie ${Math.round(review.after)}% (${deltaStr}).\n\n— Zarząd ${club.name}`
   }
 
   pushMail(state, {
@@ -125,8 +114,8 @@ export function deliverPostMatchMail(state: GameState): void {
     from: `Zarząd · ${club.short}`,
     subject,
     body,
-    round,
-    year,
+    round: season.roundIndex,
+    year: season.year,
   })
 }
 

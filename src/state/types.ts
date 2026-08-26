@@ -83,6 +83,8 @@ export interface Manager {
   boardTrust: number
   seasonsManaged: number
   clubId: string
+  /** Ostatnia kolejka ligowa z przeglądem zarządu */
+  lastBoardReviewRound?: number
 }
 
 export type BoardGoalId = 'title' | 'podium' | 'europe' | 'mid' | 'survive'
@@ -112,6 +114,13 @@ export interface SquadPlayer {
   injuryMatchesLeft: number
   /** Mecze zawieszenia po czerwonej (0 = dostępny) */
   suspensionMatchesLeft: number
+  /** Pozostałe sezony kontraktu */
+  contractYears: number
+  /** Pensja tygodniowa (stub) */
+  wage: number
+  seasonApps: number
+  seasonGoals: number
+  wantsToLeave: boolean
 }
 
 export interface Tactics {
@@ -412,7 +421,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 112
+export const SAVE_VERSION = 113
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
