@@ -84,7 +84,7 @@ export class App {
   private pickLeagueId: string | null = null
   private matchTimer: number | null = null
   /** Widok hubu w stylu FIFA Career */
-  private hubTab: 'squad' | 'season' | 'office' = 'squad'
+  private hubTab: 'squad' | 'season' | 'office' | 'news' = 'squad'
 
   /** Otwarty mail w skrzynce (Biuro) */
   private openMailId: string | null = null
@@ -461,12 +461,17 @@ export class App {
 
     let main = ''
     if (this.hubTab === 'squad') {
-      const latestNews = this.state.news?.[0]
-      const newsSub = latestNews
-        ? latestNews.headline.length > 42
-          ? `${latestNews.headline.slice(0, 40)}…`
-          : latestNews.headline
-        : 'Liga i kuluary'
+      if (!this.state.news) this.state.news = []
+      const topNews = this.state.news.slice(0, 2)
+      const newsPreview =
+        topNews.length > 0
+          ? topNews
+              .map((n) => {
+                const h = n.headline.length > 36 ? `${n.headline.slice(0, 34)}…` : n.headline
+                return `<span class="tile-news-line">${h}</span>`
+              })
+              .join('')
+          : `<span class="tile-news-line muted">Brak nowych wiadomości</span>`
 
       main = `
         <div class="career-grid">
@@ -519,12 +524,37 @@ export class App {
                 <span class="tile-title">Taktyka</span>
                 <span class="tile-sub">${planLabel(tac.plan)} · ${widthLabel(tac.width)} · press ${pressLabel(tac.press)}</span>
               </button>
-              <button type="button" class="career-tile tile-office" data-hub-tab="office">
+              <button type="button" class="career-tile tile-news" data-hub-tab="news">
                 <span class="tile-title">Wiadomości</span>
-                <span class="tile-sub">${newsSub}</span>
+                <span class="tile-sub tile-news-preview">${newsPreview}</span>
               </button>
             </div>
           </div>
+        </div>`
+    } else if (this.hubTab === 'news') {
+      if (!this.state.news) this.state.news = []
+      const newsHtml =
+        this.state.news
+          .slice(0, 20)
+          .map(
+            (n) => `<article class="news-item kind-${n.kind}">
+              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
+              <strong class="news-item-head">${n.headline}</strong>
+              <p class="news-item-body">${n.body}</p>
+            </article>`,
+          )
+          .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
+
+      main = `
+        <div class="career-news-screen">
+          <section class="career-panel news-screen-panel">
+            <div class="mail-panel-head">
+              <h3>Wiadomości</h3>
+              <button type="button" class="btn ghost compact" data-hub-tab="squad">Wróć</button>
+            </div>
+            <p class="muted" style="margin:0 0 10px">Liga, forma i kuluary transferowe</p>
+            <div class="career-news-list news-screen-list">${newsHtml}</div>
+          </section>
         </div>`
     } else if (this.hubTab === 'season') {
       main = `
@@ -644,28 +674,8 @@ export class App {
           })
           .join('') || `<p class="muted">Skrzynka pusta — maile pojawią się po meczach.</p>`
 
-      if (!this.state.news) this.state.news = []
-      const newsHtml =
-        this.state.news
-          .slice(0, 10)
-          .map(
-            (n) => `<article class="news-item kind-${n.kind}">
-              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
-              <strong class="news-item-head">${n.headline}</strong>
-              <p class="news-item-body">${n.body}</p>
-            </article>`,
-          )
-          .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
-
       main = `
         <div class="career-office">
-          <section class="career-panel news-office-panel">
-            <div class="mail-panel-head">
-              <h3>Wiadomości</h3>
-              <span class="muted">Liga i kuluary</span>
-            </div>
-            <div class="career-news-list office-news-list">${newsHtml}</div>
-          </section>
           <section class="career-panel mail-panel">
             <div class="mail-panel-head">
               <h3>Skrzynka pocztowa${unread ? ` · ${unread} nowe` : ''}</h3>
@@ -747,7 +757,7 @@ export class App {
   private bindHub(): void {
     this.root.querySelectorAll<HTMLButtonElement>('[data-hub-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.hubTab = btn.dataset.hubTab as 'squad' | 'season' | 'office'
+        this.hubTab = btn.dataset.hubTab as 'squad' | 'season' | 'office' | 'news'
         this.render()
       })
     })
