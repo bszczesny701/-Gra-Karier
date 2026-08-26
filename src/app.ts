@@ -61,6 +61,8 @@ export class App {
   private state: GameState
   private pickLeagueId: string | null = null
   private matchTimer: number | null = null
+  /** Widok hubu w stylu FIFA Career */
+  private hubTab: 'squad' | 'season' | 'office' = 'squad'
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -320,8 +322,46 @@ export class App {
     const round = nextRoundFixtures(s)
     const yourFix = round ? yourFixtureInRound(s, round) : null
     const chem = Math.round(team.teamChemistry)
+    const xi = starters(team)
     const xiOvr = Math.round(averageStarterOvr(team))
     const yourPow = Math.round(lineupPower(team))
+    const energy = Math.round(
+      xi.reduce((sum, p) => sum + p.fitness, 0) / Math.max(1, xi.length),
+    )
+    const skillPct = Math.min(100, Math.round((xiOvr / 85) * 100))
+    const plan = formationPlan(team.tactics.formation)
+    const map = new Map(team.squad.map((p) => [p.id, p]))
+
+    const sheetPlayers = team.startingIds
+      .map((id, i) => {
+        const p = map.get(id)
+        const slot = plan[i]
+        if (!p || !slot) return ''
+        const short = p.name.split(' ').pop() ?? p.name
+        return `<div class="sheet-player" style="left:${slot.x}%;top:${slot.y}%">
+          <div class="sheet-kit"><span>${p.overall}</span></div>
+          <div class="sheet-name">${short}</div>
+        </div>`
+      })
+      .join('')
+
+    let rivalTileInner = `<div class="tile-title">Następny mecz</div><p class="tile-sub">Brak meczu w kolejce</p>`
+    if (yourFix) {
+      const oppId = yourFix.homeId === s.clubId ? yourFix.awayId : yourFix.homeId
+      const opp = getClub(oppId)
+      const oppPow = clubPowerPreview(oppId)
+      const home = yourFix.homeId === s.clubId
+      rivalTileInner = `
+        <div class="tile-title">Następny mecz</div>
+        <div class="tile-rival-row">
+          <div><strong>${club.short}</strong> <span>${yourPow}</span></div>
+          <div class="tile-rival-vs">vs</div>
+          <div><strong>${opp.short}</strong> <span>${oppPow}</span></div>
+        </div>
+        <p class="tile-sub">${home ? 'U siebie' : 'Wyjazd'} · kol. ${s.roundIndex + 1}</p>`
+    } else if (s.phase === 'done') {
+      rivalTileInner = `<div class="tile-title">Sezon</div><p class="tile-sub">Zakończony — zobacz podsumowanie</p>`
+    }
 
     const fullTable = sortedStandings(s)
       .map((row, i) => {
@@ -339,108 +379,200 @@ export class App {
       })
       .join('')
 
-    let rivalBlock = ''
-    if (yourFix) {
-      const oppId = yourFix.homeId === s.clubId ? yourFix.awayId : yourFix.homeId
-      const opp = getClub(oppId)
-      const oppPow = clubPowerPreview(oppId)
-      const home = yourFix.homeId === s.clubId
-      const maxPow = Math.max(yourPow, oppPow, 1)
-      const yourPct = Math.round((yourPow / maxPow) * 100)
-      const oppPct = Math.round((oppPow / maxPow) * 100)
-      const edge =
-        yourPow - oppPow >= 4 ? 'Faworyt' : oppPow - yourPow >= 4 ? 'Underdog' : 'Wyrównany'
-      rivalBlock = `
-        <div class="rival-preview">
-          <div class="rival-head">
-            <span class="muted">Kolejka ${s.roundIndex + 1}/${s.rounds.length}</span>
-            <span class="rival-edge">${edge}</span>
-          </div>
-          <div class="rival-matchup">
-            <div class="rival-side">
-              <div class="rival-name">${club.short}</div>
-              <div class="rival-pow">${yourPow}</div>
-              <div class="muted">${home ? 'U siebie' : 'Wyjazd'} · XI ${xiOvr}</div>
-              <div class="pow-bar"><i style="width:${yourPct}%"></i></div>
-            </div>
-            <div class="rival-vs">vs</div>
-            <div class="rival-side">
-              <div class="rival-name">${opp.short}</div>
-              <div class="rival-pow">${oppPow}</div>
-              <div class="muted">${home ? 'Wyjazd' : 'U siebie'} · klub</div>
-              <div class="pow-bar them"><i style="width:${oppPct}%"></i></div>
-            </div>
-          </div>
-          <p class="muted rival-fixture">${getClub(yourFix.homeId).name} — ${getClub(yourFix.awayId).name}</p>
-        </div>`
-    } else if (s.phase === 'done') {
-      rivalBlock = `<p class="muted">Sezon zakończony.</p>`
-    } else {
-      rivalBlock = `<p class="muted">Brak Twojego meczu w tej kolejce.</p>`
-    }
-
     const log = this.state.log
-      .slice(0, 5)
+      .slice(0, 6)
       .map((l) => `<li>${l}</li>`)
       .join('')
 
-    const topXi = starters(team)
-      .slice(0, 5)
-      .map((p) => `${p.name.split(' ').pop()} ${p.overall}`)
-      .join(' · ')
+    const tabs = [
+      { id: 'squad' as const, label: 'Skład' },
+      { id: 'season' as const, label: 'Sezon' },
+      { id: 'office' as const, label: 'Biuro' },
+    ]
+      .map(
+        (t) =>
+          `<button type="button" class="career-tab ${this.hubTab === t.id ? 'active' : ''}" data-hub-tab="${t.id}">${t.label}</button>`,
+      )
+      .join('')
 
-    return this.shell(
-      `
-      <section class="panel player-card">
-        <div class="player-head">
-          <div>
-            <h2>${club.name}</h2>
-            <p class="muted">${m.name} · ${league.name} · sezon ${s.year}</p>
+    let main = ''
+    if (this.hubTab === 'squad') {
+      main = `
+        <div class="career-grid">
+          <article class="career-sheet" id="btn-sheet-lineup" role="button" tabindex="0">
+            <header class="sheet-head">
+              <div>
+                <h2>${club.name.toUpperCase()}</h2>
+                <p>Pierwsza drużyna · ${team.tactics.formation}</p>
+              </div>
+              <div class="sheet-meters">
+                <div class="sheet-meter"><span>Siła</span><div class="sheet-meter-track"><i style="width:${skillPct}%"></i></div></div>
+                <div class="sheet-meter"><span>Chemia</span><div class="sheet-meter-track"><i style="width:${chem}%"></i></div></div>
+                <div class="sheet-meter"><span>Energia</span><div class="sheet-meter-track"><i style="width:${energy}%"></i></div></div>
+              </div>
+            </header>
+            <div class="sheet-pitch-wrap">
+              <div class="sheet-pitch">
+                <div class="pitch-markings fifa-marks"></div>
+                ${sheetPlayers}
+              </div>
+            </div>
+            <p class="sheet-foot">Miejsce ${place}. · ${league.name} · XI ≈ ${xiOvr} OVR · kadra ${team.squad.length}</p>
+          </article>
+
+          <div class="career-tiles">
+            <button type="button" class="career-tile tile-squad" id="btn-lineup">
+              <span class="tile-title">Centrum składu</span>
+              <span class="tile-sub">Ustaw XI, taktykę i ławkę</span>
+            </button>
+            ${
+              s.phase === 'playing'
+                ? `<button type="button" class="career-tile tile-play" id="btn-match">
+                    <span class="tile-title">Graj mecz</span>
+                    <span class="tile-sub">Skład i start kolejki</span>
+                  </button>`
+                : `<button type="button" class="career-tile tile-play" id="btn-end">
+                    <span class="tile-title">Podsumowanie</span>
+                    <span class="tile-sub">Zakończ sezon</span>
+                  </button>`
+            }
+            <button type="button" class="career-tile tile-rival" data-hub-tab="season">
+              ${rivalTileInner}
+            </button>
+            <button type="button" class="career-tile tile-table" data-hub-tab="season">
+              <span class="tile-title">Tabela</span>
+              <span class="tile-sub">${league.name} · ${place}. miejsce · ${s.record.won}-${s.record.drawn}-${s.record.lost}</span>
+            </button>
+            <button type="button" class="career-tile tile-tactics" id="btn-lineup-tactics">
+              <span class="tile-title">Taktyka</span>
+              <span class="tile-sub">${styleLabel(team.tactics.style)} · ${widthLabel(team.tactics.width ?? 2)} · press ${pressLabel(team.tactics.press ?? 2)}</span>
+            </button>
+            <button type="button" class="career-tile tile-office" data-hub-tab="office">
+              <span class="tile-title">Biuro</span>
+              <span class="tile-sub">Dziennik i nowa kariera</span>
+            </button>
           </div>
-          <div class="money">${formatStars(club.stars)}</div>
-        </div>
-        <p class="meta">Miejsce <strong>${place}.</strong> · bilans ${s.record.won}-${s.record.drawn}-${s.record.lost} · chemia <strong>${chem}</strong> · XI ≈ <strong>${xiOvr}</strong> OVR</p>
-        <p class="muted">Taktyka: ${team.tactics.formation} · ${styleLabel(team.tactics.style)} · ${widthLabel(team.tactics.width ?? 2)} · press ${pressLabel(team.tactics.press ?? 2)} · ${tempoLabel(team.tactics.tempo ?? 2)}</p>
-        <p class="muted">XI: ${topXi}… · kadra ${team.squad.length}</p>
-      </section>
+        </div>`
+    } else if (this.hubTab === 'season') {
+      main = `
+        <div class="career-season">
+          <section class="career-panel">
+            <h3>Następny rywal</h3>
+            ${
+              yourFix
+                ? (() => {
+                    const oppId = yourFix.homeId === s.clubId ? yourFix.awayId : yourFix.homeId
+                    const opp = getClub(oppId)
+                    const oppPow = clubPowerPreview(oppId)
+                    const home = yourFix.homeId === s.clubId
+                    const maxPow = Math.max(yourPow, oppPow, 1)
+                    return `
+                    <div class="rival-preview career-rival">
+                      <div class="rival-head">
+                        <span class="muted">Kolejka ${s.roundIndex + 1}/${s.rounds.length}</span>
+                        <span class="rival-edge">${yourPow - oppPow >= 4 ? 'Faworyt' : oppPow - yourPow >= 4 ? 'Underdog' : 'Wyrównany'}</span>
+                      </div>
+                      <div class="rival-matchup">
+                        <div class="rival-side">
+                          <div class="rival-name">${club.short}</div>
+                          <div class="rival-pow">${yourPow}</div>
+                          <div class="muted">${home ? 'U siebie' : 'Wyjazd'} · XI ${xiOvr}</div>
+                          <div class="pow-bar"><i style="width:${Math.round((yourPow / maxPow) * 100)}%"></i></div>
+                        </div>
+                        <div class="rival-vs">vs</div>
+                        <div class="rival-side">
+                          <div class="rival-name">${opp.short}</div>
+                          <div class="rival-pow">${oppPow}</div>
+                          <div class="muted">${home ? 'Wyjazd' : 'U siebie'}</div>
+                          <div class="pow-bar them"><i style="width:${Math.round((oppPow / maxPow) * 100)}%"></i></div>
+                        </div>
+                      </div>
+                      <p class="muted rival-fixture">${getClub(yourFix.homeId).name} — ${getClub(yourFix.awayId).name}</p>
+                    </div>`
+                  })()
+                : `<p class="muted">${s.phase === 'done' ? 'Sezon zakończony.' : 'Brak meczu w tej kolejce.'}</p>`
+            }
+            <div class="actions" style="margin-top:14px">
+              ${
+                s.phase === 'playing'
+                  ? `<button class="btn primary" id="btn-match">Skład i mecz</button>
+                     <button class="btn ghost" id="btn-lineup">Tylko skład</button>`
+                  : `<button class="btn primary" id="btn-end">Podsumowanie sezonu</button>`
+              }
+            </div>
+          </section>
+          <section class="career-panel">
+            <h3>Tabela · ${league.name}</h3>
+            <table class="mini-table full-table">
+              <thead><tr><th>#</th><th>Klub</th><th>M</th><th>W-R-P</th><th>+/−</th><th>Pkt</th></tr></thead>
+              <tbody>${fullTable}</tbody>
+            </table>
+          </section>
+        </div>`
+    } else {
+      main = `
+        <div class="career-office">
+          <section class="career-panel">
+            <h3>Profil trenera</h3>
+            <p class="meta">${m.name} · reputacja ${m.reputation} · sezony ${m.seasonsManaged}</p>
+            <p class="muted">${club.name} · budżet ${Math.round(team.budget).toLocaleString('pl-PL')}</p>
+            <p class="muted">Taktyka: ${team.tactics.formation} · ${styleLabel(team.tactics.style)} · tempo ${tempoLabel(team.tactics.tempo ?? 2)}</p>
+          </section>
+          <section class="career-panel">
+            <h3>Dziennik</h3>
+            <ul class="log">${log || '<li class="muted">Brak wpisów</li>'}</ul>
+            <div class="actions" style="margin-top:12px">
+              <button class="btn ghost danger" id="btn-reset">Nowa kariera</button>
+            </div>
+          </section>
+        </div>`
+    }
 
-      <section class="panel">
-        <h3>Następny rywal</h3>
-        ${rivalBlock}
-      </section>
-
-      <section class="panel">
-        <h3>Tabela · ${league.name}</h3>
-        <table class="mini-table full-table">
-          <thead><tr><th>#</th><th>Klub</th><th>M</th><th>W-R-P</th><th>+/−</th><th>Pkt</th></tr></thead>
-          <tbody>${fullTable}</tbody>
-        </table>
-        <div class="actions" style="margin-top:14px">
-          ${
-            s.phase === 'playing'
-              ? `<button class="btn primary" id="btn-match">Skład i mecz</button>
-                 <button class="btn ghost" id="btn-lineup">Tylko skład</button>`
-              : `<button class="btn primary" id="btn-end">Podsumowanie sezonu</button>`
-          }
-        </div>
-      </section>
-
-      <section class="panel">
-        <h3>Dziennik</h3>
-        <ul class="log">${log || '<li class="muted">Brak wpisów</li>'}</ul>
-        <div class="actions"><button class="btn ghost danger" id="btn-reset">Nowa gra</button></div>
-      </section>`,
-      club.short,
-      'wide',
-    )
+    return `
+      <div class="app-shell career">
+        <header class="career-top">
+          <div class="career-status">
+            <div class="career-pill">Sezon ${s.year}</div>
+            <div class="career-pill">${league.name}</div>
+            <div class="career-pill money-pill">${formatStars(club.stars)}</div>
+          </div>
+          <div class="career-brand">GRA TRENERA</div>
+          <div class="career-profile">
+            <div class="career-profile-text">
+              <strong>${m.name}</strong>
+              <span>${club.short} · ${place}.</span>
+            </div>
+            <div class="career-rating">${Math.min(99, 55 + Math.round(m.reputation / 3))}</div>
+          </div>
+        </header>
+        <nav class="career-nav">${tabs}</nav>
+        <main class="career-main">${main}</main>
+        <footer class="career-foot">
+          <span>Wybierz kafelek</span>
+          <span>Hub klubu</span>
+        </footer>
+      </div>`
   }
 
   private bindHub(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-hub-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.hubTab = btn.dataset.hubTab as 'squad' | 'season' | 'office'
+        this.render()
+      })
+    })
+    const goLineup = () => this.go(() => openLineup(this.state))
+    this.root.querySelector('#btn-lineup')?.addEventListener('click', goLineup)
+    this.root.querySelector('#btn-lineup-tactics')?.addEventListener('click', goLineup)
+    this.root.querySelector('#btn-sheet-lineup')?.addEventListener('click', goLineup)
+    this.root.querySelector('#btn-sheet-lineup')?.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter' || (e as KeyboardEvent).key === ' ') {
+        e.preventDefault()
+        goLineup()
+      }
+    })
     this.root.querySelector('#btn-match')?.addEventListener('click', () => {
       this.go(() => playNextMatchFromHub(this.state))
-    })
-    this.root.querySelector('#btn-lineup')?.addEventListener('click', () => {
-      this.go(() => openLineup(this.state))
     })
     this.root.querySelector('#btn-end')?.addEventListener('click', () => {
       this.go(() => finalizeSeason(this.state))
@@ -450,6 +582,7 @@ export class App {
       clearSave()
       this.state = createEmptyState()
       this.state.screen = 'home'
+      this.hubTab = 'squad'
       this.render()
     })
   }
