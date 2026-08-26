@@ -1,0 +1,15 @@
+---
+description: Always commit and push finished work straight to main
+alwaysApply: true
+---
+
+# Deploy to main
+
+After completing a feature or fix that the user asked for, always:
+
+1. Build to verify
+2. Commit relevant files
+3. Push immediately to `main` (`git push -u origin HEAD`)
+
+Do not wait for a separate "commit/push" request unless the user explicitly says not to push.
+Do not open a PR for routine game updates — ship on `main`.
