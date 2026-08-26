@@ -145,6 +145,9 @@ export function createManagerSeason(
     pendingMoment: null,
     record: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0 },
     teamChemistry: state.team?.teamChemistry ?? 52,
+    calendar: { weekIndex: 0, weeks: [] },
+    matches: {},
+    cup: null,
   }
 }
 

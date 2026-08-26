@@ -32,6 +32,9 @@ import {
   startSecondHalf,
   tickLiveMinute,
   finalizeSeason,
+  advanceWeek,
+  nextUserMatch,
+  canAdvanceWeek,
   type MotivationId,
 } from './systems/managerCareer'
 import { intervalMsForSpeed } from './systems/liveMatch'
@@ -50,7 +53,13 @@ import {
   unreadMailCount,
 } from './systems/mailbox'
 import { newsKindLabel } from './systems/news'
-import { clubForm, clubPowerPreview, clubTopPlayers, nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
+import { clubForm, clubPowerPreview, clubTopPlayers } from './systems/leagueSim'
+import {
+  currentWeek,
+  dayActivityLabel,
+  transferWindowLabel,
+  weekdayLabel,
+} from './systems/calendar'
 import { averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
@@ -84,7 +93,7 @@ export class App {
   private pickLeagueId: string | null = null
   private matchTimer: number | null = null
   /** Widok hubu w stylu FIFA Career */
-  private hubTab: 'squad' | 'season' | 'office' | 'news' = 'squad'
+  private hubTab: 'squad' | 'season' | 'office' | 'news' | 'calendar' = 'squad'
 
   /** Otwarty mail w skrzynce (Biuro) */
   private openMailId: string | null = null
@@ -366,8 +375,8 @@ export class App {
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
     const place = playerTablePosition(s)
-    const round = nextRoundFixtures(s)
-    const yourFix = round ? yourFixtureInRound(s, round) : null
+    const upcoming = nextUserMatch(s)
+    const week = currentWeek(s)
     const chem = Math.round(team.teamChemistry)
     const xi = starters(team)
     const xiOvr = Math.round(averageStarterOvr(team))
@@ -398,12 +407,13 @@ export class App {
       })
       .join('')
 
-    let rivalTileInner = `<div class="tile-title">Następny mecz</div><p class="tile-sub">Brak meczu w kolejce</p>`
-    if (yourFix) {
-      const oppId = yourFix.homeId === s.clubId ? yourFix.awayId : yourFix.homeId
+    let rivalTileInner = `<div class="tile-title">Następny mecz</div><p class="tile-sub">Brak meczu w tym tygodniu</p>`
+    if (upcoming) {
+      const oppId = upcoming.homeId === s.clubId ? upcoming.awayId : upcoming.homeId
       const opp = getClub(oppId)
       const oppPow = clubPowerPreview(oppId)
-      const home = yourFix.homeId === s.clubId
+      const home = upcoming.homeId === s.clubId
+      const comp = upcoming.competition === 'cup' ? 'Puchar' : `Liga · kol. ${(upcoming.leagueRound ?? s.roundIndex) + 1}`
       rivalTileInner = `
         <div class="tile-title">Następny mecz</div>
         <div class="tile-rival-row">
@@ -411,9 +421,11 @@ export class App {
           <div class="tile-rival-vs">vs</div>
           <div><strong>${opp.short}</strong> <span>${oppPow}</span></div>
         </div>
-        <p class="tile-sub">${home ? 'U siebie' : 'Wyjazd'} · kol. ${s.roundIndex + 1}</p>`
+        <p class="tile-sub">${comp} · ${home ? 'U siebie' : 'Wyjazd'}</p>`
     } else if (s.phase === 'done') {
       rivalTileInner = `<div class="tile-title">Sezon</div><p class="tile-sub">Zakończony — zobacz podsumowanie</p>`
+    } else if (canAdvanceWeek(s)) {
+      rivalTileInner = `<div class="tile-title">Tydzień wolny</div><p class="tile-sub">Przejdź dalej w Kalendarzu</p>`
     }
 
     const fullTable = sortedStandings(s)
@@ -450,6 +462,7 @@ export class App {
 
     const tabs = [
       { id: 'squad' as const, label: 'Główny' },
+      { id: 'calendar' as const, label: 'Kalendarz' },
       { id: 'season' as const, label: 'Sezon' },
       { id: 'office' as const, label: 'Biuro' },
     ]
@@ -508,9 +521,19 @@ export class App {
               </button>
               ${
                 s.phase === 'playing'
-                  ? `<button type="button" class="career-tile tile-play" id="btn-match">
+                  ? upcoming
+                    ? `<button type="button" class="career-tile tile-play" id="btn-match">
                       <span class="tile-title">Graj mecz</span>
-                      <span class="tile-sub">Skład i start kolejki</span>
+                      <span class="tile-sub">Skład i start</span>
+                    </button>`
+                    : canAdvanceWeek(s)
+                      ? `<button type="button" class="career-tile tile-play" id="btn-advance-week">
+                      <span class="tile-title">Następny tydzień</span>
+                      <span class="tile-sub">${week?.label ?? 'Dalej'}</span>
+                    </button>`
+                      : `<button type="button" class="career-tile tile-play" data-hub-tab="calendar">
+                      <span class="tile-title">Kalendarz</span>
+                      <span class="tile-sub">Zaplanuj tydzień</span>
                     </button>`
                   : `<button type="button" class="career-tile tile-play" id="btn-end">
                       <span class="tile-title">Podsumowanie</span>
@@ -534,6 +557,74 @@ export class App {
               </button>
             </div>
           </div>
+        </div>`
+    } else if (this.hubTab === 'calendar') {
+      const cal = s.calendar
+      const w = currentWeek(s)
+      const windowBadge = w ? transferWindowLabel(w.transferWindow) : '—'
+      const daysHtml = w
+        ? w.days
+            .map((d) => {
+              let detail = dayActivityLabel(d.activity)
+              if (d.activity === 'match' && d.matchId && s.matches[d.matchId]) {
+                const m = s.matches[d.matchId]!
+                const opp = m.homeId === s.clubId ? m.awayId : m.homeId
+                const comp = m.competition === 'cup' ? 'PP' : 'Liga'
+                detail = `${comp} vs ${getClub(opp).short}`
+              }
+              return `<button type="button" class="cal-day activity-${d.activity}" data-cal-day="${d.weekday}" ${d.activity === 'training' ? 'data-training="1"' : ''} ${d.activity === 'match' && d.matchId ? `data-play-match="${d.matchId}"` : ''}>
+                <span class="cal-day-name">${weekdayLabel(d.weekday)}</span>
+                <span class="cal-day-act">${detail}</span>
+              </button>`
+            })
+            .join('')
+        : `<p class="muted">Brak tygodnia.</p>`
+
+      const cup = s.cup
+      const cupMini = cup
+        ? `<div class="cup-ladder">${cup.yourPath
+            .map((step, i) => {
+              const cls =
+                step.result === 'won' || step.result === 'bye'
+                  ? 'won'
+                  : step.result === 'lost'
+                    ? 'lost'
+                    : i === cup.roundIndex && !cup.eliminated
+                      ? 'now'
+                      : step.result === 'pending'
+                        ? 'idle'
+                        : 'done'
+              return `<span class="cup-step ${cls}" title="${step.roundName}${step.opponentId ? ` vs ${getClub(step.opponentId).short}` : ''}">${step.roundName.replace(' finału', '').replace('Ćwierć', '1/4').replace('Pół', '1/2')}</span>${i < cup.yourPath.length - 1 ? '<span class="cup-arrow">→</span>' : ''}`
+            })
+            .join('')}</div>`
+        : `<p class="muted">Puchar Polski od poziomu I ligi.</p>`
+
+      main = `
+        <div class="career-calendar-screen">
+          <section class="career-panel">
+            <div class="mail-panel-head">
+              <h3>Tydzień ${(cal?.weekIndex ?? 0) + 1}/${cal?.weeks.length ?? 0}</h3>
+              <span class="cal-window-badge ${w?.transferWindow ? 'open' : ''}">${windowBadge}</span>
+            </div>
+            <p class="muted" style="margin:0 0 10px">${w?.label ?? '—'} · Sezon ${s.year}</p>
+            <div class="cal-week">${daysHtml}</div>
+            <div class="actions" style="margin-top:14px">
+              ${
+                upcoming
+                  ? `<button class="btn primary" id="btn-match">Graj mecz</button>`
+                  : canAdvanceWeek(s)
+                    ? `<button class="btn primary" id="btn-advance-week">Następny tydzień</button>`
+                    : s.phase === 'done'
+                      ? `<button class="btn primary" id="btn-end">Podsumowanie sezonu</button>`
+                      : ''
+              }
+              <button class="btn ghost" data-hub-tab="squad">Wróć</button>
+            </div>
+          </section>
+          <section class="career-panel">
+            <h3>Puchar Polski</h3>
+            ${cupMini}
+          </section>
         </div>`
     } else if (this.hubTab === 'news') {
       if (!this.state.news) this.state.news = []
@@ -585,21 +676,25 @@ export class App {
           <section class="career-panel">
             <h3>Analiza rywala</h3>
             ${
-              yourFix
+              upcoming
                 ? (() => {
-                    const oppId = yourFix.homeId === s.clubId ? yourFix.awayId : yourFix.homeId
+                    const oppId = upcoming.homeId === s.clubId ? upcoming.awayId : upcoming.homeId
                     const opp = getClub(oppId)
                     const oppPow = clubPowerPreview(oppId)
-                    const home = yourFix.homeId === s.clubId
+                    const home = upcoming.homeId === s.clubId
                     const maxPow = Math.max(yourPow, oppPow, 1)
                     const tops = clubTopPlayers(oppId, 3)
                     const form = clubForm(s.standings, oppId)
                     const oppRow = s.standings.find((r) => r.clubId === oppId)
                     const oppPlace = sortedStandings(s).findIndex((r) => r.clubId === oppId) + 1
+                    const compLabel =
+                      upcoming.competition === 'cup'
+                        ? 'Puchar Polski'
+                        : `Kolejka ${(upcoming.leagueRound ?? s.roundIndex) + 1}/${s.rounds.length}`
                     return `
                     <div class="rival-preview career-rival">
                       <div class="rival-head">
-                        <span class="muted">Kolejka ${s.roundIndex + 1}/${s.rounds.length} · ${home ? 'U siebie' : 'Wyjazd'}</span>
+                        <span class="muted">${compLabel} · ${home ? 'U siebie' : 'Wyjazd'}</span>
                         <span class="rival-edge">${yourPow - oppPow >= 4 ? 'Faworyt' : oppPow - yourPow >= 4 ? 'Underdog' : 'Wyrównany'}</span>
                       </div>
                       <div class="rival-matchup">
@@ -617,7 +712,7 @@ export class App {
                           <div class="pow-bar them"><i style="width:${Math.round((oppPow / maxPow) * 100)}%"></i></div>
                         </div>
                       </div>
-                      <p class="rival-fixture"><strong>${getClub(yourFix.homeId).name}</strong> — <strong>${getClub(yourFix.awayId).name}</strong></p>
+                      <p class="rival-fixture"><strong>${getClub(upcoming.homeId).name}</strong> — <strong>${getClub(upcoming.awayId).name}</strong></p>
 
                       <div class="opp-scout">
                         <div class="opp-block">
@@ -639,16 +734,45 @@ export class App {
                       </div>
                     </div>`
                   })()
-                : `<p class="muted">${s.phase === 'done' ? 'Sezon zakończony.' : 'Brak meczu w tej kolejce.'}</p>`
+                : `<p class="muted">${s.phase === 'done' ? 'Sezon zakończony.' : canAdvanceWeek(s) ? 'Brak meczu — przejdź do następnego tygodnia.' : 'Brak meczu w tym tygodniu.'}</p>`
             }
             <div class="actions" style="margin-top:14px">
               ${
                 s.phase === 'playing'
-                  ? `<button class="btn primary" id="btn-match">Skład i mecz</button>
+                  ? upcoming
+                    ? `<button class="btn primary" id="btn-match">Skład i mecz</button>
                      <button class="btn ghost" id="btn-lineup">Tylko skład</button>`
+                    : canAdvanceWeek(s)
+                      ? `<button class="btn primary" id="btn-advance-week">Następny tydzień</button>
+                     <button class="btn ghost" data-hub-tab="calendar">Kalendarz</button>`
+                      : `<button class="btn ghost" data-hub-tab="calendar">Kalendarz</button>`
                   : `<button class="btn primary" id="btn-end">Podsumowanie sezonu</button>`
               }
             </div>
+          </section>
+          <section class="career-panel">
+            <h3>Puchar Polski</h3>
+            ${
+              s.cup
+                ? `<div class="cup-ladder">${s.cup.yourPath
+                    .map((step, i) => {
+                      const cls =
+                        step.result === 'won' || step.result === 'bye'
+                          ? 'won'
+                          : step.result === 'lost'
+                            ? 'lost'
+                            : i === s.cup!.roundIndex && !s.cup!.eliminated
+                              ? 'now'
+                              : 'idle'
+                      const tip = step.opponentId
+                        ? `${step.roundName} vs ${getClub(step.opponentId).short}`
+                        : step.roundName
+                      return `<span class="cup-step ${cls}" title="${tip}">${step.roundName}</span>${i < s.cup!.yourPath.length - 1 ? '<span class="cup-arrow">→</span>' : ''}`
+                    })
+                    .join('')}</div>
+                  <p class="muted" style="margin-top:8px">${s.cup.eliminated ? 'Odpadłeś z pucharu.' : s.cup.championId === s.clubId ? 'Mistrz Pucharu!' : 'Twoja ścieżka w PP.'}</p>`
+                : `<p class="muted">Dostępny od I ligi / Ekstraklasy.</p>`
+            }
           </section>
         </div>`
     } else {
@@ -761,7 +885,7 @@ export class App {
   private bindHub(): void {
     this.root.querySelectorAll<HTMLButtonElement>('[data-hub-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.hubTab = btn.dataset.hubTab as 'squad' | 'season' | 'office' | 'news'
+        this.hubTab = btn.dataset.hubTab as 'squad' | 'season' | 'office' | 'news' | 'calendar'
         this.render()
       })
     })
@@ -777,7 +901,29 @@ export class App {
       }
     })
     this.root.querySelector('#btn-match')?.addEventListener('click', () => {
-      this.go(() => playNextMatchFromHub(this.state))
+      this.go(() => {
+        const err = playNextMatchFromHub(this.state)
+        if (err) pushTempAlert(err)
+      })
+    })
+    this.root.querySelector('#btn-advance-week')?.addEventListener('click', () => {
+      this.go(() => {
+        const err = advanceWeek(this.state)
+        if (err) pushTempAlert(err)
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-training]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        pushTempAlert('Trening wkrótce — na razie to tylko plan tygodnia.')
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-play-match]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => {
+          const err = playNextMatchFromHub(this.state)
+          if (err) pushTempAlert(err)
+        })
+      })
     })
     this.root.querySelector('#btn-end')?.addEventListener('click', () => {
       this.go(() => finalizeSeason(this.state))
@@ -1492,6 +1638,7 @@ export class App {
         <h2>${r.sacked ? 'Zwolniony' : `Sezon ${r.year}`}</h2>
         <p class="meta">${league.name} · <strong>${r.place}.</strong> miejsce · ${r.points} pkt</p>
         <p>Bilans: ${r.record.won}-${r.record.drawn}-${r.record.lost} · bramki ${r.record.goalsFor}:${r.record.goalsAgainst}</p>
+        ${r.cupSummary ? `<p class="meta">${r.cupSummary}</p>` : ''}
         ${
           r.boardGoalLabel
             ? `<div class="board-report ${r.sacked ? 'sacked' : ''}">

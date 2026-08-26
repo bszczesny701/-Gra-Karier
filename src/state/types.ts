@@ -202,6 +202,7 @@ export interface MatchEvent {
 
 export type LiveHalf = '1' | 'ht' | '2' | 'done'
 export type MatchSpeed = 1 | 2 | 4
+export type CompetitionId = 'league' | 'cup'
 
 /** Slot boiska w meczu — null = pusty (czerwona / kontuzja bez zmiany). */
 export type LivePitchSlot = string | null
@@ -235,6 +236,9 @@ export interface LiveMatchState {
   playedIds: string[]
   /** Koniec doliczonego czasu (null = normalna gra) */
   stoppageUntil: number | null
+  /** Id ScheduledMatch w sezonie */
+  matchId: string | null
+  competition: CompetitionId
 }
 
 export interface PendingMatchMoment {
@@ -259,6 +263,66 @@ export interface SeasonRecord {
   goalsAgainst: number
 }
 
+export type DayActivity = 'rest' | 'training' | 'match'
+export type TransferWindow = 'summer' | 'winter' | null
+
+export interface ScheduledMatch {
+  id: string
+  competition: CompetitionId
+  homeId: string
+  awayId: string
+  homeGoals: number | null
+  awayGoals: number | null
+  /** Indeks kolejki ligowej (tylko liga) */
+  leagueRound?: number
+  /** Indeks rundy pucharowej (tylko puchar) */
+  cupRound?: number
+}
+
+export interface CalendarDay {
+  weekday: 0 | 1 | 2 | 3 | 4 | 5 | 6
+  activity: DayActivity
+  matchId?: string
+}
+
+export interface SeasonWeek {
+  index: number
+  label: string
+  transferWindow: TransferWindow
+  days: CalendarDay[]
+  matchIds: string[]
+  /** Powiązana kolejka ligowa, jeśli tydzień ją zawiera */
+  leagueRoundIndex?: number
+}
+
+export interface SeasonCalendar {
+  weekIndex: number
+  weeks: SeasonWeek[]
+}
+
+export type CupPathResult = 'pending' | 'won' | 'lost' | 'bye'
+
+export interface CupPathStep {
+  roundName: string
+  opponentId: string | null
+  result: CupPathResult
+}
+
+export interface CupState {
+  entrantIds: string[]
+  /** Id meczów w season.matches, per runda */
+  rounds: string[][]
+  roundIndex: number
+  eliminated: boolean
+  championId: string | null
+  yourPath: CupPathStep[]
+  /** Awansowani do następnej rundy (bye + zwycięzcy bieżącej) */
+  advancedIds: string[]
+  totalRounds: number
+  /** Indeks tygodnia kalendarza dla każdej rundy pucharu */
+  calendarWeekForRound: number[]
+}
+
 export interface SeasonState {
   year: number
   leagueId: string
@@ -275,6 +339,9 @@ export interface SeasonState {
   pendingMoment: PendingMatchMoment | null
   record: SeasonRecord
   teamChemistry: number
+  calendar: SeasonCalendar
+  matches: Record<string, ScheduledMatch>
+  cup: CupState | null
 }
 
 export interface SeasonReport {
@@ -295,6 +362,8 @@ export interface SeasonReport {
   boardTrustDelta?: number
   boardGoalLabel?: string
   sacked?: boolean
+  /** Podsumowanie Pucharu Polski */
+  cupSummary?: string
 }
 
 export type MailKind = 'discipline' | 'medical' | 'board' | 'system'
@@ -343,7 +412,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 111
+export const SAVE_VERSION = 112
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

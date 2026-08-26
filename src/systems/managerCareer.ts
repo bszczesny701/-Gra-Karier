@@ -15,7 +15,7 @@ import {
   createManagerSeason,
   initClubLeagueMap,
 } from './leagueSim'
-import { beginMatchday } from './matchEngine'
+import { beginMatchday, advanceWeek, nextUserMatch, canAdvanceWeek } from './matchEngine'
 import {
   applyHalftimeMotivation,
   liveSubstitute,
@@ -38,9 +38,11 @@ import {
   shouldSack,
 } from './board'
 import { seedOpeningNews } from './news'
+import { cupSummaryText } from './cup'
+import { buildSeasonSchedule } from './calendar'
 
 export { playerTablePosition, sortedStandings, standingsAroundPlayer }
-export { beginMatchday }
+export { beginMatchday, advanceWeek, nextUserMatch, canAdvanceWeek }
 export {
   applyHalftimeMotivation,
   liveSubstitute,
@@ -104,6 +106,7 @@ export function selectClub(state: GameState, clubId: string): void {
 
   state.team = createTeamState(clubId)
   state.season = createManagerSeason(state, clubId, year)
+  buildSeasonSchedule(state, state.season)
   state.season.teamChemistry = state.team.teamChemistry
   state.seasonReport = null
   state.liveMatch = null
@@ -265,11 +268,13 @@ export function finalizeSeason(state: GameState): void {
   }
 
   const league = getLeague(season.leagueId)
+  const cupLine = cupSummaryText(season)
   let narrative = `Sezon ${season.year}: ${place}. miejsce w ${league.name} (${row?.points ?? 0} pkt). `
   if (promotion) narrative += 'Awans! '
   else if (relegation) narrative += 'Spadek. '
   else narrative += 'Zostajesz w lidze. '
-  narrative += summary
+  if (cupLine) narrative += ` ${cupLine}`
+  narrative += ` ${summary}`
   if (sacked) narrative += ' Zarząd zwalnia trenera.'
 
   const report: SeasonReport = {
@@ -289,6 +294,7 @@ export function finalizeSeason(state: GameState): void {
     boardTrustDelta: delta,
     boardGoalLabel: exp.label,
     sacked,
+    cupSummary: cupLine ?? undefined,
   }
   state.seasonReport = report
   state.screen = 'seasonReport'
@@ -323,6 +329,7 @@ export function startNextSeason(state: GameState): void {
   team.benchIds = picked.benchIds
 
   state.season = createManagerSeason(state, manager.clubId, year)
+  buildSeasonSchedule(state, state.season)
   state.season.teamChemistry = team.teamChemistry
   state.seasonReport = null
   state.screen = 'hub'
@@ -336,6 +343,11 @@ export function startNextSeason(state: GameState): void {
 
 export function playNextMatchFromHub(state: GameState): string | null {
   if (!state.season || state.season.phase !== 'playing') return 'Sezon zakończony'
+  if (state.season.calendar?.weeks?.length && !nextUserMatch(state.season)) {
+    return canAdvanceWeek(state.season)
+      ? 'Brak meczu — przejdź do następnego tygodnia w Kalendarzu'
+      : 'Brak meczu w tym tygodniu'
+  }
   state.screen = 'lineup'
   return null
 }

@@ -1,5 +1,6 @@
 import { getClub } from '../data/clubs'
 import type {
+  CompetitionId,
   GameState,
   LeagueFixture,
   LiveMatchState,
@@ -7,6 +8,7 @@ import type {
   ManagerMatchResult,
   MatchEvent,
   MatchSpeed,
+  ScheduledMatch,
   SquadPlayer,
 } from '../state/types'
 import { clamp, clampFloat, normalizeTactics } from '../state/types'
@@ -20,6 +22,8 @@ import {
 import { deliverPostMatchMail } from './mailbox'
 import { publishYourMatchNews } from './news'
 import { formationFit } from './tactics'
+import { applyCupMatchResult } from './cup'
+import { nextUserMatch } from './calendar'
 
 const MAX_SUBS = 3
 
@@ -277,8 +281,13 @@ function maybeDisciplineAndInjuries(state: GameState, live: LiveMatchState): voi
   }
 }
 
-/** Start live po ustawieniu składu; AI już powinno być odpalone w rundzie. */
-export function createLiveMatch(state: GameState, fixture: LeagueFixture): LiveMatchState {
+/** Start live po ustawieniu składu; AI już powinno być odpalone w tygodniu. */
+export function createLiveMatch(
+  state: GameState,
+  fixture: LeagueFixture | ScheduledMatch,
+  matchId: string | null = null,
+  competition: CompetitionId = 'league',
+): LiveMatchState {
   const team = state.team!
   const season = state.season!
   const opponentId = fixture.homeId === season.clubId ? fixture.awayId : fixture.homeId
@@ -316,8 +325,11 @@ export function createLiveMatch(state: GameState, fixture: LeagueFixture): LiveM
     speed: 2,
     playedIds: [...team.startingIds],
     stoppageUntil: null,
+    matchId,
+    competition,
   }
-  pushEvent(live, 'kickoff', `Początek meczu vs ${getClub(opponentId).name}.`)
+  const tag = competition === 'cup' ? 'Puchar Polski' : 'Liga'
+  pushEvent(live, 'kickoff', `${tag}: początek meczu vs ${getClub(opponentId).name}.`)
   return live
 }
 
@@ -518,23 +530,47 @@ export function finishLiveMatch(state: GameState): void {
   const season = state.season!
   const team = state.team!
   const clubId = season.clubId
+  const isCup = live.competition === 'cup'
 
   live.half = 'done'
   live.paused = true
   pushEvent(live, 'ft', `Koniec meczu ${live.homeGoals}:${live.awayGoals}.`)
 
-  applyResultToStandings(season.standings, live.homeId, live.awayId, live.homeGoals, live.awayGoals)
+  let pens = false
+  if (isCup && live.homeGoals === live.awayGoals) {
+    pens = true
+    const youHome = live.homeId === clubId
+    const youWinPens = chance(0.48 + (live.moraleBoost > 0 ? 0.06 : 0))
+    if (youWinPens) {
+      if (youHome) live.homeGoals += 1
+      else live.awayGoals += 1
+    } else {
+      if (youHome) live.awayGoals += 1
+      else live.homeGoals += 1
+    }
+    pushEvent(live, 'ft', 'Rozstrzygnięcie po rzutach karnych.')
+  }
+
+  if (isCup && live.matchId) {
+    applyCupMatchResult(season, live.matchId, live.homeGoals, live.awayGoals)
+  } else {
+    applyResultToStandings(season.standings, live.homeId, live.awayId, live.homeGoals, live.awayGoals)
+    if (live.matchId && season.matches[live.matchId]) {
+      season.matches[live.matchId].homeGoals = live.homeGoals
+      season.matches[live.matchId].awayGoals = live.awayGoals
+    }
+    season.record.played += 1
+    const { yours, theirs } = yourGoals(live, clubId)
+    season.record.goalsFor += yours
+    season.record.goalsAgainst += theirs
+    if (yours > theirs) season.record.won += 1
+    else if (yours === theirs) season.record.drawn += 1
+    else season.record.lost += 1
+  }
 
   const { yours, theirs } = yourGoals(live, clubId)
   const won = yours > theirs
-  const drawn = yours === theirs
-
-  season.record.played += 1
-  season.record.goalsFor += yours
-  season.record.goalsAgainst += theirs
-  if (won) season.record.won += 1
-  else if (drawn) season.record.drawn += 1
-  else season.record.lost += 1
+  const drawn = !isCup && yours === theirs
 
   for (const p of team.squad) {
     if (live.playedIds.includes(p.id)) {
@@ -544,7 +580,6 @@ export function finishLiveMatch(state: GameState): void {
       p.form = clamp(p.form + (won ? 2 + rngInt(2) : drawn ? 0 : -(1 + rngInt(2))), 25, 90)
       p.morale = clamp(p.morale + (won ? 2 : drawn ? 0 : -2), 20, 100)
     } else if (live.benchIds.includes(p.id)) {
-      // Ławka — regeneracja kondycji
       p.fitness = clamp(p.fitness + 7 + rngInt(5), 30, 100)
       p.morale = clamp(p.morale + (won ? 1 : 0), 20, 100)
     } else {
@@ -567,7 +602,6 @@ export function finishLiveMatch(state: GameState): void {
     }
   }
 
-  // Uzupełnij XI na kolejny mecz (bez dziur / niedostępnych)
   const available = team.squad.filter(
     (p) => (p.injuryMatchesLeft ?? 0) === 0 && (p.suspensionMatchesLeft ?? 0) === 0,
   )
@@ -596,7 +630,9 @@ export function finishLiveMatch(state: GameState): void {
   const away = getClub(live.awayId)
   const yourReds = live.events.filter((e) => e.kind === 'red' && e.side === 'you').length
   const yourInj = live.events.filter((e) => e.kind === 'injury' && e.side === 'you').length
-  let narrative = `${home.short} ${live.homeGoals}:${live.awayGoals} ${away.short}. `
+  let narrative = isCup ? 'Puchar Polski · ' : ''
+  narrative += `${home.short} ${live.homeGoals}:${live.awayGoals} ${away.short}. `
+  if (pens) narrative += 'Po karnych. '
   if (won) narrative += 'Wygrana! '
   else if (drawn) narrative += 'Remis. '
   else narrative += 'Porażka. '
@@ -619,8 +655,34 @@ export function finishLiveMatch(state: GameState): void {
     chemistryAfter: team.teamChemistry,
   }
   season.lastMatch = result
-  season.roundIndex += 1
-  if (season.roundIndex >= season.rounds.length) season.phase = 'done'
+
+  // Sync kolejki ligowej bez ślepego ++
+  if (!isCup) {
+    let completed = 0
+    for (let li = 0; li < season.rounds.length; li++) {
+      const ids = Object.values(season.matches).filter(
+        (m) => m.competition === 'league' && m.leagueRound === li,
+      )
+      if (!ids.length) break
+      if (ids.every((m) => m.homeGoals != null)) completed = li + 1
+      else break
+    }
+    season.roundIndex = completed
+  }
+
+  if (season.calendar?.weeks?.length) {
+    if (!nextUserMatch(season)) {
+      const allLeagueDone = Object.values(season.matches)
+        .filter((m) => m.competition === 'league')
+        .every((m) => m.homeGoals != null)
+      if (allLeagueDone && season.calendar.weekIndex >= season.calendar.weeks.length - 1) {
+        season.phase = 'done'
+      }
+    }
+  } else {
+    season.roundIndex += 1
+    if (season.roundIndex >= season.rounds.length) season.phase = 'done'
+  }
 
   deliverPostMatchMail(state)
   publishYourMatchNews(state, live.homeId, live.awayId, live.homeGoals, live.awayGoals)
