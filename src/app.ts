@@ -49,6 +49,7 @@ import {
   markMailRead,
   unreadMailCount,
 } from './systems/mailbox'
+import { newsKindLabel } from './systems/news'
 import { clubForm, clubPowerPreview, clubTopPlayers, nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
 import { averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
@@ -448,7 +449,7 @@ export class App {
       .join('')
 
     const tabs = [
-      { id: 'squad' as const, label: 'Skład' },
+      { id: 'squad' as const, label: 'Główny' },
       { id: 'season' as const, label: 'Sezon' },
       { id: 'office' as const, label: 'Biuro' },
     ]
@@ -460,6 +461,19 @@ export class App {
 
     let main = ''
     if (this.hubTab === 'squad') {
+      if (!this.state.news) this.state.news = []
+      const newsHtml =
+        this.state.news
+          .slice(0, 8)
+          .map(
+            (n) => `<article class="news-item kind-${n.kind}">
+              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
+              <strong class="news-item-head">${n.headline}</strong>
+              <p class="news-item-body">${n.body}</p>
+            </article>`,
+          )
+          .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
+
       main = `
         <div class="career-grid">
           <article class="career-sheet" id="btn-sheet-lineup" role="button" tabindex="0">
@@ -483,41 +497,50 @@ export class App {
             <p class="sheet-foot">Miejsce ${place}. · ${league.name} · XI ≈ ${xiOvr} OVR · kadra ${team.squad.length}</p>
           </article>
 
-          <div class="career-tiles">
-            <button type="button" class="career-tile tile-squad" id="btn-lineup">
-              <span class="tile-title">Centrum składu</span>
-              <span class="tile-sub">Ustaw XI, taktykę i ławkę</span>
-            </button>
-            ${
-              s.phase === 'playing'
-                ? `<button type="button" class="career-tile tile-play" id="btn-match">
-                    <span class="tile-title">Graj mecz</span>
-                    <span class="tile-sub">Skład i start kolejki</span>
-                  </button>`
-                : `<button type="button" class="career-tile tile-play" id="btn-end">
-                    <span class="tile-title">Podsumowanie</span>
-                    <span class="tile-sub">Zakończ sezon</span>
-                  </button>`
-            }
-            <button type="button" class="career-tile tile-rival" data-hub-tab="season">
-              ${rivalTileInner}
-            </button>
-            <button type="button" class="career-tile tile-table" data-hub-tab="season">
-              <span class="tile-title">Tabela i cele</span>
-              <span class="tile-sub">${place}. miejsce · ${goalProg.exp.label}</span>
-            </button>
-            <button type="button" class="career-tile tile-tactics" id="btn-lineup-tactics">
-              <span class="tile-title">Taktyka</span>
-              <span class="tile-sub">${planLabel(tac.plan)} · ${widthLabel(tac.width)} · press ${pressLabel(tac.press)}</span>
-            </button>
-            <button type="button" class="career-tile tile-office" data-hub-tab="office">
-              <span class="tile-title">Biuro</span>
-              <span class="tile-sub">${
-                unreadMailCount(this.state) > 0
-                  ? `Skrzynka · ${unreadMailCount(this.state)} nowe`
-                  : `Zaufanie ${trust}% · ${trustLabel(trust)}`
-              }</span>
-            </button>
+          <div class="career-side">
+            <div class="career-tiles">
+              <button type="button" class="career-tile tile-squad" id="btn-lineup">
+                <span class="tile-title">Centrum składu</span>
+                <span class="tile-sub">Ustaw XI, taktykę i ławkę</span>
+              </button>
+              ${
+                s.phase === 'playing'
+                  ? `<button type="button" class="career-tile tile-play" id="btn-match">
+                      <span class="tile-title">Graj mecz</span>
+                      <span class="tile-sub">Skład i start kolejki</span>
+                    </button>`
+                  : `<button type="button" class="career-tile tile-play" id="btn-end">
+                      <span class="tile-title">Podsumowanie</span>
+                      <span class="tile-sub">Zakończ sezon</span>
+                    </button>`
+              }
+              <button type="button" class="career-tile tile-rival" data-hub-tab="season">
+                ${rivalTileInner}
+              </button>
+              <button type="button" class="career-tile tile-table" data-hub-tab="season">
+                <span class="tile-title">Tabela i cele</span>
+                <span class="tile-sub">${place}. miejsce · ${goalProg.exp.label}</span>
+              </button>
+              <button type="button" class="career-tile tile-tactics" id="btn-lineup-tactics">
+                <span class="tile-title">Taktyka</span>
+                <span class="tile-sub">${planLabel(tac.plan)} · ${widthLabel(tac.width)} · press ${pressLabel(tac.press)}</span>
+              </button>
+              <button type="button" class="career-tile tile-office" data-hub-tab="office">
+                <span class="tile-title">Biuro</span>
+                <span class="tile-sub">${
+                  unreadMailCount(this.state) > 0
+                    ? `Skrzynka · ${unreadMailCount(this.state)} nowe`
+                    : `Zaufanie ${trust}% · ${trustLabel(trust)}`
+                }</span>
+              </button>
+            </div>
+            <aside class="career-news" aria-label="Wiadomości">
+              <header class="career-news-head">
+                <h3>Wiadomości</h3>
+                <span class="muted">Liga i kuluary</span>
+              </header>
+              <div class="career-news-list">${newsHtml}</div>
+            </aside>
           </div>
         </div>`
     } else if (this.hubTab === 'season') {

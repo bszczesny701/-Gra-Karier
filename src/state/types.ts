@@ -311,6 +311,18 @@ export interface MailMessage {
   createdAt: number
 }
 
+export type NewsKind = 'match' | 'form' | 'club' | 'transfer' | 'league'
+
+export interface NewsItem {
+  id: string
+  kind: NewsKind
+  headline: string
+  body: string
+  round?: number
+  year?: number
+  createdAt: number
+}
+
 export interface GameState {
   version: number
   screen: Screen
@@ -326,10 +338,12 @@ export interface GameState {
   log: string[]
   /** Skrzynka pocztowa w Biurze */
   mailbox: MailMessage[]
+  /** Wiadomości / gazeta na ekranie Główny */
+  news: NewsItem[]
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 110
+export const SAVE_VERSION = 111
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -352,6 +366,7 @@ export function createEmptyState(): GameState {
     clubLeagueIds: {},
     log: [],
     mailbox: [],
+    news: [],
   }
 }
 

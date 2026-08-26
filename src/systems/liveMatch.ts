@@ -18,6 +18,7 @@ import {
   rngInt,
 } from './leagueSim'
 import { deliverPostMatchMail } from './mailbox'
+import { publishYourMatchNews } from './news'
 import { formationFit } from './tactics'
 
 const MAX_SUBS = 3
@@ -622,6 +623,7 @@ export function finishLiveMatch(state: GameState): void {
   if (season.roundIndex >= season.rounds.length) season.phase = 'done'
 
   deliverPostMatchMail(state)
+  publishYourMatchNews(state, live.homeId, live.awayId, live.homeGoals, live.awayGoals)
 
   state.liveMatch = null
   state.screen = 'matchResult'

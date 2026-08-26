@@ -37,6 +37,7 @@ import {
   initialBoardTrust,
   shouldSack,
 } from './board'
+import { seedOpeningNews } from './news'
 
 export { playerTablePosition, sortedStandings, standingsAroundPlayer }
 export { beginMatchday }
@@ -107,11 +108,13 @@ export function selectClub(state: GameState, clubId: string): void {
   state.seasonReport = null
   state.liveMatch = null
   state.mailbox = []
+  state.news = []
   state.screen = 'hub'
   pushLog(
     state,
     `${state.manager!.name} obejmuje ${club.name} (${formatStars(club.stars)} ${starsLabel(club.stars)}). Cel zarządu: ${exp.label}.`,
   )
+  seedOpeningNews(state)
 }
 
 /** Po zwolnieniu — wybór nowego klubu (zachowuje karierę trenera). */
