@@ -1001,8 +1001,8 @@ h3 {
 .club-pick {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: stretch;
+  gap: 8px;
   width: 100%;
   text-align: left;
   padding: 12px 14px;
@@ -1012,6 +1012,26 @@ h3 {
   color: var(--text);
   cursor: pointer;
   font: inherit;
+}
+
+.club-pick-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.club-pick-board {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.board-goal {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gold, #f0c94d);
 }
 
 .club-pick:hover {
@@ -2129,6 +2149,87 @@ h3 {
   background: linear-gradient(160deg, #1e3a55, #0d1c2a);
   border: 2px solid var(--accent);
   color: #fff;
+}
+
+.career-rating.warn {
+  border-color: #c47a3a;
+  background: linear-gradient(160deg, #5a3a20, #2a1810);
+}
+
+.career-rating.crit {
+  border-color: #a63d3d;
+  background: linear-gradient(160deg, #5a2020, #2a1010);
+}
+
+.board-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.board-status {
+  margin: 0;
+  font-weight: 600;
+}
+
+.board-progress.on-track .board-status {
+  color: #7dcea0;
+}
+
+.board-progress.off-track .board-status {
+  color: #f0a090;
+}
+
+.board-warn {
+  margin: 0;
+  color: #f0a090;
+  font-weight: 600;
+}
+
+.trust-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.trust-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #3d7ea6, #f0c94d);
+}
+
+.trust-bar.warn i {
+  background: linear-gradient(90deg, #c47a3a, #f0c94d);
+}
+
+.trust-bar.crit i {
+  background: linear-gradient(90deg, #a63d3d, #c47a3a);
+}
+
+.trust-caption {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.board-report {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.board-report.sacked {
+  border-color: rgba(166, 61, 61, 0.55);
 }
 
 .career-nav {

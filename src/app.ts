@@ -18,6 +18,7 @@ import {
   polishLeagues,
   playerUnavailableReason,
   selectClub,
+  seekNewClub,
   setFormation,
   setGamePlan,
   setMatchPaused,
@@ -34,6 +35,14 @@ import {
   type MotivationId,
 } from './systems/managerCareer'
 import { intervalMsForSpeed } from './systems/liveMatch'
+import {
+  boardExpectationForClub,
+  initialBoardTrust,
+  seasonGoalProgress,
+  SACK_TRUST_THRESHOLD,
+  trustLabel,
+  WARN_TRUST_THRESHOLD,
+} from './systems/board'
 import { clubForm, clubPowerPreview, clubTopPlayers, nextRoundFixtures, yourFixtureInRound } from './systems/leagueSim'
 import { averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
@@ -73,8 +82,11 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root
     this.state = hasSave() ? loadState() : createEmptyState()
-    if (!this.state.manager || !this.state.team) this.state.screen = 'home'
-    else if (this.state.liveMatch && (this.state.screen === 'liveMatch' || this.state.screen === 'halfTime')) {
+    if (this.state.manager && !this.state.team && this.state.screen === 'pickClub') {
+      /* zwolniony — szuka klubu */
+    } else if (!this.state.manager || !this.state.team) {
+      this.state.screen = 'home'
+    } else if (this.state.liveMatch && (this.state.screen === 'liveMatch' || this.state.screen === 'halfTime')) {
       /* keep */
     } else if (this.state.liveMatch) {
       this.state.screen = this.state.liveMatch.half === 'ht' ? 'halfTime' : 'liveMatch'
@@ -281,6 +293,7 @@ export class App {
     const leagues = polishLeagues()
     if (!this.pickLeagueId) this.pickLeagueId = leagues[0]?.id ?? null
     const league = leagues.find((l) => l.id === this.pickLeagueId) ?? leagues[0]
+    const returning = Boolean(this.state.manager && !this.state.team)
     const tabs = leagues
       .map(
         (l) =>
@@ -290,17 +303,28 @@ export class App {
     const clubs = (league?.clubIds ?? [])
       .map((id) => {
         const c = getClub(id)
+        const exp = boardExpectationForClub(id, league?.id)
         return `<button class="club-pick" data-club="${id}">
-          <strong>${c.name}</strong>
-          <span class="muted">${formatStars(c.stars)} · siła ${c.strength}</span>
+          <div class="club-pick-main">
+            <strong>${c.name}</strong>
+            <span class="muted">${formatStars(c.stars)} · siła ${c.strength}</span>
+          </div>
+          <div class="club-pick-board">
+            <span class="board-goal">${exp.label}</span>
+            <span class="muted">${exp.detail}</span>
+          </div>
         </button>`
       })
       .join('')
     return this.shell(
       `
       <section class="panel">
-        <h2>Wybierz klub</h2>
-        <p class="muted">Dowolny klub z lig polskich. Później awansujesz lub spadniesz z zespołem.</p>
+        <h2>${returning ? 'Nowy klub' : 'Wybierz klub'}</h2>
+        <p class="muted">${
+          returning
+            ? 'Zarząd Cię zwolnił. Wybierz nowy klub — każde wymagania zarządu są inne.'
+            : 'Każdy klub ma cele zarządu. Niewywiązanie się obniża zaufanie i może skończyć się zwolnieniem.'
+        }</p>
         <div class="league-tabs">${tabs}</div>
         <div class="club-list">${clubs}</div>
       </section>`,
@@ -326,6 +350,9 @@ export class App {
     const m = this.state.manager!
     const team = this.state.team!
     const s = this.state.season!
+    if (m.boardTrust == null) {
+      m.boardTrust = initialBoardTrust(s.clubId, s.leagueId)
+    }
     const club = getClub(s.clubId)
     const league = getLeague(s.leagueId)
     const place = playerTablePosition(s)
@@ -343,6 +370,10 @@ export class App {
     team.tactics = tac
     const plan = visualFormationPlan(tac.formation, tac.width, tac.defLine)
     const map = new Map(team.squad.map((p) => [p.id, p]))
+    const goalProg = seasonGoalProgress(s)
+    const trust = Math.round(m.boardTrust)
+    const trustCls =
+      trust < SACK_TRUST_THRESHOLD ? 'crit' : trust < WARN_TRUST_THRESHOLD ? 'warn' : 'ok'
 
     const sheetPlayers = team.startingIds
       .map((id, i) => {
@@ -463,8 +494,8 @@ export class App {
               ${rivalTileInner}
             </button>
             <button type="button" class="career-tile tile-table" data-hub-tab="season">
-              <span class="tile-title">Tabela</span>
-              <span class="tile-sub">${league.name} · ${place}. miejsce · ${s.record.won}-${s.record.drawn}-${s.record.lost}</span>
+              <span class="tile-title">Tabela i cele</span>
+              <span class="tile-sub">${place}. miejsce · ${goalProg.exp.label}</span>
             </button>
             <button type="button" class="career-tile tile-tactics" id="btn-lineup-tactics">
               <span class="tile-title">Taktyka</span>
@@ -472,13 +503,32 @@ export class App {
             </button>
             <button type="button" class="career-tile tile-office" data-hub-tab="office">
               <span class="tile-title">Biuro</span>
-              <span class="tile-sub">Dziennik i nowa kariera</span>
+              <span class="tile-sub">Zaufanie ${trust}% · ${trustLabel(trust)}</span>
             </button>
           </div>
         </div>`
     } else if (this.hubTab === 'season') {
       main = `
         <div class="career-season">
+          <section class="career-panel">
+            <h3>Cel zarządu</h3>
+            <div class="board-progress ${goalProg.onTrack ? 'on-track' : 'off-track'}">
+              <div class="board-progress-head">
+                <strong>${goalProg.exp.label}</strong>
+                <span>${place}. / cel ${goalProg.exp.targetPlace}.</span>
+              </div>
+              <p class="muted">${goalProg.exp.detail}</p>
+              <p class="board-status">${goalProg.statusText}</p>
+              <div class="trust-bar ${trustCls}" title="Zaufanie zarządu">
+                <i style="width:${trust}%"></i>
+              </div>
+              <p class="muted trust-caption">Zaufanie: ${trust}% · ${trustLabel(trust)}${
+                trust < WARN_TRUST_THRESHOLD
+                  ? ` · poniżej ${SACK_TRUST_THRESHOLD}% grozi zwolnienie po sezonie`
+                  : ''
+              }</p>
+            </div>
+          </section>
           <section class="career-panel">
             <h3>Analiza rywala</h3>
             ${
@@ -559,10 +609,28 @@ export class App {
       main = `
         <div class="career-office">
           <section class="career-panel">
+            <h3>Zarząd · ${club.name}</h3>
+            <div class="board-progress ${trustCls}">
+              <div class="board-progress-head">
+                <strong>${goalProg.exp.label}</strong>
+                <span>${trustLabel(trust)}</span>
+              </div>
+              <p>${goalProg.exp.detail}</p>
+              <div class="trust-bar ${trustCls}"><i style="width:${trust}%"></i></div>
+              <p class="muted trust-caption">Zaufanie zarządu: <strong>${trust}%</strong> · Ocena po sezonie vs cel top ${goalProg.exp.targetPlace}.</p>
+              ${
+                trust < WARN_TRUST_THRESHOLD
+                  ? `<p class="board-warn">Uwaga: kolejne niepowodzenie może oznaczać zwolnienie (próg ${SACK_TRUST_THRESHOLD}%).</p>`
+                  : `<p class="muted">Spełniaj cele, a zaufanie rośnie — i Twoja reputacja też.</p>`
+              }
+            </div>
+          </section>
+          <section class="career-panel">
             <h3>Profil trenera</h3>
             <p class="meta">${m.name} · reputacja ${m.reputation} · sezony ${m.seasonsManaged}</p>
             <p class="muted">${club.name} · budżet ${Math.round(team.budget).toLocaleString('pl-PL')}</p>
             <p class="muted">Taktyka: ${tac.formation} · ${planLabel(tac.plan)} · tempo ${tempoLabel(tac.tempo)}</p>
+            <p class="muted">Bilans sezonu: ${s.record.won}-${s.record.drawn}-${s.record.lost} · ${place}. miejsce</p>
           </section>
           <section class="career-panel">
             <h3>Dziennik</h3>
@@ -586,9 +654,9 @@ export class App {
           <div class="career-profile">
             <div class="career-profile-text">
               <strong>${m.name}</strong>
-              <span>${club.short} · ${place}.</span>
+              <span>${club.short} · ${place}. · zaufanie ${trust}%</span>
             </div>
-            <div class="career-rating">${Math.min(99, 55 + Math.round(m.reputation / 3))}</div>
+            <div class="career-rating ${trustCls}" title="Zaufanie zarządu">${trust}</div>
           </div>
         </header>
         <nav class="career-nav">${tabs}</nav>
@@ -1313,22 +1381,45 @@ export class App {
       r.nextLeagueId && r.nextLeagueId !== r.leagueId
         ? getLeague(r.nextLeagueId).name
         : league.name
+    const trustDelta =
+      r.boardTrustDelta != null
+        ? `${r.boardTrustDelta > 0 ? '+' : ''}${r.boardTrustDelta}`
+        : null
     return this.shell(
       `
       <section class="panel">
-        <h2>Sezon ${r.year}</h2>
+        <h2>${r.sacked ? 'Zwolniony' : `Sezon ${r.year}`}</h2>
         <p class="meta">${league.name} · <strong>${r.place}.</strong> miejsce · ${r.points} pkt</p>
         <p>Bilans: ${r.record.won}-${r.record.drawn}-${r.record.lost} · bramki ${r.record.goalsFor}:${r.record.goalsAgainst}</p>
+        ${
+          r.boardGoalLabel
+            ? `<div class="board-report ${r.sacked ? 'sacked' : ''}">
+                <p><strong>Cel zarządu:</strong> ${r.boardGoalLabel}</p>
+                <p>${r.boardSummary ?? ''}</p>
+                ${
+                  trustDelta != null
+                    ? `<p class="muted">Zaufanie: ${r.boardTrustBefore}% → ${r.boardTrustAfter}% (${trustDelta})</p>`
+                    : ''
+                }
+              </div>`
+            : ''
+        }
         <p>${r.narrative}</p>
         ${
-          r.promotion
-            ? `<p class="meta up">Awans → ${next}</p>`
-            : r.relegation
-              ? `<p class="meta down">Spadek → ${next}</p>`
-              : `<p class="muted">Kolejny sezon: ${next}</p>`
+          r.sacked
+            ? `<p class="meta down">Zarząd rozwiązał kontrakt. Szukaj nowego klubu.</p>`
+            : r.promotion
+              ? `<p class="meta up">Awans → ${next}</p>`
+              : r.relegation
+                ? `<p class="meta down">Spadek → ${next}</p>`
+                : `<p class="muted">Kolejny sezon: ${next}</p>`
         }
         <div class="actions">
-          <button class="btn primary" id="btn-next-season">Nowy sezon</button>
+          ${
+            r.sacked
+              ? `<button class="btn primary" id="btn-seek-club">Szukaj nowego klubu</button>`
+              : `<button class="btn primary" id="btn-next-season">Nowy sezon</button>`
+          }
         </div>
       </section>`,
       'Raport',
@@ -1338,6 +1429,9 @@ export class App {
   private bindSeasonReport(): void {
     this.root.querySelector('#btn-next-season')?.addEventListener('click', () => {
       this.go(() => startNextSeason(this.state))
+    })
+    this.root.querySelector('#btn-seek-club')?.addEventListener('click', () => {
+      this.go(() => seekNewClub(this.state))
     })
   }
 }

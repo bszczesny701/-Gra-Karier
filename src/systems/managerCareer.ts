@@ -30,6 +30,13 @@ import {
 import { createTeamState, pickDefaultLineup } from './squadGen'
 import { applyFormationDefaultOrder, validateLineup } from './tactics'
 import { playerTablePosition, sortedStandings, standingsAroundPlayer } from './standings'
+import {
+  applyBoardTrust,
+  boardExpectationForClub,
+  boardTrustDelta,
+  initialBoardTrust,
+  shouldSack,
+} from './board'
 
 export { playerTablePosition, sortedStandings, standingsAroundPlayer }
 export { beginMatchday }
@@ -73,22 +80,50 @@ export function selectClub(state: GameState, clubId: string): void {
     state.clubLeagueIds = initClubLeagueMap()
   }
   const club = getClub(clubId)
-  const year = new Date().getFullYear()
-  state.manager = {
-    name: state.draftManagerName || 'Trener',
-    reputation: 35,
-    seasonsManaged: 0,
-    clubId,
+  const leagueId = state.clubLeagueIds[clubId]
+  const year = state.seasonReport?.sacked
+    ? state.seasonReport.year + 1
+    : (state.season?.year ?? new Date().getFullYear())
+  const returning = Boolean(state.manager && !state.team)
+  const trust = initialBoardTrust(clubId, leagueId)
+  const exp = boardExpectationForClub(clubId, leagueId)
+
+  if (returning && state.manager) {
+    state.manager.clubId = clubId
+    state.manager.boardTrust = trust
+  } else {
+    state.manager = {
+      name: state.draftManagerName || state.manager?.name || 'Trener',
+      reputation: 35,
+      boardTrust: trust,
+      seasonsManaged: 0,
+      clubId,
+    }
   }
+
   state.team = createTeamState(clubId)
   state.season = createManagerSeason(state, clubId, year)
   state.season.teamChemistry = state.team.teamChemistry
   state.seasonReport = null
+  state.liveMatch = null
   state.screen = 'hub'
   pushLog(
     state,
-    `${state.manager.name} obejmuje ${club.name} (${formatStars(club.stars)} ${starsLabel(club.stars)}).`,
+    `${state.manager!.name} obejmuje ${club.name} (${formatStars(club.stars)} ${starsLabel(club.stars)}). Cel zarządu: ${exp.label}.`,
   )
+}
+
+/** Po zwolnieniu — wybór nowego klubu (zachowuje karierę trenera). */
+export function seekNewClub(state: GameState): void {
+  if (state.manager) {
+    state.draftManagerName = state.manager.name
+    state.manager.clubId = ''
+  }
+  state.team = null
+  state.season = null
+  state.liveMatch = null
+  /* seasonReport zostaje — rok i kontekst zwolnienia */
+  state.screen = 'pickClub'
 }
 
 export function openLineup(state: GameState): void {
@@ -205,20 +240,33 @@ export function finalizeSeason(state: GameState): void {
   )
 
   manager.seasonsManaged += 1
-  manager.reputation = Math.max(
-    10,
-    Math.min(
-      99,
-      manager.reputation +
-        (place <= 2 ? 8 : place <= 6 ? 3 : place >= season.clubIds.length - 2 ? -5 : 1),
-    ),
-  )
+  if (manager.boardTrust == null) {
+    manager.boardTrust = initialBoardTrust(season.clubId, season.leagueId)
+  }
+
+  const exp = boardExpectationForClub(season.clubId, season.leagueId)
+  const trustBefore = manager.boardTrust
+  const { delta, summary } = boardTrustDelta(place, exp, relegation)
+  manager.boardTrust = applyBoardTrust(trustBefore, delta)
+
+  const repDelta =
+    place <= 2 ? 8 : place <= 6 ? 3 : place >= season.clubIds.length - 2 ? -5 : 1
+  const repBoard =
+    delta >= 15 ? 4 : delta >= 5 ? 1 : delta <= -20 ? -6 : delta < 0 ? -3 : 0
+  manager.reputation = Math.max(10, Math.min(99, manager.reputation + repDelta + repBoard))
+
+  const sacked = shouldSack(manager.boardTrust)
+  if (sacked) {
+    manager.reputation = Math.max(10, manager.reputation - 8)
+  }
 
   const league = getLeague(season.leagueId)
   let narrative = `Sezon ${season.year}: ${place}. miejsce w ${league.name} (${row?.points ?? 0} pkt). `
-  if (promotion) narrative += 'Awans!'
-  else if (relegation) narrative += 'Spadek.'
-  else narrative += 'Zostajesz w lidze.'
+  if (promotion) narrative += 'Awans! '
+  else if (relegation) narrative += 'Spadek. '
+  else narrative += 'Zostajesz w lidze. '
+  narrative += summary
+  if (sacked) narrative += ' Zarząd zwalnia trenera.'
 
   const report: SeasonReport = {
     year: season.year,
@@ -231,6 +279,12 @@ export function finalizeSeason(state: GameState): void {
     relegation,
     narrative,
     nextLeagueId,
+    boardSummary: summary,
+    boardTrustBefore: trustBefore,
+    boardTrustAfter: manager.boardTrust,
+    boardTrustDelta: delta,
+    boardGoalLabel: exp.label,
+    sacked,
   }
   state.seasonReport = report
   state.screen = 'seasonReport'
@@ -239,7 +293,11 @@ export function finalizeSeason(state: GameState): void {
 
 export function startNextSeason(state: GameState): void {
   const manager = state.manager!
-  const team = state.team!
+  if (state.seasonReport?.sacked || !state.team) {
+    seekNewClub(state)
+    return
+  }
+  const team = state.team
   const prev = state.season!
   const year = prev.year + 1
 
@@ -265,7 +323,11 @@ export function startNextSeason(state: GameState): void {
   state.seasonReport = null
   state.screen = 'hub'
   const league = getLeague(state.season.leagueId)
-  pushLog(state, `Nowy sezon ${year} — ${getClub(manager.clubId).name} w ${league.name}.`)
+  const exp = boardExpectationForClub(manager.clubId, state.season.leagueId)
+  pushLog(
+    state,
+    `Nowy sezon ${year} — ${getClub(manager.clubId).name} w ${league.name}. Cel: ${exp.label}.`,
+  )
 }
 
 export function playNextMatchFromHub(state: GameState): string | null {

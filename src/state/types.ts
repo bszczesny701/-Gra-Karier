@@ -79,8 +79,20 @@ export interface Attributes {
 export interface Manager {
   name: string
   reputation: number
+  /** Zaufanie zarządu 0–100 */
+  boardTrust: number
   seasonsManaged: number
   clubId: string
+}
+
+export type BoardGoalId = 'title' | 'podium' | 'europe' | 'mid' | 'survive'
+
+export interface BoardExpectation {
+  goal: BoardGoalId
+  targetPlace: number
+  minAcceptablePlace: number
+  label: string
+  detail: string
 }
 
 export interface SquadPlayer {
@@ -276,6 +288,13 @@ export interface SeasonReport {
   relegation: boolean
   narrative: string
   nextLeagueId: string | null
+  /** Ocena zarządu po sezonie */
+  boardSummary?: string
+  boardTrustBefore?: number
+  boardTrustAfter?: number
+  boardTrustDelta?: number
+  boardGoalLabel?: string
+  sacked?: boolean
 }
 
 export interface GameState {
@@ -294,7 +313,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 107
+export const SAVE_VERSION = 108
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
