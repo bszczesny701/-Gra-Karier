@@ -461,18 +461,12 @@ export class App {
 
     let main = ''
     if (this.hubTab === 'squad') {
-      if (!this.state.news) this.state.news = []
-      const newsHtml =
-        this.state.news
-          .slice(0, 5)
-          .map(
-            (n) => `<article class="news-item kind-${n.kind}">
-              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
-              <strong class="news-item-head">${n.headline}</strong>
-              <p class="news-item-body">${n.body}</p>
-            </article>`,
-          )
-          .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
+      const latestNews = this.state.news?.[0]
+      const newsSub = latestNews
+        ? latestNews.headline.length > 42
+          ? `${latestNews.headline.slice(0, 40)}…`
+          : latestNews.headline
+        : 'Liga i kuluary'
 
       main = `
         <div class="career-grid">
@@ -525,18 +519,10 @@ export class App {
                 <span class="tile-title">Taktyka</span>
                 <span class="tile-sub">${planLabel(tac.plan)} · ${widthLabel(tac.width)} · press ${pressLabel(tac.press)}</span>
               </button>
-              <div class="career-tile tile-office tile-office-news" aria-label="Biuro — wiadomości">
-                <div class="tile-office-head">
-                  <div>
-                    <span class="tile-title">Biuro</span>
-                    <span class="tile-sub">Wiadomości · zaufanie ${trust}%</span>
-                  </div>
-                  <button type="button" class="btn ghost compact" data-hub-tab="office">Skrzynka${
-                    unreadMailCount(this.state) > 0 ? ` · ${unreadMailCount(this.state)}` : ''
-                  }</button>
-                </div>
-                <div class="tile-news-list">${newsHtml}</div>
-              </div>
+              <button type="button" class="career-tile tile-office" data-hub-tab="office">
+                <span class="tile-title">Wiadomości</span>
+                <span class="tile-sub">${newsSub}</span>
+              </button>
             </div>
           </div>
         </div>`
@@ -658,8 +644,28 @@ export class App {
           })
           .join('') || `<p class="muted">Skrzynka pusta — maile pojawią się po meczach.</p>`
 
+      if (!this.state.news) this.state.news = []
+      const newsHtml =
+        this.state.news
+          .slice(0, 10)
+          .map(
+            (n) => `<article class="news-item kind-${n.kind}">
+              <div class="news-item-tag">${newsKindLabel(n.kind)}${n.round ? ` · kol. ${n.round}` : ''}</div>
+              <strong class="news-item-head">${n.headline}</strong>
+              <p class="news-item-body">${n.body}</p>
+            </article>`,
+          )
+          .join('') || `<p class="muted">Brak wiadomości — wróć po kolejce.</p>`
+
       main = `
         <div class="career-office">
+          <section class="career-panel news-office-panel">
+            <div class="mail-panel-head">
+              <h3>Wiadomości</h3>
+              <span class="muted">Liga i kuluary</span>
+            </div>
+            <div class="career-news-list office-news-list">${newsHtml}</div>
+          </section>
           <section class="career-panel mail-panel">
             <div class="mail-panel-head">
               <h3>Skrzynka pocztowa${unread ? ` · ${unread} nowe` : ''}</h3>
