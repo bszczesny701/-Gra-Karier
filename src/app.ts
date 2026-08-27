@@ -96,7 +96,7 @@ import {
 } from './systems/calendar'
 import { normalizeSquadPlayer, normalizeTeamSquad, updateWantsToLeave, averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
-import { clearSave, hasSave, loadState, saveState } from './state/gameState'
+import { clearSave, clearSlot, getActiveSlot, hasSave, listSaveSlots, loadState, saveState, switchToSlot } from './state/gameState'
 import type {
   Formation,
   GamePlan,
@@ -297,15 +297,35 @@ export class App {
   }
 
   private homeHtml(): string {
+    const slots = listSaveSlots()
+    const active = getActiveSlot()
     const canContinue = hasSave()
+    const slotCards = slots
+      .map((s) => {
+        const clubLabel = s.clubShort ? getClub(s.clubShort).short : '—'
+        const info = s.occupied
+          ? `${s.managerName ?? 'Trener'} · ${clubLabel}${s.year ? ` · ${s.year}` : ''}`
+          : 'Pusty'
+        return `<button type="button" class="save-slot ${s.index === active ? 'active' : ''} ${s.occupied ? 'filled' : ''}" data-slot="${s.index}">
+          <strong>Slot ${s.index + 1}</strong>
+          <span class="muted">${info}</span>
+        </button>`
+      })
+      .join('')
     return this.shell(
       `
       <section class="hero-panel">
         <h1>Prowadź zespół</h1>
         <p class="muted">Wybierz klub, ustaw skład i taktykę, graj sezon ligowy mecz po meczu.</p>
+        <div class="save-slots">${slotCards}</div>
         <div class="actions">
           ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
           <button class="btn ${canContinue ? 'ghost' : 'primary'}" id="btn-new">Nowa kariera</button>
+          ${
+            canContinue
+              ? `<button class="btn ghost danger" id="btn-clear-slot">Wyczyść aktywny slot</button>`
+              : ''
+          }
         </div>
       </section>`,
       'Menu',
@@ -313,6 +333,13 @@ export class App {
   }
 
   private bindHome(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-slot]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.slot)
+        this.state = switchToSlot(idx)
+        this.render()
+      })
+    })
     this.root.querySelector('#btn-continue')?.addEventListener('click', () => {
       this.state = loadState()
       if (!this.state.manager) this.state.screen = 'home'
@@ -323,6 +350,11 @@ export class App {
       clearSave()
       this.state = createEmptyState()
       this.go(() => startManagerCreate(this.state))
+    })
+    this.root.querySelector('#btn-clear-slot')?.addEventListener('click', () => {
+      clearSlot(getActiveSlot())
+      this.state = createEmptyState()
+      this.render()
     })
   }
 
@@ -460,7 +492,12 @@ export class App {
       const opp = getClub(oppId)
       const oppPow = clubPowerPreview(oppId, this.state)
       const home = upcoming.homeId === s.clubId
-      const comp = upcoming.competition === 'cup' ? 'Puchar' : `Liga · kol. ${(upcoming.leagueRound ?? s.roundIndex) + 1}`
+      const comp =
+        upcoming.competition === 'cup'
+          ? 'Puchar'
+          : upcoming.competition === 'europa'
+            ? 'Europa'
+            : `Liga · kol. ${(upcoming.leagueRound ?? s.roundIndex) + 1}`
       rivalTileInner = `
         <div class="tile-title">Następny mecz</div>
         <div class="tile-rival-row">
@@ -619,7 +656,8 @@ export class App {
               if (d.activity === 'match' && d.matchId && s.matches[d.matchId]) {
                 const m = s.matches[d.matchId]!
                 const opp = m.homeId === s.clubId ? m.awayId : m.homeId
-                const comp = m.competition === 'cup' ? 'PP' : 'Liga'
+                const comp =
+                  m.competition === 'cup' ? 'PP' : m.competition === 'europa' ? 'EU' : 'Liga'
                 detail = `${comp} vs ${getClub(opp).short}`
               }
               return `<button type="button" class="cal-day activity-${d.activity}" data-cal-day="${d.weekday}" ${d.activity === 'training' ? 'data-training="1"' : ''} ${d.activity === 'match' && d.matchId ? `data-play-match="${d.matchId}"` : ''}>
@@ -649,6 +687,25 @@ export class App {
             .join('')}</div>`
         : `<p class="muted">Puchar Polski od poziomu I ligi.</p>`
 
+      const europa = s.europa
+      const europaMini = europa
+        ? `<div class="cup-ladder">${europa.yourPath
+            .map((step, i) => {
+              const cls =
+                step.result === 'won' || step.result === 'bye'
+                  ? 'won'
+                  : step.result === 'lost'
+                    ? 'lost'
+                    : i === europa.roundIndex && !europa.eliminated
+                      ? 'now'
+                      : step.result === 'pending'
+                        ? 'idle'
+                        : 'done'
+              return `<span class="cup-step ${cls}" title="${step.roundName}${step.opponentId ? ` vs ${getClub(step.opponentId).short}` : ''}">${step.roundName.replace(' finału', '').replace('Ćwierć', '1/4').replace('Pół', '1/2')}</span>${i < europa.yourPath.length - 1 ? '<span class="cup-arrow">→</span>' : ''}`
+            })
+            .join('')}</div>`
+        : `<p class="muted">Europa: Ekstraklasa (★3+) lub top 6 / PP.</p>`
+
       main = `
         <div class="career-calendar-screen">
           <section class="career-panel">
@@ -677,6 +734,10 @@ export class App {
           <section class="career-panel">
             <h3>Puchar Polski</h3>
             ${cupMini}
+          </section>
+          <section class="career-panel">
+            <h3>Europa</h3>
+            ${europaMini}
           </section>
         </div>`
     } else if (this.hubTab === 'news') {
@@ -744,6 +805,30 @@ export class App {
                   : `<p class="muted">Dostępny od I ligi / Ekstraklasy.</p>`
               }
             </section>
+            <section class="career-panel">
+              <h3>Europa</h3>
+              ${
+                s.europa
+                  ? `<div class="cup-ladder">${s.europa.yourPath
+                      .map((step, i) => {
+                        const cls =
+                          step.result === 'won' || step.result === 'bye'
+                            ? 'won'
+                            : step.result === 'lost'
+                              ? 'lost'
+                              : i === s.europa!.roundIndex && !s.europa!.eliminated
+                                ? 'now'
+                                : 'idle'
+                        const tip = step.opponentId
+                          ? `${step.roundName} vs ${getClub(step.opponentId).short}`
+                          : step.roundName
+                        return `<span class="cup-step ${cls}" title="${tip}">${step.roundName}</span>${i < s.europa!.yourPath.length - 1 ? '<span class="cup-arrow">→</span>' : ''}`
+                      })
+                      .join('')}</div>
+                    <p class="muted" style="margin-top:8px">${s.europa.eliminated ? 'Odpadłeś z Europy.' : s.europa.championId === s.clubId ? 'Mistrz Europy!' : 'Twoja ścieżka w Europie.'}</p>`
+                  : `<p class="muted">Wymaga Ekstraklasy (★3+ na start) lub top 6 / PP.</p>`
+              }
+            </section>
             <section class="career-panel career-panel-table">
               <h3>Tabela · ${league.name}</h3>
               <table class="mini-table full-table names-full">
@@ -768,7 +853,9 @@ export class App {
                     const compLabel =
                       upcoming.competition === 'cup'
                         ? 'Puchar Polski'
-                        : `Kolejka ${(upcoming.leagueRound ?? s.roundIndex) + 1}/${s.rounds.length}`
+                        : upcoming.competition === 'europa'
+                          ? 'Puchar Europy'
+                          : `Kolejka ${(upcoming.leagueRound ?? s.roundIndex) + 1}/${s.rounds.length}`
                     return `
                     <div class="rival-preview career-rival">
                       <div class="rival-head">
@@ -952,7 +1039,7 @@ export class App {
               <div class="trust-bar ${trustCls}"><i style="width:${trust}%"></i></div>
               <p class="muted trust-caption">Zarząd <strong>${trust}%</strong> · kibice <strong>${Math.round(m.fanTrust ?? trust)}%</strong></p>
               <div class="trust-bar fan"><i style="width:${Math.round(m.fanTrust ?? trust)}%"></i></div>
-              <p class="muted">Trening: ${daysUntilTraining(this.state) === 0 ? 'gotowy' : `za ${daysUntilTraining(this.state)} dni`} · trudność ${this.state.settings?.difficulty ?? 'normal'}</p>
+              <p class="muted">Trening: ${daysUntilTraining(this.state) === 0 ? 'gotowy' : `za ${daysUntilTraining(this.state)} dni`} · trudność ${this.state.settings?.difficulty ?? 'normal'}${m.europaQualified ? ' · Europa ✓' : ''}</p>
               ${
                 trust < WARN_TRUST_THRESHOLD
                   ? `<p class="board-warn">Poniżej ${SACK_TRUST_THRESHOLD}% po sezonie — zwolnienie.</p>`
@@ -980,6 +1067,19 @@ export class App {
                 </select>
               </label>
             </div>
+            <div class="save-slots office-slots" style="margin-top:12px">
+              ${listSaveSlots()
+                .map((s) => {
+                  const active = getActiveSlot() === s.index
+                  const clubLabel = s.clubShort ? getClub(s.clubShort).short : '—'
+                  return `<button type="button" class="save-slot ${active ? 'active' : ''}" data-office-slot="${s.index}">
+                    <strong>Slot ${s.index + 1}${active ? ' · aktywny' : ''}</strong>
+                    <span class="muted">${s.occupied ? `${s.managerName ?? ''} · ${clubLabel}` : 'Pusty'}</span>
+                  </button>`
+                })
+                .join('')}
+            </div>
+            <p class="muted" style="margin-top:6px">Zapisy lokalne — przełącz slot wraca do menu (aktualny zapis zostaje w swoim slocie).</p>
           </section>
           <section class="career-panel">
             <h3>Finanse</h3>
@@ -1273,6 +1373,17 @@ export class App {
       this.go(() => {
         if (!this.state.settings) this.state.settings = { difficulty: 'normal' }
         this.state.settings.difficulty = v
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-office-slot]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.officeSlot)
+        if (idx === getActiveSlot()) return
+        saveState(this.state)
+        this.state = switchToSlot(idx)
+        if (!this.state.manager) this.state.screen = 'home'
+        else this.state.screen = 'hub'
+        this.render()
       })
     })
     const applyTf = () => {
@@ -2313,6 +2424,7 @@ export class App {
         <p class="meta">${league.name} · <strong>${r.place}.</strong> miejsce · ${r.points} pkt</p>
         <p>Bilans: ${r.record.won}-${r.record.drawn}-${r.record.lost} · bramki ${r.record.goalsFor}:${r.record.goalsAgainst}</p>
         ${r.cupSummary ? `<p class="meta">${r.cupSummary}</p>` : ''}
+        ${r.europaSummary ? `<p class="meta">${r.europaSummary}</p>` : ''}
         ${
           r.boardGoalLabel
             ? `<div class="board-report ${r.sacked ? 'sacked' : ''}">

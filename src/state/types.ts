@@ -90,6 +90,10 @@ export interface Manager {
   lastBoardReviewRound?: number
   /** Ostatnia kolejka z ofertą pracy (cooldown) */
   lastJobOfferRound?: number
+  /** Kwalifikacja do Europy na kolejny sezon */
+  europaQualified?: boolean
+  /** Licznik meczów od ostatniej konferencji prasowej */
+  matchesSincePress?: number
 }
 
 export type BoardGoalId = 'title' | 'podium' | 'europe' | 'mid' | 'survive'
@@ -241,6 +245,9 @@ export interface ManagerMatchResult {
   drawn: boolean
   keyRatings: Array<{ name: string; rating: number }>
   chemistryAfter: number
+  competition?: CompetitionId
+  /** Liczba czerwonych Twoich w meczu (osłabienie) */
+  yourReds?: number
 }
 
 export type MatchEventKind =
@@ -267,7 +274,7 @@ export interface MatchEvent {
 
 export type LiveHalf = '1' | 'ht' | '2' | 'done'
 export type MatchSpeed = 1 | 2 | 4
-export type CompetitionId = 'league' | 'cup'
+export type CompetitionId = 'league' | 'cup' | 'europa'
 
 /** Slot boiska w meczu — null = pusty (czerwona / kontuzja bez zmiany). */
 export type LivePitchSlot = string | null
@@ -407,6 +414,8 @@ export interface SeasonState {
   calendar: SeasonCalendar
   matches: Record<string, ScheduledMatch>
   cup: CupState | null
+  /** Puchar Europy (lite KO) */
+  europa: CupState | null
 }
 
 export interface SeasonReport {
@@ -429,6 +438,7 @@ export interface SeasonReport {
   sacked?: boolean
   /** Podsumowanie Pucharu Polski */
   cupSummary?: string
+  europaSummary?: string
   financeSummary?: string
 }
 
@@ -554,7 +564,10 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 117
+export const SAVE_SLOTS_META_KEY = 'gra-karier-slots-meta'
+export const SAVE_ACTIVE_SLOT_KEY = 'gra-karier-active-slot'
+export const SAVE_SLOT_COUNT = 3
+export const SAVE_VERSION = 118
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

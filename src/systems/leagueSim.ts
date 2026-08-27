@@ -148,6 +148,7 @@ export function createManagerSeason(
     calendar: { weekIndex: 0, weeks: [] },
     matches: {},
     cup: null,
+    europa: null,
   }
 }
 

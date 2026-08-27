@@ -1,6 +1,7 @@
 import type { GameState, ScheduledMatch } from '../state/types'
 import { canAdvanceWeek, currentWeek, nextUserMatch } from './calendar'
 import { applyCupMatchResult, simulateCupScore } from './cup'
+import { applyEuropaMatchResult } from './europa'
 import {
   applyResultToStandings,
   nextRoundFixtures,
@@ -39,6 +40,11 @@ function resolveScheduledAi(state: GameState, m: ScheduledMatch): void {
   if (m.competition === 'cup') {
     const { homeGoals, awayGoals } = simulateCupScore(m.homeId, m.awayId, state)
     applyCupMatchResult(state.season!, m.id, homeGoals, awayGoals)
+    return
+  }
+  if (m.competition === 'europa') {
+    const { homeGoals, awayGoals } = simulateCupScore(m.homeId, m.awayId, state)
+    applyEuropaMatchResult(state.season!, m.id, homeGoals, awayGoals)
     return
   }
   const { homeGoals, awayGoals } = simulateAiMatch(m.homeId, m.awayId, {}, state)

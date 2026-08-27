@@ -17,25 +17,51 @@ function q(id: string, text: string) {
   return { id, text, answers: TONES }
 }
 
+/** Konferencja nie po każdym meczu — tylko przy ważnych momentach / co ~3–4 mecze. */
+export function shouldHoldPressConference(state: GameState): boolean {
+  const last = state.season?.lastMatch
+  const m = state.manager
+  if (!last || !m) return false
+
+  const since = m.matchesSincePress ?? 99
+  const gapOk = since >= 3
+
+  const heavyLoss = !last.won && !last.drawn && last.theirGoals - last.yourGoals >= 2
+  const knockout =
+    last.competition === 'cup' ||
+    last.competition === 'europa' ||
+    Boolean(last.yourReds && last.yourReds > 0)
+  const bigWin = last.won && last.yourGoals - last.theirGoals >= 3
+
+  if (knockout || heavyLoss || bigWin) return true
+  if (!gapOk) return false
+  // ~30% po normalnym meczu gdy minęły ≥3 mecze
+  return Math.random() < 0.32
+}
+
 export function buildPressSession(state: GameState): PressSession | null {
   const last = state.season?.lastMatch
   if (!last) return null
+  if (!shouldHoldPressConference(state)) return null
+
   const context: PressSession['context'] = last.won ? 'win' : last.drawn ? 'draw' : 'loss'
   const questions =
     context === 'win'
-      ? [
-          q('w1', 'Jak oceniasz dzisiejsze zwycięstwo?'),
-          q('w2', 'Czy to przełom w sezonie, czy za wcześnie na takie słowa?'),
-        ]
+      ? [q('w1', 'Jak oceniasz dzisiejsze zwycięstwo?')]
       : context === 'draw'
-        ? [
-            q('d1', 'Remis — punkt zysku czy dwa stracone?'),
-            q('d2', 'Kibice oczekują więcej. Co im powiesz?'),
-          ]
-        : [
-            q('l1', 'Porażka boli. Gdzie leży przyczyna?'),
-            q('l2', 'Czy zarząd powinien się martwić o Twoją pozycję?'),
-          ]
+        ? [q('d1', 'Remis — punkt zysku czy dwa stracone?')]
+        : [q('l1', 'Porażka boli. Gdzie leży przyczyna?')]
+  if (last.yourReds && last.yourReds > 0 && context !== 'win') {
+    questions.push(q('card', 'Czerwona kartka zmieniła mecz. Co poszło nie tak?'))
+  } else if (Math.random() < 0.45) {
+    questions.push(
+      context === 'win'
+        ? q('w2', 'Czy to przełom w sezonie, czy za wcześnie na takie słowa?')
+        : context === 'draw'
+          ? q('d2', 'Kibice oczekują więcej. Co im powiesz?')
+          : q('l2', 'Czy zarząd powinien się martwić o Twoją pozycję?'),
+    )
+  }
   return { questions, index: 0, answered: [], context }
 }
 
@@ -126,6 +152,7 @@ function finishPressConference(state: GameState): void {
     state.screen = 'hub'
     return
   }
+  m.matchesSincePress = 0
   const tones = press.answered.map((a) => a.tone).join(', ')
   pushMail(state, {
     kind: 'press',

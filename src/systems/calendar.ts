@@ -8,6 +8,7 @@ import type {
   TransferWindow,
 } from '../state/types'
 import { createCupState } from './cup'
+import { createEuropaState } from './europa'
 
 const WEEKDAY_SHORT = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'] as const
 
@@ -64,6 +65,7 @@ function planCupLeagueRounds(leagueRoundCount: number, cupRounds: number): numbe
 export function buildSeasonSchedule(state: GameState, season: SeasonState): void {
   const matches: Record<string, ScheduledMatch> = {}
   const cup = createCupState(state, season.clubId, matches)
+  const europa = createEuropaState(state, season.clubId, season.leagueId, matches)
   const weeks: SeasonWeek[] = []
   let wi = 0
 
@@ -73,8 +75,16 @@ export function buildSeasonSchedule(state: GameState, season: SeasonState): void
   const leagueRounds = season.rounds
   const mid = Math.floor(leagueRounds.length / 2)
   const cupAtLeague = cup ? planCupLeagueRounds(leagueRounds.length, cup.totalRounds) : []
+  const europaAtLeague = europa
+    ? planCupLeagueRounds(leagueRounds.length, europa.totalRounds).map((lr, i) =>
+        Math.min(leagueRounds.length - 1, Math.max(0, lr + (i % 2 === 0 ? 1 : 0))),
+      )
+    : []
   if (cup) {
     cup.calendarWeekForRound = Array(cup.totalRounds).fill(-1)
+  }
+  if (europa) {
+    europa.calendarWeekForRound = Array(europa.totalRounds).fill(-1)
   }
 
   for (let li = 0; li < leagueRounds.length; li++) {
@@ -129,6 +139,25 @@ export function buildSeasonSchedule(state: GameState, season: SeasonState): void
       }
     }
 
+    const europaRoundIdx = europaAtLeague.indexOf(li)
+    if (europa && europaRoundIdx >= 0) {
+      europa.calendarWeekForRound[europaRoundIdx] = wi
+      if (europaRoundIdx === 0) {
+        for (const id of europa.rounds[0] ?? []) {
+          if (!weekMatchIds.includes(id)) weekMatchIds.push(id)
+        }
+        const yourEu = (europa.rounds[0] ?? [])
+          .map((id) => matches[id]!)
+          .find((m) => m.homeId === season.clubId || m.awayId === season.clubId)
+        if (yourEu && !dayPatch[3]) {
+          dayPatch[3] = { weekday: 3, activity: 'match', matchId: yourEu.id }
+        } else if (yourEu && dayPatch[3]) {
+          // Czwartek zajęty treningiem — i tak nadpisujemy meczem
+          dayPatch[3] = { weekday: 3, activity: 'match', matchId: yourEu.id }
+        }
+      }
+    }
+
     weeks.push(
       makeWeek(wi++, `Kolejka ${li + 1}`, null, makeDays(dayPatch), weekMatchIds, li),
     )
@@ -138,6 +167,7 @@ export function buildSeasonSchedule(state: GameState, season: SeasonState): void
   season.matches = matches
   season.calendar = calendar
   season.cup = cup
+  season.europa = europa
 }
 
 export function currentWeek(season: SeasonState): SeasonWeek | null {

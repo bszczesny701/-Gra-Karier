@@ -2172,6 +2172,36 @@ h3 {
 .mail-row-kind.kind-job { color: #e8c060; }
 .news-card.kind-press .news-card-tag { color: #c9a0e8; }
 
+.save-slots {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.save-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+  color: inherit;
+  cursor: pointer;
+}
+
+.save-slot.active {
+  border-color: rgba(90, 180, 255, 0.55);
+  background: rgba(40, 70, 100, 0.4);
+}
+
+.save-slot.filled strong {
+  color: #dff0ff;
+}
+
+
 
 
 .player-leave-badge {

@@ -41,6 +41,7 @@ import {
 } from './board'
 import { seedOpeningNews } from './news'
 import { cupSummaryText } from './cup'
+import { europaSummaryText, updateEuropaQualification } from './europa'
 import { buildSeasonSchedule } from './calendar'
 import { applySeasonPrize, normalizeTeamFinance, weeklyWageBill } from './finance'
 import { processContractExpiries } from './contracts'
@@ -107,6 +108,7 @@ export { tickAiWorldTransfers } from './transfers'
 export { buildPressSession, answerPressQuestion, ensureFanTrust } from './press'
 export { maybeSpawnJobOffer, acceptJobOffer, rejectJobOffer } from './jobOffers'
 export type { AttackInstruction, DefendInstruction, Difficulty } from '../state/types'
+export { europaSummaryText } from './europa'
 
 export function polishLeagues() {
   return LEAGUES.filter((l) => l.country === 'PL').sort((a, b) => b.tier - a.tier)
@@ -148,6 +150,10 @@ export function selectClub(state: GameState, clubId: string): void {
     state.manager.clubId = clubId
     state.manager.boardTrust = trust
     state.manager.fanTrust = Math.max(20, Math.min(85, trust + (Math.floor(Math.random() * 11) - 5)))
+    state.manager.matchesSincePress = 99
+    if (state.manager.europaQualified == null) {
+      state.manager.europaQualified = leagueId === 'liga-1' && club.stars >= 3
+    }
   } else {
     state.manager = {
       name: state.draftManagerName || state.manager?.name || 'Trener',
@@ -156,6 +162,8 @@ export function selectClub(state: GameState, clubId: string): void {
       fanTrust: Math.max(20, Math.min(85, trust + (Math.floor(Math.random() * 11) - 5))),
       seasonsManaged: 0,
       clubId,
+      europaQualified: leagueId === 'liga-1' && club.stars >= 3,
+      matchesSincePress: 99,
     }
   }
 
@@ -343,12 +351,16 @@ export function finalizeSeason(state: GameState): void {
 
   const league = getLeague(season.leagueId)
   const cupLine = cupSummaryText(season)
+  const europaLine = europaSummaryText(season)
+  updateEuropaQualification(state, place)
   const prize = state.team ? applySeasonPrize(state, place) : 0
   let narrative = `Sezon ${season.year}: ${place}. miejsce w ${league.name} (${row?.points ?? 0} pkt). `
   if (promotion) narrative += 'Awans! '
   else if (relegation) narrative += 'Spadek. '
   else narrative += 'Zostajesz w lidze. '
   if (cupLine) narrative += ` ${cupLine}`
+  if (europaLine) narrative += ` ${europaLine}`
+  if (manager.europaQualified) narrative += ' Kwalifikacja do Europy na kolejny sezon.'
   if (prize) narrative += ` Nagroda: ${prize.toLocaleString('pl-PL')} zł.`
   narrative += ` ${summary}`
   if (sacked) narrative += ' Zarząd zwalnia trenera.'
@@ -371,6 +383,7 @@ export function finalizeSeason(state: GameState): void {
     boardGoalLabel: exp.label,
     sacked,
     cupSummary: cupLine ?? undefined,
+    europaSummary: europaLine ?? undefined,
     financeSummary: state.team
       ? `Budżet ${Math.round(state.team.budget).toLocaleString('pl-PL')} · płace ${weeklyWageBill(state.team).toLocaleString('pl-PL')}/tyg. · bilans +${Math.round(state.team.seasonIncome).toLocaleString('pl-PL')} / −${Math.round(state.team.seasonExpense).toLocaleString('pl-PL')}`
       : undefined,

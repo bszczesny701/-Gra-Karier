@@ -23,6 +23,7 @@ import { deliverPostMatchMail, deliverBoardReviewMail } from './mailbox'
 import { publishYourMatchNews } from './news'
 import { formationFit } from './tactics'
 import { applyCupMatchResult } from './cup'
+import { applyEuropaMatchResult } from './europa'
 import { nextUserMatch } from './calendar'
 import { maybeBoardReview } from './board'
 import { updateWantsToLeave, normalizeSquadPlayer } from './squadGen'
@@ -340,7 +341,8 @@ export function createLiveMatch(
     matchId,
     competition,
   }
-  const tag = competition === 'cup' ? 'Puchar Polski' : 'Liga'
+  const tag =
+    competition === 'cup' ? 'Puchar Polski' : competition === 'europa' ? 'Europa' : 'Liga'
   pushEvent(live, 'kickoff', `${tag}: początek meczu vs ${getClub(opponentId).name}.`)
   return live
 }
@@ -498,8 +500,22 @@ export function tickLiveMinute(state: GameState): boolean {
   const youAtt = yourPow + (isHome ? 1.5 : 0) + live.moraleBoost * 0.5 + mods.you
   const themAtt = oppPow + (isHome ? 0 : 1.2) - live.moraleBoost * 0.3 + mods.them
 
-  const youChance = clampFloat((0.006 + (youAtt - themAtt) / 900) * mods.chanceYou, 0.003, 0.032)
-  const themChance = clampFloat((0.006 + (themAtt - youAtt) / 900) * mods.chanceThem, 0.003, 0.032)
+  // Osłabienie po czerwonej / kontuzji bez zmiany: więcej szans rywala
+  const menOnPitch = pitchIds(live).length
+  const menDown = Math.max(0, 11 - menOnPitch)
+  const understrengthThem = 1 + menDown * 0.42
+  const understrengthYou = Math.max(0.55, 1 - menDown * 0.14)
+
+  const youChance = clampFloat(
+    (0.006 + (youAtt - themAtt) / 900) * mods.chanceYou * understrengthYou,
+    0.002,
+    0.032,
+  )
+  const themChance = clampFloat(
+    (0.006 + (themAtt - youAtt) / 900) * mods.chanceThem * understrengthThem,
+    0.003,
+    menDown > 0 ? 0.055 : 0.032,
+  )
 
   let scored = false
   if (chance(youChance)) {
@@ -542,14 +558,14 @@ export function finishLiveMatch(state: GameState): void {
   const season = state.season!
   const team = state.team!
   const clubId = season.clubId
-  const isCup = live.competition === 'cup'
+  const isKnockout = live.competition === 'cup' || live.competition === 'europa'
 
   live.half = 'done'
   live.paused = true
   pushEvent(live, 'ft', `Koniec meczu ${live.homeGoals}:${live.awayGoals}.`)
 
   let pens = false
-  if (isCup && live.homeGoals === live.awayGoals) {
+  if (isKnockout && live.homeGoals === live.awayGoals) {
     pens = true
     const youHome = live.homeId === clubId
     const youWinPens = chance(0.48 + (live.moraleBoost > 0 ? 0.06 : 0))
@@ -563,8 +579,10 @@ export function finishLiveMatch(state: GameState): void {
     pushEvent(live, 'ft', 'Rozstrzygnięcie po rzutach karnych.')
   }
 
-  if (isCup && live.matchId) {
+  if (live.competition === 'cup' && live.matchId) {
     applyCupMatchResult(season, live.matchId, live.homeGoals, live.awayGoals)
+  } else if (live.competition === 'europa' && live.matchId) {
+    applyEuropaMatchResult(season, live.matchId, live.homeGoals, live.awayGoals)
   } else {
     applyResultToStandings(season.standings, live.homeId, live.awayId, live.homeGoals, live.awayGoals)
     if (live.matchId && season.matches[live.matchId]) {
@@ -582,7 +600,7 @@ export function finishLiveMatch(state: GameState): void {
 
   const { yours, theirs } = yourGoals(live, clubId)
   const won = yours > theirs
-  const drawn = !isCup && yours === theirs
+  const drawn = !isKnockout && yours === theirs
 
   for (const p of team.squad) {
     normalizeSquadPlayer(p)
@@ -605,7 +623,7 @@ export function finishLiveMatch(state: GameState): void {
     } else {
       p.fitness = clamp(p.fitness + 52 + rngInt(6), 20, 100)
       p.sharpness = clamp((p.sharpness ?? 70) - 2, 0, 100)
-      if (!isCup) p.morale = clamp(p.morale - 1, 20, 100)
+      if (!isKnockout) p.morale = clamp(p.morale - 1, 20, 100)
     }
   }
 
@@ -672,7 +690,12 @@ export function finishLiveMatch(state: GameState): void {
   const away = getClub(live.awayId)
   const yourReds = live.events.filter((e) => e.kind === 'red' && e.side === 'you').length
   const yourInj = live.events.filter((e) => e.kind === 'injury' && e.side === 'you').length
-  let narrative = isCup ? 'Puchar Polski · ' : ''
+  let narrative =
+    live.competition === 'cup'
+      ? 'Puchar Polski · '
+      : live.competition === 'europa'
+        ? 'Europa · '
+        : ''
   narrative += `${home.short} ${live.homeGoals}:${live.awayGoals} ${away.short}. `
   if (pens) narrative += 'Po karnych. '
   if (won) narrative += 'Wygrana! '
@@ -695,11 +718,17 @@ export function finishLiveMatch(state: GameState): void {
     narrative,
     keyRatings: ratings,
     chemistryAfter: team.teamChemistry,
+    competition: live.competition,
+    yourReds,
   }
   season.lastMatch = result
 
+  if (state.manager) {
+    state.manager.matchesSincePress = (state.manager.matchesSincePress ?? 0) + 1
+  }
+
   // Sync kolejki ligowej bez ślepego ++
-  if (!isCup) {
+  if (!isKnockout) {
     let completed = 0
     for (let li = 0; li < season.rounds.length; li++) {
       const ids = Object.values(season.matches).filter(
@@ -729,7 +758,7 @@ export function finishLiveMatch(state: GameState): void {
   deliverPostMatchMail(state)
   publishYourMatchNews(state, live.homeId, live.awayId, live.homeGoals, live.awayGoals)
 
-  if (!isCup) {
+  if (!isKnockout) {
     const review = maybeBoardReview(state)
     if (review) {
       deliverBoardReviewMail(state, review)

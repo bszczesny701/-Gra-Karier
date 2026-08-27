@@ -105,6 +105,9 @@ export function acceptJobOffer(state: GameState): string | null {
   m.fanTrust = Math.max(0, Math.min(100, Math.round(m.boardTrust)))
   m.lastBoardReviewRound = 0
   m.lastJobOfferRound = 0
+  m.matchesSincePress = 99
+  const club = getClub(clubId)
+  m.europaQualified = leagueId === 'liga-1' && club.stars >= 3
 
   state.team = createTeamState(clubId)
   normalizeTeamSquad(state.team)
