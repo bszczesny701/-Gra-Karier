@@ -444,24 +444,26 @@ export class App {
         </button>`
       })
       .join('')
-    return this.shell(
-      `
-      <section class="hero-panel">
-        <h1>Prowadź zespół</h1>
-        <p class="muted">Wybierz klub, ustaw skład i taktykę, graj sezon ligowy mecz po meczu.</p>
-        <div class="save-slots">${slotCards}</div>
-        <div class="actions">
-          ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
-          <button class="btn ${canContinue ? 'ghost' : 'primary'}" id="btn-new">Nowa kariera</button>
-          ${
-            canContinue
-              ? `<button class="btn ghost danger" id="btn-clear-slot">Wyczyść aktywny slot</button>`
-              : ''
-          }
-        </div>
-      </section>`,
-      'Menu',
-    )
+    return `
+      <div class="app-shell home-shell">
+        <main class="content home-content">
+          <section class="home-hero">
+            <p class="home-brand">Gra Trenera</p>
+            <h1>Prowadź zespół</h1>
+            <p class="home-lead">Wybierz klub, ustaw skład i taktykę — graj sezon mecz po meczu.</p>
+            <div class="save-slots">${slotCards}</div>
+            <div class="home-actions">
+              ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
+              <button class="btn ${canContinue ? 'ghost' : 'primary'}" id="btn-new">Nowa kariera</button>
+              ${
+                canContinue
+                  ? `<button class="btn ghost danger" id="btn-clear-slot">Wyczyść aktywny slot</button>`
+                  : ''
+              }
+            </div>
+          </section>
+        </main>
+      </div>`
   }
 
   private bindHome(): void {
