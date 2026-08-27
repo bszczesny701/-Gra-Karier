@@ -195,7 +195,7 @@ export function clubPowerPreview(clubId: string, state?: GameState | null): numb
   return Math.round(state ? clubSquadPower(state, clubId) : getEffectiveStrength(clubId))
 }
 
-export type ScoutPlayer = { name: string; overall: number; role: string }
+export type ScoutPlayer = { name: string; overall: number; role: string; nationality?: string }
 
 /** Top zawodnicy klubu (realny skład / aiSquads / estymacja). */
 export function clubTopPlayers(clubId: string, count = 3, state?: GameState | null): ScoutPlayer[] {
@@ -204,20 +204,25 @@ export function clubTopPlayers(clubId: string, count = 3, state?: GameState | nu
     return [...ai]
       .sort((a, b) => b.overall - a.overall)
       .slice(0, count)
-      .map((p) => ({ name: p.name, overall: p.overall, role: p.role }))
+      .map((p) => ({ name: p.name, overall: p.overall, role: p.role, nationality: p.nationality }))
   }
   if (state?.team?.clubId === clubId) {
     return [...state.team.squad]
       .sort((a, b) => b.overall - a.overall)
       .slice(0, count)
-      .map((p) => ({ name: p.name, overall: p.overall, role: p.role }))
+      .map((p) => ({ name: p.name, overall: p.overall, role: p.role, nationality: p.nationality }))
   }
   const real = EKSTRAKLASA_SQUADS[clubId]
   if (real?.length) {
     return [...real]
       .sort((a, b) => b.overall - a.overall)
       .slice(0, count)
-      .map((p) => ({ name: p.name, overall: p.overall, role: p.role }))
+      .map((p) => ({
+        name: p.name,
+        overall: p.overall,
+        role: p.role,
+        nationality: p.nationality ?? 'PL',
+      }))
   }
   const club = getClub(clubId)
   const roles = ['ŚN', 'OP', 'ŚP', 'ŚO', 'PO'] as const

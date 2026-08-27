@@ -185,6 +185,8 @@ export interface TeamState {
   benchIds: string[]
   trainingFocus: TrainingFocus
   captainId: string | null
+  /** Absolutny dzień ostatniej sesji treningowej (cooldown 5 dni) */
+  lastTrainingDay: number | null
 }
 
 export interface LeagueFixture {
@@ -498,7 +500,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 115
+export const SAVE_VERSION = 116
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

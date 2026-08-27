@@ -89,7 +89,13 @@ export {
   setTrainingFocus,
   cycleTrainingFocus,
   applyWeekTraining,
+  runTrainingSession,
+  canRunTraining,
+  daysUntilTraining,
+  DRILLS,
+  gradeColorClass,
 } from './training'
+export type { TrainingSlot, TrainingSlotResult, DrillId, TrainingGrade } from './training'
 export {
   recomputeTeamChemistry,
   setCaptain,

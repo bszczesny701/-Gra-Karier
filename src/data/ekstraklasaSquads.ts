@@ -1,4 +1,5 @@
 import type { PitchRole } from '../state/types'
+import { nationalityForSeedName } from './playerNationalities'
 
 /** Ziarno zawodnika: realne składy Ekstraklasy 2025/26 (szeroka kadra). */
 export interface RealPlayerSeed {
@@ -6,13 +7,22 @@ export interface RealPlayerSeed {
   role: PitchRole
   overall: number
   age: number
+  /** Kod kraju ISO2 — jeśli brak, bierzemy z OFFICIAL_NATIONALITY / PL */
+  nationality?: string
 }
 
-const p = (name: string, role: PitchRole, overall: number, age: number): RealPlayerSeed => ({
+const p = (
+  name: string,
+  role: PitchRole,
+  overall: number,
+  age: number,
+  nationality?: string,
+): RealPlayerSeed => ({
   name,
   role,
   overall,
   age,
+  nationality: nationality ?? nationalityForSeedName(name),
 })
 
 /**

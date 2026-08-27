@@ -24,7 +24,7 @@ const LAST = [
   'Adamczyk', 'Dudek', 'Zając', 'Wieczorek', 'Jabłoński', 'Król', 'Majewski', 'Olszewski',
 ]
 
-const NAT_POOL = ['PL', 'PL', 'PL', 'PL', 'PL', 'PL', 'UA', 'SK', 'CZ', 'ES', 'BR', 'NG'] as const
+const NAT_POOL: string[] = ['PL', 'PL', 'PL', 'PL', 'PL', 'PL', 'UA', 'SK', 'CZ', 'ES', 'BR', 'NG']
 const WR: WorkRate[] = ['low', 'med', 'high']
 
 function hash(s: string): number {
@@ -119,6 +119,7 @@ export function normalizeTeamSquad(team: TeamState): void {
   for (const p of team.squad) normalizeSquadPlayer(p)
   if (!team.trainingFocus) team.trainingFocus = 'balanced'
   if (team.captainId === undefined) team.captainId = null
+  if (team.lastTrainingDay === undefined) team.lastTrainingDay = null
   if (team.captainId && !team.squad.some((p) => p.id === team.captainId)) {
     team.captainId = null
   }
@@ -190,6 +191,7 @@ function makeFromSeed(clubId: string, index: number, seed: RealPlayerSeed): Squa
   const h = hash(`${clubId}-${seed.name}-${index}`)
   const contract = stubContract(seed.age, seed.overall, h)
   const extras = cardExtras(seed.age, seed.overall, seed.role, h)
+  if (seed.nationality) extras.nationality = seed.nationality
   return {
     id: `${clubId}-r${index}`,
     name: seed.name,
@@ -304,6 +306,7 @@ export function createTeamState(clubId: string): TeamState {
     benchIds,
     trainingFocus: 'balanced',
     captainId: captain?.id ?? null,
+    lastTrainingDay: null,
   }
 }
 

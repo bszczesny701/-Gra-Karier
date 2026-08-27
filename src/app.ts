@@ -51,12 +51,17 @@ import {
   suggestRenewTerms,
   playerMarketValue,
   weeklyWageBill,
-  TRAINING_FOCUS_LABELS,
-  cycleTrainingFocus,
   setCaptain,
   dressingRoomStatus,
   workRateLabel,
+  runTrainingSession,
+  canRunTraining,
+  DRILLS,
+  gradeColorClass,
   type MotivationId,
+  type TrainingSlot,
+  type TrainingSlotResult,
+  type DrillId,
 } from './systems/managerCareer'
 import { intervalMsForSpeed } from './systems/liveMatch'
 import {
@@ -114,7 +119,9 @@ export class App {
   private pickLeagueId: string | null = null
   private matchTimer: number | null = null
   /** Widok hubu w stylu FIFA Career */
-  private hubTab: 'squad' | 'season' | 'office' | 'news' | 'calendar' | 'transfers' = 'squad'
+  private hubTab: 'squad' | 'season' | 'office' | 'news' | 'calendar' | 'transfers' | 'training' = 'squad'
+  private trainingSlots: TrainingSlot[] = []
+  private trainingResults: TrainingSlotResult[] | null = null
 
   /** Otwarty mail w skrzynce (Biuro) */
   private openMailId: string | null = null
@@ -489,6 +496,7 @@ export class App {
       { id: 'squad' as const, label: 'Główny' },
       { id: 'calendar' as const, label: 'Kalendarz' },
       { id: 'transfers' as const, label: 'Transfery' },
+      { id: 'training' as const, label: 'Trening' },
       { id: 'season' as const, label: 'Sezon' },
       { id: 'office' as const, label: 'Biuro' },
     ]
@@ -633,8 +641,8 @@ export class App {
               <span class="cal-window-badge ${w?.transferWindow ? 'open' : ''}">${windowBadge}</span>
             </div>
             <p class="muted" style="margin:0 0 10px">${w?.label ?? '—'} · Sezon ${s.year}</p>
-            <p class="meta" style="margin:0 0 8px">Trening: <strong>${TRAINING_FOCUS_LABELS[team.trainingFocus ?? 'balanced']}</strong>
-              <button type="button" class="btn ghost compact" id="btn-cycle-focus" style="margin-left:8px">Zmień focus</button>
+            <p class="meta" style="margin:0 0 8px">Trening FIFA:
+              <button type="button" class="btn ghost compact" data-hub-tab="training" style="margin-left:8px">Otwórz sesję</button>
             </p>
             <div class="cal-week">${daysHtml}</div>
             <div class="actions" style="margin-top:14px">
@@ -683,32 +691,57 @@ export class App {
     } else if (this.hubTab === 'season') {
       main = `
         <div class="career-season">
-          <section class="career-panel career-panel-table">
-            <h3>Tabela · ${league.name}</h3>
-            <table class="mini-table full-table names-full">
-              <thead><tr><th>#</th><th>Klub</th><th>M</th><th>W-R-P</th><th>+/−</th><th>Pkt</th></tr></thead>
-              <tbody>${fullTable}</tbody>
-            </table>
-          </section>
-          <section class="career-panel board-panel-compact">
-            <h3>Cel zarządu</h3>
-            <div class="board-progress compact ${goalProg.onTrack ? 'on-track' : 'off-track'}">
-              <div class="board-progress-head">
-                <strong>${goalProg.exp.label}</strong>
-                <span>${place}. / cel ${goalProg.exp.targetPlace}.</span>
+          <div class="season-stack">
+            <section class="career-panel board-panel-compact">
+              <h3>Cel zarządu</h3>
+              <div class="board-progress compact ${goalProg.onTrack ? 'on-track' : 'off-track'}">
+                <div class="board-progress-head">
+                  <strong>${goalProg.exp.label}</strong>
+                  <span>${place}. / cel ${goalProg.exp.targetPlace}.</span>
+                </div>
+                <p class="board-status">${goalProg.statusText}</p>
+                <div class="trust-bar ${trustCls}" title="Zaufanie zarządu"><i style="width:${trust}%"></i></div>
+                <p class="muted trust-caption">Zaufanie ${trust}% · ${trustLabel(trust)}</p>
               </div>
-              <p class="board-status">${goalProg.statusText}</p>
-              <div class="trust-bar ${trustCls}" title="Zaufanie zarządu"><i style="width:${trust}%"></i></div>
-              <p class="muted trust-caption">Zaufanie ${trust}% · ${trustLabel(trust)}</p>
-            </div>
-          </section>
-          <section class="career-panel">
+            </section>
+            <section class="career-panel">
+              <h3>Puchar Polski</h3>
+              ${
+                s.cup
+                  ? `<div class="cup-ladder">${s.cup.yourPath
+                      .map((step, i) => {
+                        const cls =
+                          step.result === 'won' || step.result === 'bye'
+                            ? 'won'
+                            : step.result === 'lost'
+                              ? 'lost'
+                              : i === s.cup!.roundIndex && !s.cup!.eliminated
+                                ? 'now'
+                                : 'idle'
+                        const tip = step.opponentId
+                          ? `${step.roundName} vs ${getClub(step.opponentId).short}`
+                          : step.roundName
+                        return `<span class="cup-step ${cls}" title="${tip}">${step.roundName}</span>${i < s.cup!.yourPath.length - 1 ? '<span class="cup-arrow">→</span>' : ''}`
+                      })
+                      .join('')}</div>
+                    <p class="muted" style="margin-top:8px">${s.cup.eliminated ? 'Odpadłeś z pucharu.' : s.cup.championId === s.clubId ? 'Mistrz Pucharu!' : 'Twoja ścieżka w PP.'}</p>`
+                  : `<p class="muted">Dostępny od I ligi / Ekstraklasy.</p>`
+              }
+            </section>
+            <section class="career-panel career-panel-table">
+              <h3>Tabela · ${league.name}</h3>
+              <table class="mini-table full-table names-full">
+                <thead><tr><th>#</th><th>Klub</th><th>M</th><th>W-R-P</th><th>+/−</th><th>Pkt</th></tr></thead>
+                <tbody>${fullTable}</tbody>
+              </table>
+            </section>
+          </div>
+          <section class="career-panel season-rival-panel">
             <h3>Analiza rywala</h3>
             ${
               upcoming
                 ? (() => {
                     const oppId = upcoming.homeId === s.clubId ? upcoming.awayId : upcoming.homeId
-                    const opp = getClub(oppId)
                     const oppPow = clubPowerPreview(oppId, this.state)
                     const home = upcoming.homeId === s.clubId
                     const maxPow = Math.max(yourPow, oppPow, 1)
@@ -735,14 +768,13 @@ export class App {
                         </div>
                         <div class="rival-vs">vs</div>
                         <div class="rival-side">
-                          <div class="rival-name">${opp.short}</div>
+                          <div class="rival-name">${getClub(oppId).short}</div>
                           <div class="rival-pow">${oppPow}</div>
                           <div class="muted">${oppPlace}. miejsce · ${oppRow ? `${oppRow.won}-${oppRow.drawn}-${oppRow.lost}` : '0-0-0'}</div>
                           <div class="pow-bar them"><i style="width:${Math.round((oppPow / maxPow) * 100)}%"></i></div>
                         </div>
                       </div>
                       <p class="rival-fixture"><strong>${getClub(upcoming.homeId).name}</strong> — <strong>${getClub(upcoming.awayId).name}</strong></p>
-
                       <div class="opp-scout">
                         <div class="opp-block">
                           <h4>Forma (ost. 5)</h4>
@@ -755,7 +787,7 @@ export class App {
                             ${tops
                               .map(
                                 (p) =>
-                                  `<li><span class="opp-ovr">${p.overall}</span><span class="opp-role">${p.role}</span><span class="opp-name">${p.name}</span></li>`,
+                                  `<li><span class="opp-ovr">${p.overall}</span><span class="opp-role">${p.role}</span><span class="opp-name">${p.name}</span><span class="opp-nat">${p.nationality ?? 'PL'}</span></li>`,
                               )
                               .join('')}
                           </ul>
@@ -779,29 +811,66 @@ export class App {
               }
             </div>
           </section>
+        </div>`
+    } else if (this.hubTab === 'training') {
+      const gate = canRunTraining(this.state)
+      const slots = this.trainingSlots
+      const available = team.squad
+        .filter((p) => (p.injuryMatchesLeft ?? 0) === 0)
+        .sort((a, b) => b.overall - a.overall)
+      if (!slots.length && available[0]) {
+        this.trainingSlots = [0, 1, 2, 3, 4].map(() => ({
+          playerId: available[0]!.id,
+          drill: 'shooting' as const,
+        }))
+      }
+      const activeSlots = this.trainingSlots
+      const slotRows = [0, 1, 2, 3, 4]
+        .map((i) => {
+          const sl = activeSlots[i] ?? { playerId: available[0]?.id ?? '', drill: 'shooting' as const }
+          return `<div class="train-slot">
+            <span class="train-slot-num">${i + 1}</span>
+            <select data-train-player="${i}">${available
+              .map(
+                (p) =>
+                  `<option value="${p.id}" ${p.id === sl.playerId ? 'selected' : ''}>${p.name.split(' ').pop()} · ${p.overall}</option>`,
+              )
+              .join('')}</select>
+            <select data-train-drill="${i}">${DRILLS.map(
+              (d) =>
+                `<option value="${d.id}" ${d.id === sl.drill ? 'selected' : ''}>${d.label}</option>`,
+            ).join('')}</select>
+          </div>`
+        })
+        .join('')
+      const resultsHtml = this.trainingResults
+        ? `<div class="train-results">${this.trainingResults
+            .map((r) => {
+              const gainTxt = Object.entries(r.gains)
+                .map(([k, v]) => `${k}+${v}`)
+                .join(' · ')
+              const ovr =
+                r.overallAfter > r.overallBefore
+                  ? ` · OVR ${r.overallBefore}→${r.overallAfter}`
+                  : ''
+              return `<div class="train-result ${gradeColorClass(r.grade)}"><strong class="train-grade">${r.grade}</strong> ${r.playerName.split(' ').pop()} · ${DRILLS.find((d) => d.id === r.drill)?.label ?? r.drill}${gainTxt ? ' · ' + gainTxt : ' · brak wzrostu'}${ovr}</div>`
+            })
+            .join('')}</div>`
+        : ''
+      main = `
+        <div class="career-training">
           <section class="career-panel">
-            <h3>Puchar Polski</h3>
-            ${
-              s.cup
-                ? `<div class="cup-ladder">${s.cup.yourPath
-                    .map((step, i) => {
-                      const cls =
-                        step.result === 'won' || step.result === 'bye'
-                          ? 'won'
-                          : step.result === 'lost'
-                            ? 'lost'
-                            : i === s.cup!.roundIndex && !s.cup!.eliminated
-                              ? 'now'
-                              : 'idle'
-                      const tip = step.opponentId
-                        ? `${step.roundName} vs ${getClub(step.opponentId).short}`
-                        : step.roundName
-                      return `<span class="cup-step ${cls}" title="${tip}">${step.roundName}</span>${i < s.cup!.yourPath.length - 1 ? '<span class="cup-arrow">→</span>' : ''}`
-                    })
-                    .join('')}</div>
-                  <p class="muted" style="margin-top:8px">${s.cup.eliminated ? 'Odpadłeś z pucharu.' : s.cup.championId === s.clubId ? 'Mistrz Pucharu!' : 'Twoja ścieżka w PP.'}</p>`
-                : `<p class="muted">Dostępny od I ligi / Ekstraklasy.</p>`
-            }
+            <div class="mail-panel-head">
+              <h3>Trening (FIFA)</h3>
+              <span class="muted">${gate ? gate : 'Sesja gotowa · cooldown 5 dni'}</span>
+            </div>
+            <p class="muted" style="margin:0 0 12px">5 ćwiczeń — tego samego zawodnika możesz wybrać wielokrotnie. Ocena F–A losowa (A = największy wzrost).</p>
+            <div class="train-slots">${slotRows}</div>
+            <div class="actions" style="margin-top:14px">
+              <button type="button" class="btn primary" id="btn-run-training" ${gate ? 'disabled' : ''}>Rozpocznij trening</button>
+              <button type="button" class="btn ghost" data-hub-tab="squad">Wróć</button>
+            </div>
+            ${resultsHtml}
           </section>
         </div>`
     } else if (this.hubTab === 'office') {
@@ -896,7 +965,7 @@ export class App {
               <h3>Szatnia</h3>
               <p class="meta">Chemia <strong>${Math.round(team.teamChemistry)}</strong> · kapitan <strong>${room.captain?.name.split(' ').pop() ?? '—'}</strong></p>
               <p class="muted">${room.line}</p>
-              <p class="muted">Focus treningu: ${TRAINING_FOCUS_LABELS[team.trainingFocus ?? 'balanced']}</p>
+              <p class="muted">Sesja treningu: zakładka Trening (FIFA, 1/5 dni)</p>
               ${unrestHtml || lowHtml ? `<ul class="log compact">${unrestHtml || lowHtml}</ul>` : '<p class="muted">Brak napięć w kadrze.</p>'}
             </section>`
           })()}
@@ -1037,6 +1106,7 @@ export class App {
           | 'news'
           | 'calendar'
           | 'transfers'
+          | 'training'
         this.render()
       })
     })
@@ -1065,15 +1135,34 @@ export class App {
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-training]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.go(() => {
-          const focus = cycleTrainingFocus(this.state)
-          pushTempAlert(`Focus treningu: ${TRAINING_FOCUS_LABELS[focus]}`)
-        })
+        this.hubTab = 'training'
+        this.trainingResults = null
+        this.render()
       })
     })
     this.root.querySelector('#btn-cycle-focus')?.addEventListener('click', () => {
+      this.hubTab = 'training'
+      this.render()
+    })
+    this.root.querySelectorAll<HTMLSelectElement>('[data-train-player]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const i = Number(sel.dataset.trainPlayer)
+        if (!this.trainingSlots[i]) return
+        this.trainingSlots[i]!.playerId = sel.value
+      })
+    })
+    this.root.querySelectorAll<HTMLSelectElement>('[data-train-drill]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const i = Number(sel.dataset.trainDrill)
+        if (!this.trainingSlots[i]) return
+        this.trainingSlots[i]!.drill = sel.value as DrillId
+      })
+    })
+    this.root.querySelector('#btn-run-training')?.addEventListener('click', () => {
       this.go(() => {
-        cycleTrainingFocus(this.state)
+        const { error, results } = runTrainingSession(this.state, this.trainingSlots)
+        if (error) pushTempAlert(error)
+        else this.trainingResults = results
       })
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-play-match]').forEach((btn) => {
