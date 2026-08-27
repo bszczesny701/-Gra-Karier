@@ -238,14 +238,23 @@ export function clubForm(standings: ClubStanding[], clubId: string): Array<'W' |
   return row?.form?.slice(-5) ?? []
 }
 
+/** Modyfikator mocy AI względem trudności (przeciwnik silniejszy na hard). */
+export function difficultyAiBias(state?: GameState | null): number {
+  const d = state?.settings?.difficulty ?? 'normal'
+  if (d === 'easy') return -2.2
+  if (d === 'hard') return 2.5
+  return 0
+}
+
 export function simulateAiMatch(
   homeId: string,
   awayId: string,
   mods: Record<string, number> = {},
   state?: GameState | null,
 ): { homeGoals: number; awayGoals: number } {
-  const homePow = aiClubPower(homeId, mods, state) + 1.5
-  const awayPow = aiClubPower(awayId, mods, state)
+  const bias = difficultyAiBias(state)
+  const homePow = aiClubPower(homeId, mods, state) + 1.5 + bias
+  const awayPow = aiClubPower(awayId, mods, state) + bias
   return {
     homeGoals: scoreline(homePow, awayPow * 0.92),
     awayGoals: scoreline(awayPow, homePow * 0.92),

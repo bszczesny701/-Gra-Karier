@@ -58,10 +58,18 @@ import {
   canRunTraining,
   DRILLS,
   gradeColorClass,
+  answerPressQuestion,
+  ensureFanTrust,
+  acceptJobOffer,
+  rejectJobOffer,
+  daysUntilTraining,
   type MotivationId,
   type TrainingSlot,
   type TrainingSlotResult,
   type DrillId,
+  type AttackInstruction,
+  type DefendInstruction,
+  type Difficulty,
 } from './systems/managerCareer'
 import { intervalMsForSpeed } from './systems/liveMatch'
 import {
@@ -122,6 +130,7 @@ export class App {
   private hubTab: 'squad' | 'season' | 'office' | 'news' | 'calendar' | 'transfers' | 'training' = 'squad'
   private trainingSlots: TrainingSlot[] = []
   private trainingResults: TrainingSlotResult[] | null = null
+  private transferFilter = { pos: 'all', minOvr: 0, maxPrice: 0 }
 
   /** Otwarty mail w skrzynce (Biuro) */
   private openMailId: string | null = null
@@ -273,6 +282,10 @@ export class App {
         this.root.innerHTML = this.matchResultHtml()
         this.bindMatchResult()
         break
+      case 'pressConference':
+        this.root.innerHTML = this.pressConferenceHtml()
+        this.bindPressConference()
+        break
       case 'seasonReport':
         this.root.innerHTML = this.seasonReportHtml()
         this.bindSeasonReport()
@@ -401,6 +414,8 @@ export class App {
     const team = this.state.team!
     const s = this.state.season!
     normalizeTeamSquad(team)
+    ensureFanTrust(this.state)
+    if (!this.state.settings) this.state.settings = { difficulty: 'normal' }
     if (m.boardTrust == null) {
       m.boardTrust = initialBoardTrust(s.clubId, s.leagueId)
     }
@@ -497,6 +512,7 @@ export class App {
       { id: 'calendar' as const, label: 'Kalendarz' },
       { id: 'transfers' as const, label: 'Transfery' },
       { id: 'training' as const, label: 'Trening' },
+      { id: 'news' as const, label: 'Wiadomości' },
       { id: 'season' as const, label: 'Sezon' },
       { id: 'office' as const, label: 'Biuro' },
     ]
@@ -775,6 +791,7 @@ export class App {
                         </div>
                       </div>
                       <p class="rival-fixture"><strong>${getClub(upcoming.homeId).name}</strong> — <strong>${getClub(upcoming.awayId).name}</strong></p>
+                      <p class="muted">Przewidywany styl: <strong>${oppPow >= yourPow + 3 ? 'press / agresja' : oppPow + 3 <= yourPow ? 'counter / niski blok' : 'balanced'}</strong> · moc ${oppPow}</p>
                       <div class="opp-scout">
                         <div class="opp-block">
                           <h4>Forma (ost. 5)</h4>
@@ -926,19 +943,42 @@ export class App {
             </div>
           </section>
           <section class="career-panel board-panel-compact">
-            <h3>Zarząd · ${club.name}</h3>
+            <h3>Cele · ${club.name}</h3>
             <div class="board-progress compact ${trustCls}">
               <div class="board-progress-head">
                 <strong>${goalProg.exp.label}</strong>
                 <span>${trustLabel(trust)}</span>
               </div>
               <div class="trust-bar ${trustCls}"><i style="width:${trust}%"></i></div>
-              <p class="muted trust-caption">Zaufanie <strong>${trust}%</strong> · cel top ${goalProg.exp.targetPlace}.</p>
+              <p class="muted trust-caption">Zarząd <strong>${trust}%</strong> · kibice <strong>${Math.round(m.fanTrust ?? trust)}%</strong></p>
+              <div class="trust-bar fan"><i style="width:${Math.round(m.fanTrust ?? trust)}%"></i></div>
+              <p class="muted">Trening: ${daysUntilTraining(this.state) === 0 ? 'gotowy' : `za ${daysUntilTraining(this.state)} dni`} · trudność ${this.state.settings?.difficulty ?? 'normal'}</p>
               ${
                 trust < WARN_TRUST_THRESHOLD
                   ? `<p class="board-warn">Poniżej ${SACK_TRUST_THRESHOLD}% po sezonie — zwolnienie.</p>`
                   : ''
               }
+            </div>
+            ${
+              this.state.pendingJobOffer
+                ? `<div class="job-offer-box">
+                    <p class="meta"><strong>Oferta pracy</strong> · ${getClub(this.state.pendingJobOffer.clubId).name}</p>
+                    <p class="muted">${this.state.pendingJobOffer.message}</p>
+                    <div class="actions" style="margin-top:8px">
+                      <button type="button" class="btn primary compact" id="btn-job-accept">Przyjmij</button>
+                      <button type="button" class="btn ghost compact" id="btn-job-reject">Odrzuć</button>
+                    </div>
+                  </div>`
+                : ''
+            }
+            <div class="actions" style="margin-top:10px">
+              <label class="muted">Trudność
+                <select id="sel-difficulty">
+                  <option value="easy" ${this.state.settings?.difficulty === 'easy' ? 'selected' : ''}>Łatwy</option>
+                  <option value="normal" ${(this.state.settings?.difficulty ?? 'normal') === 'normal' ? 'selected' : ''}>Normalny</option>
+                  <option value="hard" ${this.state.settings?.difficulty === 'hard' ? 'selected' : ''}>Trudny</option>
+                </select>
+              </label>
             </div>
           </section>
           <section class="career-panel">
@@ -984,6 +1024,7 @@ export class App {
       refreshListingsIfNeeded(this.state)
       const market = this.state.market
       const windowOpen = isTransferWindowOpen(this.state)
+      const f = this.transferFilter
       const listings = (market?.listings ?? [])
         .map((l) => {
           const found = this.state.team?.squad.find((p) => p.id === l.playerId)
@@ -995,8 +1036,16 @@ export class App {
                 }
                 return null
               })()
-          if (!found) return ''
+          if (!found) return null
           const p = found.player
+          if (f.pos !== 'all' && p.position !== f.pos && p.role !== f.pos) return null
+          if (f.minOvr > 0 && p.overall < f.minOvr) return null
+          if (f.maxPrice > 0 && l.askingPrice > f.maxPrice) return null
+          return { l, found, p }
+        })
+        .filter(Boolean)
+        .map((row) => {
+          const { l, found, p } = row!
           const own = found.clubId === s.clubId
           const val = playerMarketValue(p)
           return `<article class="transfer-row">
@@ -1018,7 +1067,21 @@ export class App {
             </div>
           </article>`
         })
-        .join('') || `<p class="muted">${windowOpen ? 'Brak ofert na rynku — wróć w kolejnym tygodniu okienka.' : 'Okienko zamknięte.'}</p>`
+        .join('') || `<p class="muted">${windowOpen ? 'Brak ofert — zmień filtry lub wróć później.' : 'Okienko zamknięte.'}</p>`
+
+      const filterBar = `
+        <div class="transfer-filters">
+          <select id="tf-pos">
+            <option value="all" ${f.pos === 'all' ? 'selected' : ''}>Pozycja: wszystkie</option>
+            <option value="NP" ${f.pos === 'NP' ? 'selected' : ''}>Napastnicy</option>
+            <option value="POM" ${f.pos === 'POM' ? 'selected' : ''}>Pomoc</option>
+            <option value="ŚO" ${f.pos === 'ŚO' ? 'selected' : ''}>Środkowi</option>
+            <option value="OB" ${f.pos === 'OB' ? 'selected' : ''}>Obrona</option>
+            <option value="BR" ${f.pos === 'BR' ? 'selected' : ''}>Bramkarze</option>
+          </select>
+          <label class="muted">min OVR <input type="number" id="tf-ovr" min="0" max="99" value="${f.minOvr || ''}" placeholder="0"></label>
+          <label class="muted">max cena <input type="number" id="tf-price" min="0" step="100000" value="${f.maxPrice || ''}" placeholder="∞"></label>
+        </div>`
 
       const offers = (market?.offers ?? [])
         .filter((o) => o.status === 'pending' || o.status === 'countered')
@@ -1061,6 +1124,7 @@ export class App {
               <span class="cal-window-badge ${windowOpen ? 'open' : ''}">${windowOpen ? 'Okienko otwarte' : 'Okienko zamknięte'}</span>
             </div>
             <p class="muted" style="margin:0 0 10px">Budżet ${Math.round(team.budget).toLocaleString('pl-PL')} zł · kadra ${team.squad.length}/30</p>
+            ${filterBar}
             <div class="transfer-list">${listings}</div>
           </section>
           <section class="career-panel">
@@ -1195,6 +1259,32 @@ export class App {
     this.root.querySelector('#btn-mail-read-all')?.addEventListener('click', () => {
       this.go(() => markAllMailRead(this.state))
     })
+    this.root.querySelector('#btn-job-accept')?.addEventListener('click', () => {
+      this.go(() => {
+        const err = acceptJobOffer(this.state)
+        if (err) pushTempAlert(err)
+      })
+    })
+    this.root.querySelector('#btn-job-reject')?.addEventListener('click', () => {
+      this.go(() => rejectJobOffer(this.state))
+    })
+    this.root.querySelector('#sel-difficulty')?.addEventListener('change', (e) => {
+      const v = (e.target as HTMLSelectElement).value as Difficulty
+      this.go(() => {
+        if (!this.state.settings) this.state.settings = { difficulty: 'normal' }
+        this.state.settings.difficulty = v
+      })
+    })
+    const applyTf = () => {
+      const pos = (this.root.querySelector('#tf-pos') as HTMLSelectElement | null)?.value ?? 'all'
+      const minOvr = Number((this.root.querySelector('#tf-ovr') as HTMLInputElement | null)?.value || 0)
+      const maxPrice = Number((this.root.querySelector('#tf-price') as HTMLInputElement | null)?.value || 0)
+      this.transferFilter = { pos, minOvr, maxPrice }
+      this.render()
+    }
+    this.root.querySelector('#tf-pos')?.addEventListener('change', applyTf)
+    this.root.querySelector('#tf-ovr')?.addEventListener('change', applyTf)
+    this.root.querySelector('#tf-price')?.addEventListener('change', applyTf)
 
     this.root.querySelectorAll<HTMLButtonElement>('[data-buy]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1266,7 +1356,7 @@ export class App {
     else for (const p of team.squad) normalizeSquadPlayer(p)
     const plan = visualFormationPlan(team.tactics.formation, team.tactics.width, team.tactics.defLine)
     const map = new Map(team.squad.map((p) => [p.id, p]))
-    const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
+    const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2', '4-2-3-1', '5-3-2', '4-1-4-1']
 
     const pitchPlayers = team.startingIds
       .map((id, i) => {
@@ -1355,6 +1445,38 @@ export class App {
                 ${profile.releaseClause ? `<span class="muted">· klauzula ${profile.releaseClause.toLocaleString('pl-PL')}</span>` : ''}
                 ${profile.loanFromClubId ? `<span class="muted">· wypożyczony z ${getClub(profile.loanFromClubId).short}${profile.loanWeeksLeft != null ? ` · ${profile.loanWeeksLeft} tyg.` : ''}</span>` : ''}
               </div>
+              <div class="player-instr">
+                <label class="muted">Atak
+                  <select id="instr-atk">
+                    ${(['default', 'stayForward', 'comeShort', 'cutInside'] as AttackInstruction[])
+                      .map((v) => {
+                        const cur = team.playerInstructions?.[profile.id]?.attacking ?? 'default'
+                        const lab =
+                          v === 'stayForward'
+                            ? 'Zostań wyżej'
+                            : v === 'comeShort'
+                              ? 'Cofnij się'
+                              : v === 'cutInside'
+                                ? 'Do środka'
+                                : 'Domyślnie'
+                        return `<option value="${v}" ${cur === v ? 'selected' : ''}>${lab}</option>`
+                      })
+                      .join('')}
+                  </select>
+                </label>
+                <label class="muted">Obrona
+                  <select id="instr-def">
+                    ${(['default', 'stayBack', 'manMark'] as DefendInstruction[])
+                      .map((v) => {
+                        const cur = team.playerInstructions?.[profile.id]?.defending ?? 'default'
+                        const lab =
+                          v === 'stayBack' ? 'Zostań z tyłu' : v === 'manMark' ? 'Kryj człowieka' : 'Domyślnie'
+                        return `<option value="${v}" ${cur === v ? 'selected' : ''}>${lab}</option>`
+                      })
+                      .join('')}
+                  </select>
+                </label>
+              </div>
               <div class="actions" style="margin-top:4px">
                 ${
                   team.captainId === profile.id
@@ -1428,7 +1550,7 @@ export class App {
     const t = team.tactics
     const plan = visualFormationPlan(t.formation, t.width, t.defLine)
     const map = new Map(team.squad.map((p) => [p.id, p]))
-    const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2']
+    const formations: Formation[] = ['4-4-2', '4-3-3', '3-5-2', '4-2-3-1', '5-3-2', '4-1-4-1']
     const plans: GamePlan[] = ['possession', 'balanced', 'counter', 'press', 'direct']
     const mentalities: Mentality[] = [1, 2, 3, 4, 5]
     const axes: TacticAxis[] = [1, 2, 3]
@@ -1523,6 +1645,28 @@ export class App {
               ${axisRow('defLine', 'Linia obrony', { 1: 'Niska', 2: 'Średnia', 3: 'Wysoka' })}
               ${axisRow('buildUp', 'Budowanie', { 1: 'Krótkie', 2: 'Mieszane', 3: 'Długie' })}
             </div>
+            <div class="tactics-block">
+              <h3>Stałe fragmenty</h3>
+              ${(['corners', 'freeKicks', 'penalties'] as const)
+                .map((key) => {
+                  const label = key === 'corners' ? 'Rożne' : key === 'freeKicks' ? 'Wolne' : 'Karne'
+                  const cur = team.setPieces?.[key] ?? ''
+                  return `<label class="muted setpiece-row">${label}
+                    <select data-setpiece="${key}">
+                      <option value="">—</option>
+                      ${team.squad
+                        .slice()
+                        .sort((a, b) => b.overall - a.overall)
+                        .map(
+                          (p) =>
+                            `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${p.name.split(' ').pop()} · ${p.overall}</option>`,
+                        )
+                        .join('')}
+                    </select>
+                  </label>`
+                })
+                .join('')}
+            </div>
             <p class="tactics-summary muted">
               ${planLabel(t.plan)} · ${mentalityLabel(t.mentality)} · ${widthLabel(t.width)} · linia ${defLineLabel(t.defLine)} · ${buildUpLabel(t.buildUp)} · tempo ${tempoLabel(t.tempo)}
             </p>
@@ -1562,6 +1706,16 @@ export class App {
         const key = btn.dataset.axis as 'width' | 'press' | 'tempo' | 'defLine' | 'buildUp'
         const val = Number(btn.dataset.val) as TacticAxis
         this.go(() => setTacticAxis(this.state, key, val))
+      })
+    })
+    this.root.querySelectorAll<HTMLSelectElement>('[data-setpiece]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const key = sel.dataset.setpiece as 'corners' | 'freeKicks' | 'penalties'
+        const team = this.state.team
+        if (!team) return
+        if (!team.setPieces) team.setPieces = { corners: null, freeKicks: null, penalties: null }
+        team.setPieces[key] = sel.value || null
+        saveState(this.state)
       })
     })
     const back = () =>
@@ -1637,6 +1791,26 @@ export class App {
         setCaptain(this.state.team!, id)
         this.profilePlayerId = null
       })
+    })
+    this.root.querySelector('#instr-atk')?.addEventListener('change', (e) => {
+      const id = this.profilePlayerId
+      const team = this.state.team
+      if (!id || !team) return
+      const v = (e.target as HTMLSelectElement).value as AttackInstruction
+      if (!team.playerInstructions) team.playerInstructions = {}
+      const cur = team.playerInstructions[id] ?? { attacking: 'default', defending: 'default' }
+      team.playerInstructions[id] = { ...cur, attacking: v }
+      saveState(this.state)
+    })
+    this.root.querySelector('#instr-def')?.addEventListener('change', (e) => {
+      const id = this.profilePlayerId
+      const team = this.state.team
+      if (!id || !team) return
+      const v = (e.target as HTMLSelectElement).value as DefendInstruction
+      if (!team.playerInstructions) team.playerInstructions = {}
+      const cur = team.playerInstructions[id] ?? { attacking: 'default', defending: 'default' }
+      team.playerInstructions[id] = { ...cur, defending: v }
+      saveState(this.state)
     })
     this.root.querySelector('#btn-list-player')?.addEventListener('click', () => {
       const id = this.profilePlayerId
@@ -2070,6 +2244,49 @@ export class App {
       </section>`,
       'Wynik',
     )
+  }
+
+  private pressConferenceHtml(): string {
+    const press = this.state.pendingPress
+    const m = this.state.manager!
+    if (!press) {
+      return this.shell(`<section class="panel"><p class="muted">Brak konferencji.</p><button class="btn primary" id="btn-press-skip">Dalej</button></section>`, 'Media')
+    }
+    const q = press.questions[press.index]
+    if (!q) {
+      return this.shell(`<section class="panel"><p class="muted">Koniec.</p><button class="btn primary" id="btn-press-skip">Dalej</button></section>`, 'Media')
+    }
+    return this.shell(
+      `
+      <section class="panel press-panel">
+        <h2>Konferencja prasowa</h2>
+        <p class="muted">${m.name} · pytanie ${press.index + 1}/${press.questions.length}</p>
+        <p class="press-q">${q.text}</p>
+        <div class="chat-replies">
+          ${q.answers
+            .map(
+              (a) =>
+                `<button type="button" class="chat-reply" data-press-tone="${a.id}"><span class="chat-reply-text">${a.label}</span></button>`,
+            )
+            .join('')}
+        </div>
+      </section>`,
+      'Media',
+    )
+  }
+
+  private bindPressConference(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-press-tone]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => answerPressQuestion(this.state, btn.dataset.pressTone as 'aggressive' | 'calm' | 'diplomatic'))
+      })
+    })
+    this.root.querySelector('#btn-press-skip')?.addEventListener('click', () => {
+      this.go(() => {
+        this.state.pendingPress = null
+        this.state.screen = 'hub'
+      })
+    })
   }
 
   private bindMatchResult(): void {

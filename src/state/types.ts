@@ -43,7 +43,7 @@ export function roleBase(role: PitchRole): Position {
 }
 
 export type MatchAction = 'shoot' | 'pass' | 'tackle' | 'clear'
-export type Formation = '4-4-2' | '4-3-3' | '3-5-2'
+export type Formation = '4-4-2' | '4-3-3' | '3-5-2' | '4-2-3-1' | '5-3-2' | '4-1-4-1'
 /** Legacy — mapowane w normalizeTactics */
 export type TacticalStyle = 'attack' | 'balanced' | 'defend'
 /** Plan gry (główny styl) */
@@ -64,6 +64,7 @@ export type Screen =
   | 'halfTime'
   | 'matchMoment'
   | 'matchResult'
+  | 'pressConference'
   | 'seasonReport'
 
 export type SeasonPhase = 'playing' | 'done'
@@ -81,10 +82,14 @@ export interface Manager {
   reputation: number
   /** Zaufanie zarządu 0–100 */
   boardTrust: number
+  /** Zaufanie kibiców 0–100 */
+  fanTrust: number
   seasonsManaged: number
   clubId: string
   /** Ostatnia kolejka ligowa z przeglądem zarządu */
   lastBoardReviewRound?: number
+  /** Ostatnia kolejka z ofertą pracy (cooldown) */
+  lastJobOfferRound?: number
 }
 
 export type BoardGoalId = 'title' | 'podium' | 'europe' | 'mid' | 'survive'
@@ -172,6 +177,20 @@ export interface Tactics {
   style?: TacticalStyle
 }
 
+export type AttackInstruction = 'default' | 'stayForward' | 'comeShort' | 'cutInside'
+export type DefendInstruction = 'default' | 'stayBack' | 'manMark'
+
+export interface PlayerInstruction {
+  attacking: AttackInstruction
+  defending: DefendInstruction
+}
+
+export interface SetPieceTakers {
+  corners: string | null
+  freeKicks: string | null
+  penalties: string | null
+}
+
 export interface TeamState {
   clubId: string
   squad: SquadPlayer[]
@@ -187,6 +206,8 @@ export interface TeamState {
   captainId: string | null
   /** Absolutny dzień ostatniej sesji treningowej (cooldown 5 dni) */
   lastTrainingDay: number | null
+  playerInstructions: Record<string, PlayerInstruction>
+  setPieces: SetPieceTakers
 }
 
 export interface LeagueFixture {
@@ -411,7 +432,39 @@ export interface SeasonReport {
   financeSummary?: string
 }
 
-export type MailKind = 'discipline' | 'medical' | 'board' | 'system'
+export type MailKind = 'discipline' | 'medical' | 'board' | 'system' | 'press' | 'job'
+
+export type NewsKind = 'match' | 'form' | 'club' | 'transfer' | 'league' | 'press'
+
+export type Difficulty = 'easy' | 'normal' | 'hard'
+
+export interface GameSettings {
+  difficulty: Difficulty
+}
+
+export type PressTone = 'aggressive' | 'calm' | 'diplomatic'
+
+export interface PressQuestion {
+  id: string
+  text: string
+  answers: Array<{ id: PressTone; label: string }>
+}
+
+export interface PressSession {
+  questions: PressQuestion[]
+  /** Indeks bieżącego pytania */
+  index: number
+  answered: Array<{ questionId: string; tone: PressTone }>
+  context: 'win' | 'draw' | 'loss'
+}
+
+export interface JobOffer {
+  id: string
+  clubId: string
+  leagueId: string
+  message: string
+  createdAt: number
+}
 
 export interface MailMessage {
   id: string
@@ -424,8 +477,6 @@ export interface MailMessage {
   read: boolean
   createdAt: number
 }
-
-export type NewsKind = 'match' | 'form' | 'club' | 'transfer' | 'league'
 
 export interface NewsItem {
   id: string
@@ -497,10 +548,13 @@ export interface GameState {
   /** Wiadomości / gazeta na ekranie Główny */
   news: NewsItem[]
   market: TransferMarketState
+  settings: GameSettings
+  pendingPress: PressSession | null
+  pendingJobOffer: JobOffer | null
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 116
+export const SAVE_VERSION = 117
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))
@@ -529,6 +583,9 @@ export function createEmptyState(): GameState {
     mailbox: [],
     news: [],
     market: emptyMarket(),
+    settings: { difficulty: 'normal' },
+    pendingPress: null,
+    pendingJobOffer: null,
   }
 }
 
@@ -690,6 +747,51 @@ export function formationPlan(formation: Formation): FormationSlot[] {
       s('OP', 50, 34),
       s('LN', 36, 18),
       s('PN', 64, 18),
+    ]
+  }
+  if (formation === '4-2-3-1') {
+    return [
+      s('BR', 50, 94),
+      s('LO', 12, 80),
+      s('ŚO', 36, 82),
+      s('ŚO', 64, 82),
+      s('PO', 88, 80),
+      s('DP', 38, 58),
+      s('DP', 62, 58),
+      s('LP', 14, 36),
+      s('OP', 50, 32),
+      s('PP', 86, 36),
+      s('ŚN', 50, 14),
+    ]
+  }
+  if (formation === '5-3-2') {
+    return [
+      s('BR', 50, 94),
+      s('LO', 10, 78),
+      s('ŚO', 30, 84),
+      s('ŚO', 50, 86),
+      s('ŚO', 70, 84),
+      s('PO', 90, 78),
+      s('DP', 32, 54),
+      s('ŚP', 50, 52),
+      s('PP', 68, 54),
+      s('LN', 38, 18),
+      s('PN', 62, 18),
+    ]
+  }
+  if (formation === '4-1-4-1') {
+    return [
+      s('BR', 50, 94),
+      s('LO', 12, 80),
+      s('ŚO', 36, 82),
+      s('ŚO', 64, 82),
+      s('PO', 88, 80),
+      s('DP', 50, 62),
+      s('LP', 14, 42),
+      s('ŚP', 38, 44),
+      s('ŚP', 62, 44),
+      s('PP', 86, 42),
+      s('ŚN', 50, 14),
     ]
   }
   // 4-4-2

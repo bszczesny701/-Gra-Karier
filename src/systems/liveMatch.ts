@@ -26,7 +26,7 @@ import { applyCupMatchResult } from './cup'
 import { nextUserMatch } from './calendar'
 import { maybeBoardReview } from './board'
 import { updateWantsToLeave, normalizeSquadPlayer } from './squadGen'
-import { recomputeTeamChemistry } from './chemistry'
+import { applyFanTrustToChemistry, recomputeTeamChemistry } from './chemistry'
 import { pushLog } from '../state/gameState'
 
 const MAX_SUBS = 3
@@ -273,7 +273,12 @@ function maybeDisciplineAndInjuries(state: GameState, live: LiveMatchState): voi
   const fat = live.fatigue[p.id] ?? 50
   // Im niższa świeżość (fatigue), tym większa szansa kontuzji
   const tiredFactor = Math.pow((100 - fat) / 100, 1.45)
-  const injuryChance = clampFloat(0.0018 + tiredFactor * 0.032 + (fat < 30 ? 0.01 : 0), 0.0018, 0.045)
+  const injuryChance = clampFloat(
+    (0.0018 + tiredFactor * 0.032 + (fat < 30 ? 0.01 : 0)) *
+      (state.settings?.difficulty === 'hard' ? 1.35 : state.settings?.difficulty === 'easy' ? 0.7 : 1),
+    0.001,
+    0.055,
+  )
   if (chance(injuryChance)) {
     issueInjury(state, live, p)
     return
@@ -658,6 +663,7 @@ export function finishLiveMatch(state: GameState): void {
   const impulse = won ? 2 : drawn ? 0 : -2
   team.teamChemistry = clamp(team.teamChemistry + impulse + (rngInt(3) - 1), 20, 100)
   recomputeTeamChemistry(team, impulse)
+  if (state.manager?.fanTrust != null) applyFanTrustToChemistry(team, state.manager.fanTrust)
   season.teamChemistry = team.teamChemistry
 
   const ratings = keyPlayerRatings(state)

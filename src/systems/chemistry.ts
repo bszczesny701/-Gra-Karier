@@ -67,6 +67,12 @@ export function recomputeTeamChemistry(team: TeamState, postMatchImpulse = 0): n
   return team.teamChemistry
 }
 
+/** Lekki bonus/kara zaufania kibiców do chemii XI. */
+export function applyFanTrustToChemistry(team: TeamState, fanTrust: number): void {
+  const bonus = (fanTrust - 50) * 0.08
+  team.teamChemistry = clamp(Math.round(team.teamChemistry + bonus), 20, 100)
+}
+
 export function playerSharpnessMod(p: SquadPlayer): number {
   normalizeSquadPlayer(p)
   return ((p.sharpness ?? 70) - 70) * 0.04

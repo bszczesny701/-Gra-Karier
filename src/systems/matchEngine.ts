@@ -18,6 +18,7 @@ import {
   tickLoans,
 } from './transfers'
 import { applyWeekTraining } from './training'
+import { maybeSpawnJobOffer } from './jobOffers'
 
 export { canAdvanceWeek, nextUserMatch }
 
@@ -127,6 +128,7 @@ export function advanceWeek(state: GameState): string | null {
     if (Math.random() < 0.35) maybeAiBuyOffers(state)
     if (Math.random() < 0.5) tickAiWorldTransfers(state, 2)
   }
+  maybeSpawnJobOffer(state)
 
   state.screen = 'hub'
   return null

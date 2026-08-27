@@ -27,6 +27,7 @@ export function newsKindLabel(kind: NewsKind): string {
   if (kind === 'form') return 'Forma'
   if (kind === 'club') return 'Klub'
   if (kind === 'transfer') return 'Transfery'
+  if (kind === 'press') return 'Media'
   return 'Liga'
 }
 

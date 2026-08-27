@@ -30,6 +30,7 @@ import {
 import { createTeamState, pickDefaultLineup, normalizeTeamSquad, normalizeSquadPlayer } from './squadGen'
 import { applyFormationDefaultOrder, validateLineup } from './tactics'
 import { recomputeTeamChemistry } from './chemistry'
+import { buildPressSession } from './press'
 import { playerTablePosition, sortedStandings, standingsAroundPlayer } from './standings'
 import {
   applyBoardTrust,
@@ -103,6 +104,9 @@ export {
 } from './chemistry'
 export { workRateLabel } from './squadGen'
 export { tickAiWorldTransfers } from './transfers'
+export { buildPressSession, answerPressQuestion, ensureFanTrust } from './press'
+export { maybeSpawnJobOffer, acceptJobOffer, rejectJobOffer } from './jobOffers'
+export type { AttackInstruction, DefendInstruction, Difficulty } from '../state/types'
 
 export function polishLeagues() {
   return LEAGUES.filter((l) => l.country === 'PL').sort((a, b) => b.tier - a.tier)
@@ -143,15 +147,21 @@ export function selectClub(state: GameState, clubId: string): void {
   if (returning && state.manager) {
     state.manager.clubId = clubId
     state.manager.boardTrust = trust
+    state.manager.fanTrust = Math.max(20, Math.min(85, trust + (Math.floor(Math.random() * 11) - 5)))
   } else {
     state.manager = {
       name: state.draftManagerName || state.manager?.name || 'Trener',
       reputation: 35,
       boardTrust: trust,
+      fanTrust: Math.max(20, Math.min(85, trust + (Math.floor(Math.random() * 11) - 5))),
       seasonsManaged: 0,
       clubId,
     }
   }
+
+  if (!state.settings) state.settings = { difficulty: 'normal' }
+  state.pendingPress = null
+  state.pendingJobOffer = null
 
   state.team = createTeamState(clubId)
   normalizeTeamSquad(state.team)
@@ -284,6 +294,13 @@ export function dismissMatchResult(state: GameState): void {
   }
   if (season.lastMatch) {
     pushLog(state, season.lastMatch.narrative)
+  }
+  if (!state.pendingPress) {
+    state.pendingPress = buildPressSession(state)
+  }
+  if (state.pendingPress && state.pendingPress.index < state.pendingPress.questions.length) {
+    state.screen = 'pressConference'
+    return
   }
   if (season.phase === 'done') {
     finalizeSeason(state)

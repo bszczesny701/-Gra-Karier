@@ -120,6 +120,8 @@ export function normalizeTeamSquad(team: TeamState): void {
   if (!team.trainingFocus) team.trainingFocus = 'balanced'
   if (team.captainId === undefined) team.captainId = null
   if (team.lastTrainingDay === undefined) team.lastTrainingDay = null
+  if (!team.playerInstructions) team.playerInstructions = {}
+  if (!team.setPieces) team.setPieces = { corners: null, freeKicks: null, penalties: null }
   if (team.captainId && !team.squad.some((p) => p.id === team.captainId)) {
     team.captainId = null
   }
@@ -307,6 +309,8 @@ export function createTeamState(clubId: string): TeamState {
     trainingFocus: 'balanced',
     captainId: captain?.id ?? null,
     lastTrainingDay: null,
+    playerInstructions: {},
+    setPieces: { corners: null, freeKicks: null, penalties: null },
   }
 }
 

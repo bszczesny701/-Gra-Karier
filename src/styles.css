@@ -2118,6 +2118,61 @@ h3 {
 .train-result.grade-e .train-grade { color: #f08060; }
 .train-result.grade-f .train-grade { color: #f05555; }
 
+.trust-bar.fan i {
+  background: linear-gradient(90deg, #5a9fd4, #7ec8f0);
+}
+
+.job-offer-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 200, 100, 0.25);
+  background: rgba(40, 30, 10, 0.35);
+}
+
+.transfer-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.transfer-filters select,
+.transfer-filters input,
+.setpiece-row select,
+.player-instr select,
+#sel-difficulty {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e8f0f8;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.transfer-filters input {
+  width: 88px;
+}
+
+.player-instr,
+.setpiece-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.press-panel .press-q {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 16px 0;
+}
+
+.mail-row-kind.kind-press { color: #c9a0e8; }
+.mail-row-kind.kind-job { color: #e8c060; }
+.news-card.kind-press .news-card-tag { color: #c9a0e8; }
+
+
 
 .player-leave-badge {
   margin: 0;

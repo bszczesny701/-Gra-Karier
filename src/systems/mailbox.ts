@@ -2,6 +2,7 @@ import { getClub } from '../data/clubs'
 import type { GameState, MailKind, MailMessage } from '../state/types'
 import type { BoardReviewResult } from './board'
 import { SACK_TRUST_THRESHOLD, WARN_TRUST_THRESHOLD } from './board'
+import { pushNews } from './news'
 
 let mailSeq = 0
 
@@ -117,11 +118,34 @@ export function deliverBoardReviewMail(state: GameState, review: BoardReviewResu
     round: season.roundIndex,
     year: season.year,
   })
+
+  if (review.crisis) {
+    pushNews(state, {
+      kind: 'club',
+      headline: `Kryzys w ${club.short}`,
+      body: `${review.summary} Kibice i media komentują serię porażek.`,
+      round: season.roundIndex,
+      year: season.year,
+    })
+    if (manager.fanTrust != null) {
+      manager.fanTrust = Math.max(0, Math.min(100, manager.fanTrust - 4))
+    }
+  } else if (review.delta <= -8) {
+    pushNews(state, {
+      kind: 'press',
+      headline: `Napięcie wokół ${manager.name}`,
+      body: review.summary,
+      round: season.roundIndex,
+      year: season.year,
+    })
+  }
 }
 
 export function mailKindLabel(kind: MailKind): string {
   if (kind === 'discipline') return 'Dyscyplina'
   if (kind === 'medical') return 'Medycyna'
   if (kind === 'board') return 'Zarząd'
+  if (kind === 'press') return 'Media'
+  if (kind === 'job') return 'Oferta'
   return 'System'
 }
