@@ -97,6 +97,16 @@ export interface BoardExpectation {
   detail: string
 }
 
+export type WorkRate = 'low' | 'med' | 'high'
+export type StarRating = 1 | 2 | 3 | 4 | 5
+export type TrainingFocus =
+  | 'pace'
+  | 'shooting'
+  | 'passing'
+  | 'defending'
+  | 'stamina'
+  | 'balanced'
+
 export interface SquadPlayer {
   id: string
   name: string
@@ -106,10 +116,19 @@ export interface SquadPlayer {
   role: PitchRole
   age: number
   overall: number
+  /** Sufit rozwoju (zawsze >= overall) */
+  potential: number
   attrs: Attributes
   form: number
   fitness: number
   morale: number
+  /** Świeżość meczowa 0–100 */
+  sharpness: number
+  weakFoot: StarRating
+  skillMoves: StarRating
+  workRateAtk: WorkRate
+  workRateDef: WorkRate
+  nationality: string
   /** Mecze do opuszczenia przez kontuzję (0 = zdrowy) */
   injuryMatchesLeft: number
   /** Mecze zawieszenia po czerwonej (0 = dostępny) */
@@ -120,6 +139,8 @@ export interface SquadPlayer {
   wage: number
   seasonApps: number
   seasonGoals: number
+  seasonAssists: number
+  seasonMinutes: number
   wantsToLeave: boolean
   /** Klauzula odstępnego (null = brak) */
   releaseClause: number | null
@@ -162,6 +183,8 @@ export interface TeamState {
   /** 11 id startujących (kolejność: wg slotów formacji) */
   startingIds: string[]
   benchIds: string[]
+  trainingFocus: TrainingFocus
+  captainId: string | null
 }
 
 export interface LeagueFixture {
@@ -475,7 +498,7 @@ export interface GameState {
 }
 
 export const SAVE_KEY = 'gra-karier-manager-v1'
-export const SAVE_VERSION = 114
+export const SAVE_VERSION = 115
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

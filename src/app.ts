@@ -51,6 +51,11 @@ import {
   suggestRenewTerms,
   playerMarketValue,
   weeklyWageBill,
+  TRAINING_FOCUS_LABELS,
+  cycleTrainingFocus,
+  setCaptain,
+  dressingRoomStatus,
+  workRateLabel,
   type MotivationId,
 } from './systems/managerCareer'
 import { intervalMsForSpeed } from './systems/liveMatch'
@@ -76,7 +81,7 @@ import {
   transferWindowLabel,
   weekdayLabel,
 } from './systems/calendar'
-import { normalizeSquadPlayer, updateWantsToLeave, averageStarterOvr, starters } from './systems/squadGen'
+import { normalizeSquadPlayer, normalizeTeamSquad, updateWantsToLeave, averageStarterOvr, starters } from './systems/squadGen'
 import { lineupPower, slotMismatch } from './systems/tactics'
 import { clearSave, hasSave, loadState, saveState } from './state/gameState'
 import type {
@@ -388,6 +393,7 @@ export class App {
     const m = this.state.manager!
     const team = this.state.team!
     const s = this.state.season!
+    normalizeTeamSquad(team)
     if (m.boardTrust == null) {
       m.boardTrust = initialBoardTrust(s.clubId, s.leagueId)
     }
@@ -430,7 +436,7 @@ export class App {
     if (upcoming) {
       const oppId = upcoming.homeId === s.clubId ? upcoming.awayId : upcoming.homeId
       const opp = getClub(oppId)
-      const oppPow = clubPowerPreview(oppId)
+      const oppPow = clubPowerPreview(oppId, this.state)
       const home = upcoming.homeId === s.clubId
       const comp = upcoming.competition === 'cup' ? 'Puchar' : `Liga · kol. ${(upcoming.leagueRound ?? s.roundIndex) + 1}`
       rivalTileInner = `
@@ -627,6 +633,9 @@ export class App {
               <span class="cal-window-badge ${w?.transferWindow ? 'open' : ''}">${windowBadge}</span>
             </div>
             <p class="muted" style="margin:0 0 10px">${w?.label ?? '—'} · Sezon ${s.year}</p>
+            <p class="meta" style="margin:0 0 8px">Trening: <strong>${TRAINING_FOCUS_LABELS[team.trainingFocus ?? 'balanced']}</strong>
+              <button type="button" class="btn ghost compact" id="btn-cycle-focus" style="margin-left:8px">Zmień focus</button>
+            </p>
             <div class="cal-week">${daysHtml}</div>
             <div class="actions" style="margin-top:14px">
               ${
@@ -700,10 +709,10 @@ export class App {
                 ? (() => {
                     const oppId = upcoming.homeId === s.clubId ? upcoming.awayId : upcoming.homeId
                     const opp = getClub(oppId)
-                    const oppPow = clubPowerPreview(oppId)
+                    const oppPow = clubPowerPreview(oppId, this.state)
                     const home = upcoming.homeId === s.clubId
                     const maxPow = Math.max(yourPow, oppPow, 1)
-                    const tops = clubTopPlayers(oppId, 3)
+                    const tops = clubTopPlayers(oppId, 3, this.state)
                     const form = clubForm(s.standings, oppId)
                     const oppRow = s.standings.find((r) => r.clubId === oppId)
                     const oppPlace = sortedStandings(s).findIndex((r) => r.clubId === oppId) + 1
@@ -873,6 +882,24 @@ export class App {
               <button type="button" class="btn ghost compact" data-hub-tab="transfers">Transfery</button>
             </div>
           </section>
+          ${(() => {
+            normalizeTeamSquad(team)
+            const room = dressingRoomStatus(team)
+            const unrestHtml = room.unrest
+              .slice(0, 3)
+              .map((p) => `<li>${p.name.split(' ').pop()} · chce odejść · ${p.overall} OVR</li>`)
+              .join('')
+            const lowHtml = room.lowMorale
+              .map((p) => `<li>${p.name.split(' ').pop()} · morale ${Math.round(p.morale)}</li>`)
+              .join('')
+            return `<section class="career-panel">
+              <h3>Szatnia</h3>
+              <p class="meta">Chemia <strong>${Math.round(team.teamChemistry)}</strong> · kapitan <strong>${room.captain?.name.split(' ').pop() ?? '—'}</strong></p>
+              <p class="muted">${room.line}</p>
+              <p class="muted">Focus treningu: ${TRAINING_FOCUS_LABELS[team.trainingFocus ?? 'balanced']}</p>
+              ${unrestHtml || lowHtml ? `<ul class="log compact">${unrestHtml || lowHtml}</ul>` : '<p class="muted">Brak napięć w kadrze.</p>'}
+            </section>`
+          })()}
           <section class="career-panel">
             <h3>Profil trenera</h3>
             <p class="meta">${m.name} · reputacja ${m.reputation} · sezony ${m.seasonsManaged}</p>
@@ -1038,7 +1065,15 @@ export class App {
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-training]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        pushTempAlert('Trening wkrótce — na razie to tylko plan tygodnia.')
+        this.go(() => {
+          const focus = cycleTrainingFocus(this.state)
+          pushTempAlert(`Focus treningu: ${TRAINING_FOCUS_LABELS[focus]}`)
+        })
+      })
+    })
+    this.root.querySelector('#btn-cycle-focus')?.addEventListener('click', () => {
+      this.go(() => {
+        cycleTrainingFocus(this.state)
       })
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-play-match]').forEach((btn) => {
@@ -1200,13 +1235,14 @@ export class App {
             <article class="player-profile-card" role="dialog" aria-label="Profil ${profile.name}">
               <header class="player-profile-head">
                 <div>
-                  <p class="muted">${ROLE_FULL[profile.role]} · ${profile.age} lat</p>
+                  <p class="muted">${ROLE_FULL[profile.role]} · ${profile.age} lat · ${profile.nationality ?? 'PL'}</p>
                   <h3>${profile.name}</h3>
                 </div>
-                <div class="player-profile-ovr">${profile.overall}</div>
+                <div class="player-profile-ovr" title="Overall / Potential">${profile.overall}<span class="player-pot">/${profile.potential ?? profile.overall}</span></div>
               </header>
               ${profile.wantsToLeave ? '<p class="player-leave-badge">Chce odejść</p>' : ''}
               ${unavail ? `<p class="player-status-warn">${unavail}</p>` : ''}
+              <p class="muted player-card-meta">WF ${profile.weakFoot ?? 2}★ · SM ${profile.skillMoves ?? 2}★ · praca ${workRateLabel(profile.workRateAtk ?? 'med')}/${workRateLabel(profile.workRateDef ?? 'med')} · wartość ~${playerMarketValue(profile).toLocaleString('pl-PL')}</p>
               <div class="player-profile-meters">
                 ${attrRow('Tempo', profile.attrs.pace)}
                 ${attrRow('Strzał', profile.attrs.shooting)}
@@ -1218,7 +1254,9 @@ export class App {
                 <div><span class="muted">Forma</span><strong>${Math.round(profile.form)}</strong></div>
                 <div><span class="muted">Morale</span><strong>${Math.round(profile.morale)}</strong></div>
                 <div><span class="muted">Kondycja</span><strong>${Math.round(profile.fitness)}%</strong></div>
-                <div><span class="muted">Sezon</span><strong>${profile.seasonApps} mecz. · ${profile.seasonGoals} gol.</strong></div>
+                <div><span class="muted">Sharpness</span><strong>${Math.round(profile.sharpness ?? 70)}</strong></div>
+                <div><span class="muted">Sezon</span><strong>${profile.seasonApps} m · ${profile.seasonGoals} G · ${profile.seasonAssists ?? 0} A</strong></div>
+                <div><span class="muted">Minuty</span><strong>${profile.seasonMinutes ?? 0}'</strong></div>
               </div>
               <div class="player-profile-contract">
                 <span class="muted">Kontrakt</span>
@@ -1229,6 +1267,11 @@ export class App {
                 ${profile.loanFromClubId ? `<span class="muted">· wypożyczony z ${getClub(profile.loanFromClubId).short}${profile.loanWeeksLeft != null ? ` · ${profile.loanWeeksLeft} tyg.` : ''}</span>` : ''}
               </div>
               <div class="actions" style="margin-top:4px">
+                ${
+                  team.captainId === profile.id
+                    ? `<span class="muted" style="align-self:center">Kapitan</span>`
+                    : `<button type="button" class="btn ghost compact" id="btn-make-captain">Kapitan</button>`
+                }
                 ${
                   !profile.loanFromClubId
                     ? `<button type="button" class="btn primary compact" id="btn-renew">Przedłuż</button>
@@ -1496,6 +1539,14 @@ export class App {
         const err = renewContract(this.state, id, sug.years, sug.wage, sug.clause)
         if (err) pushTempAlert(err)
         else this.profilePlayerId = null
+      })
+    })
+    this.root.querySelector('#btn-make-captain')?.addEventListener('click', () => {
+      const id = this.profilePlayerId
+      if (!id || !this.state.team) return
+      this.go(() => {
+        setCaptain(this.state.team!, id)
+        this.profilePlayerId = null
       })
     })
     this.root.querySelector('#btn-list-player')?.addEventListener('click', () => {

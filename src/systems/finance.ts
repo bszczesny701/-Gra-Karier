@@ -8,7 +8,9 @@ export function playerMarketValue(p: SquadPlayer): number {
   normalizeSquadPlayer(p)
   const ageMod = p.age <= 23 ? 1.35 : p.age <= 28 ? 1.15 : p.age <= 32 ? 0.9 : 0.55
   const roleMod = p.role === 'BR' ? 0.85 : p.role === 'ŚN' || p.role === 'PN' || p.role === 'LN' ? 1.15 : 1
-  return Math.max(50_000, Math.round(p.overall * p.overall * 420 * ageMod * roleMod))
+  const potGap = Math.max(0, (p.potential ?? p.overall) - p.overall)
+  const potMod = p.age <= 24 ? 1 + potGap * 0.035 : 1 + potGap * 0.015
+  return Math.max(50_000, Math.round(p.overall * p.overall * 420 * ageMod * roleMod * potMod))
 }
 
 export function expectedWage(p: SquadPlayer): number {

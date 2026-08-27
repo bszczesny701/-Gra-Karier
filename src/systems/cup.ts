@@ -55,10 +55,11 @@ function sortByStrength(ids: string[]): string[] {
 export function simulateCupScore(
   homeId: string,
   awayId: string,
+  state?: GameState | null,
 ): { homeGoals: number; awayGoals: number; pens: boolean } {
-  let { homeGoals, awayGoals } = simulateAiMatch(homeId, awayId)
+  let { homeGoals, awayGoals } = simulateAiMatch(homeId, awayId, {}, state)
   if (homeGoals !== awayGoals) return { homeGoals, awayGoals, pens: false }
-  const homeEdge = aiClubPower(homeId) >= aiClubPower(awayId)
+  const homeEdge = aiClubPower(homeId, {}, state) >= aiClubPower(awayId, {}, state)
   if (homeEdge) homeGoals += 1
   else awayGoals += 1
   return { homeGoals, awayGoals, pens: true }

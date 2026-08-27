@@ -18,6 +18,7 @@ import {
 } from './finance'
 import { generateSquad, normalizeSquadPlayer, pickDefaultLineup } from './squadGen'
 import { pushMail } from './mailbox'
+import { pushNews } from './news'
 
 const MIN_SQUAD = 18
 const MAX_SQUAD = 30
@@ -587,4 +588,84 @@ export function exerciseLoanBuyOption(state: GameState, playerId: string): strin
 export function onTransferWindowOpened(state: GameState): void {
   seedMarketListings(state)
   maybeAiBuyOffers(state)
+  tickAiWorldTransfers(state)
+}
+
+function leagueTierOf(state: GameState, clubId: string): number {
+  const lid = state.clubLeagueIds[clubId]
+  const league = LEAGUES.find((l) => l.id === lid)
+  return league?.tier ?? 9
+}
+
+function avgSquadOvr(squad: SquadPlayer[]): number {
+  if (!squad.length) return 40
+  const top = [...squad].sort((a, b) => b.overall - a.overall).slice(0, 11)
+  return top.reduce((s, p) => s + p.overall, 0) / top.length
+}
+
+/** Transfery AI↔AI w okienku — zmieniają kadry i generują newsy. */
+export function tickAiWorldTransfers(state: GameState, maxDeals = 2): void {
+  if (!isTransferWindowOpen(state)) return
+  ensureAiSquads(state)
+  const you = state.team?.clubId
+  const listings = state.market.listings.filter((l) => l.clubId !== you)
+  if (!listings.length) return
+
+  let deals = 0
+  const shuffled = [...listings].sort(() => Math.random() - 0.5)
+
+  for (const listing of shuffled) {
+    if (deals >= maxDeals) break
+    if (Math.random() > 0.55) continue
+
+    const sellerSquad = state.market.aiSquads[listing.clubId]
+    if (!sellerSquad) continue
+    const player = sellerSquad.find((p) => p.id === listing.playerId)
+    if (!player) continue
+    if (keepersInSquad(sellerSquad) <= 1 && player.role === 'BR') continue
+    if (sellerSquad.length <= MIN_SQUAD) continue
+
+    const sellerTier = leagueTierOf(state, listing.clubId)
+    const buyers = Object.keys(state.market.aiSquads).filter((cid) => {
+      if (cid === listing.clubId || cid === you) return false
+      const sq = state.market.aiSquads[cid]!
+      if (sq.length >= MAX_SQUAD) return false
+      const tier = leagueTierOf(state, cid)
+      return tier <= sellerTier + 1
+    })
+    if (!buyers.length) continue
+
+    const buyerId = buyers[Math.floor(Math.random() * buyers.length)]!
+    const buyerSquad = state.market.aiSquads[buyerId]!
+    const buyerAvg = avgSquadOvr(buyerSquad)
+    const needsUpgrade = player.overall >= buyerAvg - 1
+    const roleGap = !buyerSquad.some((p) => p.role === player.role && p.overall >= player.overall - 2)
+    if (!needsUpgrade && !roleGap && Math.random() > 0.35) continue
+
+    const moved = removePlayerFromClub(state, listing.clubId, player.id)
+    if (!moved) continue
+    addPlayerToClub(state, buyerId, moved)
+    state.market.listings = state.market.listings.filter((l) => l.playerId !== listing.playerId)
+    publishAiTransferNews(state, moved, listing.clubId, buyerId, listing.askingPrice)
+    deals++
+  }
+}
+
+function publishAiTransferNews(
+  state: GameState,
+  player: SquadPlayer,
+  fromId: string,
+  toId: string,
+  fee: number,
+): void {
+  const from = getClub(fromId)
+  const to = getClub(toId)
+  pushNews(state, {
+    kind: 'transfer',
+    headline: `${player.name} → ${to.short}`,
+    body: `${to.name} wykupił ${player.name} (${player.overall} OVR) z ${from.name} za ok. ${Math.round(fee).toLocaleString('pl-PL')} zł.`,
+    round: state.season?.roundIndex,
+    year: state.season?.year,
+  })
+  pushLog(state, `AI: ${from.short} → ${to.short}: ${player.name}`)
 }

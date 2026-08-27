@@ -2040,6 +2040,18 @@ h3 {
   color: var(--accent);
 }
 
+.player-profile-ovr .player-pot {
+  font-size: 0.55em;
+  font-weight: 700;
+  opacity: 0.65;
+  margin-left: 2px;
+}
+
+.player-card-meta {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+}
+
 .player-leave-badge {
   margin: 0;
   display: inline-block;

@@ -26,6 +26,7 @@ import { applyCupMatchResult } from './cup'
 import { nextUserMatch } from './calendar'
 import { maybeBoardReview } from './board'
 import { updateWantsToLeave, normalizeSquadPlayer } from './squadGen'
+import { recomputeTeamChemistry } from './chemistry'
 import { pushLog } from '../state/gameState'
 
 const MAX_SUBS = 3
@@ -64,7 +65,8 @@ function pitchIds(live: LiveMatchState): string[] {
 
 function effectiveOvr(p: SquadPlayer, fatigue: number): number {
   const f = clampFloat(fatigue, 0, 100)
-  return p.overall * (0.55 + 0.45 * (f / 100)) + (p.form - 50) * 0.08
+  const sharp = ((p.sharpness ?? 70) - 70) * 0.06
+  return p.overall * (0.55 + 0.45 * (f / 100)) + (p.form - 50) * 0.08 + sharp
 }
 
 export function liveTeamPower(state: GameState, live: LiveMatchState): number {
@@ -81,12 +83,14 @@ export function liveTeamPower(state: GameState, live: LiveMatchState): number {
       : ((ids.length / 11) - 0.65) * 6
   const t = normalizeTactics(team.tactics)
   const chem = (team.teamChemistry - 50) * 0.05
+  const captBonus =
+    team.captainId && pitchIds(live).includes(team.captainId) ? 0.7 : 0
   const styleBias = (t.mentality - 3) * 0.45
   const planBias =
     t.plan === 'press' ? 0.5 : t.plan === 'direct' ? 0.4 : t.plan === 'possession' ? -0.15 : 0.2
   const morale = live.moraleBoost * 1.4
   const menDown = (11 - xs.length) * 3.8
-  return avg + fit + chem + styleBias + planBias + morale - menDown
+  return avg + fit + chem + captBonus + styleBias + planBias + morale - menDown
 }
 
 function drainPerMinute(state: GameState, live: LiveMatchState): number {
@@ -579,6 +583,10 @@ export function finishLiveMatch(state: GameState): void {
     normalizeSquadPlayer(p)
     if (live.playedIds.includes(p.id)) {
       p.seasonApps = (p.seasonApps ?? 0) + 1
+      const started = team.startingIds.includes(p.id) || live.onPitchIds.includes(p.id)
+      const minutes = started && !live.benchIds.includes(p.id) ? 70 + rngInt(21) : 25 + rngInt(40)
+      p.seasonMinutes = (p.seasonMinutes ?? 0) + minutes
+      p.sharpness = clamp((p.sharpness ?? 70) + 3 + rngInt(4), 0, 100)
       const fat = live.fatigue[p.id] ?? 50
       const loss = clamp(Math.round((100 - fat) * 0.35 + 4), 4, 22)
       p.fitness = clamp(p.fitness - loss, 20, 100)
@@ -587,19 +595,33 @@ export function finishLiveMatch(state: GameState): void {
     } else if (live.benchIds.includes(p.id)) {
       // ~2 mecze na ławce = pełna kondycja (nawet z ~20%)
       p.fitness = clamp(p.fitness + 50 + rngInt(6), 20, 100)
+      p.sharpness = clamp((p.sharpness ?? 70) - 1, 0, 100)
       p.morale = clamp(p.morale + (won ? 1 : 0), 20, 100)
     } else {
       p.fitness = clamp(p.fitness + 52 + rngInt(6), 20, 100)
+      p.sharpness = clamp((p.sharpness ?? 70) - 2, 0, 100)
       if (!isCup) p.morale = clamp(p.morale - 1, 20, 100)
     }
   }
 
-  for (const e of live.events) {
-    if (e.kind !== 'goal' || e.side !== 'you' || !e.playerId) continue
+  const yourGoalEvents = live.events.filter((e) => e.kind === 'goal' && e.side === 'you' && e.playerId)
+  for (const e of yourGoalEvents) {
     const scorer = team.squad.find((p) => p.id === e.playerId)
     if (scorer) {
       normalizeSquadPlayer(scorer)
       scorer.seasonGoals = (scorer.seasonGoals ?? 0) + 1
+    }
+  }
+  // Asysty: ~20% goli przypisane losowemu innemu z XI
+  const assistPool = pitchIds(live)
+  for (const e of yourGoalEvents) {
+    if (Math.random() > 0.22 || assistPool.length < 2) continue
+    const others = assistPool.filter((id) => id !== e.playerId)
+    const aid = others[rngInt(others.length)]
+    const asst = team.squad.find((p) => p.id === aid)
+    if (asst) {
+      normalizeSquadPlayer(asst)
+      asst.seasonAssists = (asst.seasonAssists ?? 0) + 1
     }
   }
 
@@ -633,11 +655,9 @@ export function finishLiveMatch(state: GameState): void {
     .slice(0, 7)
     .map((p) => p.id)
 
-  team.teamChemistry = clamp(
-    team.teamChemistry + (won ? 2 : drawn ? 0 : -2) + (rngInt(3) - 1),
-    20,
-    100,
-  )
+  const impulse = won ? 2 : drawn ? 0 : -2
+  team.teamChemistry = clamp(team.teamChemistry + impulse + (rngInt(3) - 1), 20, 100)
+  recomputeTeamChemistry(team, impulse)
   season.teamChemistry = team.teamChemistry
 
   const ratings = keyPlayerRatings(state)

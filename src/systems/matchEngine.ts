@@ -14,8 +14,10 @@ import {
   isTransferWindowOpen,
   maybeAiBuyOffers,
   onTransferWindowOpened,
+  tickAiWorldTransfers,
   tickLoans,
 } from './transfers'
+import { applyWeekTraining } from './training'
 
 export { canAdvanceWeek, nextUserMatch }
 
@@ -34,11 +36,11 @@ function syncLeagueRoundProgress(season: GameState['season']): void {
 function resolveScheduledAi(state: GameState, m: ScheduledMatch): void {
   if (m.homeGoals != null) return
   if (m.competition === 'cup') {
-    const { homeGoals, awayGoals } = simulateCupScore(m.homeId, m.awayId)
+    const { homeGoals, awayGoals } = simulateCupScore(m.homeId, m.awayId, state)
     applyCupMatchResult(state.season!, m.id, homeGoals, awayGoals)
     return
   }
-  const { homeGoals, awayGoals } = simulateAiMatch(m.homeId, m.awayId)
+  const { homeGoals, awayGoals } = simulateAiMatch(m.homeId, m.awayId, {}, state)
   m.homeGoals = homeGoals
   m.awayGoals = awayGoals
   applyResultToStandings(state.season!.standings, m.homeId, m.awayId, homeGoals, awayGoals)
@@ -106,6 +108,7 @@ export function advanceWeek(state: GameState): string | null {
   if (nextUserMatch(season)) return 'Najpierw rozegraj swój mecz w tym tygodniu'
 
   const prevOpen = isTransferWindowOpen(state)
+  applyWeekTraining(state)
   simOtherMatchesInWeek(state, null)
   season.calendar.weekIndex += 1
 
@@ -120,7 +123,10 @@ export function advanceWeek(state: GameState): string | null {
   tickLoans(state)
   const nowOpen = isTransferWindowOpen(state)
   if (nowOpen && !prevOpen) onTransferWindowOpened(state)
-  else if (nowOpen && Math.random() < 0.35) maybeAiBuyOffers(state)
+  else if (nowOpen) {
+    if (Math.random() < 0.35) maybeAiBuyOffers(state)
+    if (Math.random() < 0.5) tickAiWorldTransfers(state, 2)
+  }
 
   state.screen = 'hub'
   return null

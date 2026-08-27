@@ -57,10 +57,19 @@ export function lineupPower(team: TeamState, tactics: Tactics = team.tactics): n
   const xi = starters(team)
   if (!xi.length) return 40
   const ovr =
-    xi.reduce((s, p) => s + p.overall + (p.form - 50) * 0.12 + (p.fitness - 70) * 0.08, 0) /
-    xi.length
+    xi.reduce(
+      (s, p) =>
+        s +
+        p.overall +
+        (p.form - 50) * 0.12 +
+        (p.fitness - 70) * 0.08 +
+        ((p.sharpness ?? 70) - 70) * 0.05,
+      0,
+    ) / xi.length
   const fit = formationFit(team, t.formation)
   const chem = (team.teamChemistry - 50) * 0.06
+  const captBonus =
+    team.captainId && team.startingIds.includes(team.captainId) ? 0.8 : 0
   const mentBias = (t.mentality - 3) * 0.55
   const planBias =
     t.plan === 'press' ? 0.6 : t.plan === 'direct' ? 0.5 : t.plan === 'possession' ? -0.2 : t.plan === 'counter' ? 0.3 : 0.2
@@ -70,7 +79,7 @@ export function lineupPower(team: TeamState, tactics: Tactics = team.tactics): n
     (t.tempo - 2) * 0.4 +
     (t.defLine - 2) * 0.2 +
     (t.buildUp - 2) * 0.15
-  return ovr + (fit - 0.65) * 8 + chem + mentBias + planBias + axisBias
+  return ovr + (fit - 0.65) * 8 + chem + captBonus + mentBias + planBias + axisBias
 }
 
 export function validateLineup(team: TeamState): string | null {

@@ -1,6 +1,14 @@
 import { getClub } from '../data/clubs'
 import { EKSTRAKLASA_SQUADS, type RealPlayerSeed } from '../data/ekstraklasaSquads'
-import type { FormationSlot, PitchRole, Position, SquadPlayer, TeamState } from '../state/types'
+import type {
+  FormationSlot,
+  PitchRole,
+  Position,
+  SquadPlayer,
+  StarRating,
+  TeamState,
+  WorkRate,
+} from '../state/types'
 import { clamp, defaultTactics, formationPlan, roleBase } from '../state/types'
 import { attrsFromOverall, calcOverall } from './playerFactory'
 
@@ -16,6 +24,9 @@ const LAST = [
   'Adamczyk', 'Dudek', 'Zając', 'Wieczorek', 'Jabłoński', 'Król', 'Majewski', 'Olszewski',
 ]
 
+const NAT_POOL = ['PL', 'PL', 'PL', 'PL', 'PL', 'PL', 'UA', 'SK', 'CZ', 'ES', 'BR', 'NG'] as const
+const WR: WorkRate[] = ['low', 'med', 'high']
+
 function hash(s: string): number {
   let h = 0
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
@@ -25,6 +36,38 @@ function hash(s: string): number {
 export function playerName(seed: string): string {
   const h = hash(seed)
   return `${FIRST[h % FIRST.length]} ${LAST[Math.floor(h / 19) % LAST.length]}`
+}
+
+function starFromHash(h: number, bias = 2): StarRating {
+  return clamp(bias + (h % 4), 1, 5) as StarRating
+}
+
+function workFromHash(h: number, shift = 0): WorkRate {
+  return WR[(h + shift) % 3]!
+}
+
+function stubPotential(age: number, overall: number, h: number): number {
+  const room =
+    age <= 21 ? 8 + (h % 7) : age <= 25 ? 4 + (h % 6) : age <= 29 ? 1 + (h % 4) : h % 2
+  return clamp(overall + room, overall, 94)
+}
+
+function cardExtras(age: number, overall: number, role: PitchRole, h: number) {
+  const potential = stubPotential(age, overall, h)
+  const weakFoot = starFromHash(h, role === 'BR' ? 2 : 2)
+  const skillMoves = starFromHash(h >> 3, role === 'ŚN' || role === 'PN' || role === 'LN' ? 3 : 2)
+  const base = roleBase(role)
+  return {
+    potential,
+    sharpness: 62 + (h % 28),
+    weakFoot,
+    skillMoves,
+    workRateAtk: workFromHash(h, base === 'OB' || role === 'BR' ? 0 : 1),
+    workRateDef: workFromHash(h >> 2, base === 'NP' ? 0 : 1),
+    nationality: NAT_POOL[h % NAT_POOL.length]!,
+    seasonAssists: 0,
+    seasonMinutes: 0,
+  }
 }
 
 /** Kadra z dokładnymi rolami (jak w FIFA). */
@@ -50,19 +93,42 @@ function stubContract(age: number, overall: number, h: number): {
 export function normalizeSquadPlayer(p: SquadPlayer): SquadPlayer {
   const h = hash(p.id)
   const stub = stubContract(p.age, p.overall, h)
+  const extras = cardExtras(p.age, p.overall, p.role, h)
   p.contractYears = p.contractYears ?? stub.contractYears
   p.wage = p.wage ?? stub.wage
   p.seasonApps = p.seasonApps ?? 0
   p.seasonGoals = p.seasonGoals ?? 0
+  p.seasonAssists = p.seasonAssists ?? 0
+  p.seasonMinutes = p.seasonMinutes ?? 0
   p.wantsToLeave = p.wantsToLeave ?? false
   p.injuryMatchesLeft = p.injuryMatchesLeft ?? 0
   p.suspensionMatchesLeft = p.suspensionMatchesLeft ?? 0
   if (p.releaseClause === undefined) p.releaseClause = stub.releaseClause
+  if (p.potential == null) p.potential = extras.potential
+  else p.potential = clamp(Math.max(p.potential, p.overall), p.overall, 94)
+  if (p.sharpness == null) p.sharpness = extras.sharpness
+  if (p.weakFoot == null) p.weakFoot = extras.weakFoot
+  if (p.skillMoves == null) p.skillMoves = extras.skillMoves
+  if (p.workRateAtk == null) p.workRateAtk = extras.workRateAtk
+  if (p.workRateDef == null) p.workRateDef = extras.workRateDef
+  if (!p.nationality) p.nationality = extras.nationality
   return p
 }
 
 export function normalizeTeamSquad(team: TeamState): void {
   for (const p of team.squad) normalizeSquadPlayer(p)
+  if (!team.trainingFocus) team.trainingFocus = 'balanced'
+  if (team.captainId === undefined) team.captainId = null
+  if (team.captainId && !team.squad.some((p) => p.id === team.captainId)) {
+    team.captainId = null
+  }
+  if (!team.captainId && team.startingIds.length) {
+    const xi = team.startingIds
+      .map((id) => team.squad.find((p) => p.id === id))
+      .filter(Boolean) as SquadPlayer[]
+    const best = [...xi].sort((a, b) => b.overall + b.morale - (a.overall + a.morale))[0]
+    team.captainId = best?.id ?? team.squad[0]?.id ?? null
+  }
 }
 
 /** Aktualizuje flagę „chce odejść” wg morale / gry / kontuzji. */
@@ -94,6 +160,7 @@ function makePlayer(
   attrs[jitter] = clamp(attrs[jitter] + ((h % 5) - 2))
   const finalOvr = calcOverall(attrs, position)
   const contract = stubContract(age, finalOvr, h)
+  const extras = cardExtras(age, finalOvr, role, h)
   return {
     id: `${clubId}-p${index}`,
     name: playerName(seed),
@@ -113,6 +180,7 @@ function makePlayer(
     seasonGoals: 0,
     wantsToLeave: false,
     releaseClause: contract.releaseClause,
+    ...extras,
   }
 }
 
@@ -121,6 +189,7 @@ function makeFromSeed(clubId: string, index: number, seed: RealPlayerSeed): Squa
   const attrs = attrsFromOverall(position, seed.overall)
   const h = hash(`${clubId}-${seed.name}-${index}`)
   const contract = stubContract(seed.age, seed.overall, h)
+  const extras = cardExtras(seed.age, seed.overall, seed.role, h)
   return {
     id: `${clubId}-r${index}`,
     name: seed.name,
@@ -140,6 +209,7 @@ function makeFromSeed(clubId: string, index: number, seed: RealPlayerSeed): Squa
     seasonGoals: 0,
     wantsToLeave: false,
     releaseClause: contract.releaseClause,
+    ...extras,
   }
 }
 
@@ -218,6 +288,10 @@ export function createTeamState(clubId: string): TeamState {
   const squad = generateSquad(clubId)
   const plan = formationPlan('4-4-2')
   const { startingIds, benchIds } = pickDefaultLineup(squad, plan)
+  const xi = startingIds
+    .map((id) => squad.find((p) => p.id === id))
+    .filter(Boolean) as SquadPlayer[]
+  const captain = [...xi].sort((a, b) => b.overall + b.morale - (a.overall + a.morale))[0]
   return {
     clubId,
     squad,
@@ -228,6 +302,8 @@ export function createTeamState(clubId: string): TeamState {
     seasonExpense: 0,
     startingIds,
     benchIds,
+    trainingFocus: 'balanced',
+    captainId: captain?.id ?? null,
   }
 }
 
@@ -244,4 +320,10 @@ export function averageStarterOvr(team: TeamState): number {
   const xi = starters(team)
   if (!xi.length) return 40
   return xi.reduce((s, p) => s + p.overall, 0) / xi.length
+}
+
+export function workRateLabel(w: WorkRate): string {
+  if (w === 'low') return 'Niski'
+  if (w === 'high') return 'Wysoki'
+  return 'Średni'
 }

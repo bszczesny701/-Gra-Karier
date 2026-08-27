@@ -170,20 +170,48 @@ export function yourFixtureInRound(
   return round.find((f) => f.homeId === season.clubId || f.awayId === season.clubId) ?? null
 }
 
+/** Siła z top-11 kadry AI / gracza, inaczej static club.strength. */
+export function clubSquadPower(state: GameState | null | undefined, clubId: string): number {
+  let squad = state?.team?.clubId === clubId ? state.team.squad : state?.market?.aiSquads?.[clubId]
+  if (!squad?.length) return getEffectiveStrength(clubId)
+  const top = [...squad].sort((a, b) => b.overall - a.overall).slice(0, 11)
+  if (!top.length) return getEffectiveStrength(clubId)
+  const avg = top.reduce((s, p) => s + p.overall, 0) / top.length
+  return avg * 0.92 + getClub(clubId).strength * 0.08
+}
+
 /** Siła AI klubu (bez kadry gracza). */
-export function aiClubPower(clubId: string, mods: Record<string, number> = {}): number {
-  return getEffectiveStrength(clubId, mods) + (Math.random() * 4 - 2)
+export function aiClubPower(
+  clubId: string,
+  mods: Record<string, number> = {},
+  state?: GameState | null,
+): number {
+  const base = state ? clubSquadPower(state, clubId) : getEffectiveStrength(clubId, mods)
+  return base + (mods[clubId] ?? 0) + (Math.random() * 4 - 2)
 }
 
 /** Stabilny podgląd mocy klubu (bez losu) — do UI. */
-export function clubPowerPreview(clubId: string): number {
-  return Math.round(getEffectiveStrength(clubId))
+export function clubPowerPreview(clubId: string, state?: GameState | null): number {
+  return Math.round(state ? clubSquadPower(state, clubId) : getEffectiveStrength(clubId))
 }
 
 export type ScoutPlayer = { name: string; overall: number; role: string }
 
-/** Top zawodnicy klubu (realny skład Ekstraklasy albo estymacja). */
-export function clubTopPlayers(clubId: string, count = 3): ScoutPlayer[] {
+/** Top zawodnicy klubu (realny skład / aiSquads / estymacja). */
+export function clubTopPlayers(clubId: string, count = 3, state?: GameState | null): ScoutPlayer[] {
+  const ai = state?.market?.aiSquads?.[clubId]
+  if (ai?.length) {
+    return [...ai]
+      .sort((a, b) => b.overall - a.overall)
+      .slice(0, count)
+      .map((p) => ({ name: p.name, overall: p.overall, role: p.role }))
+  }
+  if (state?.team?.clubId === clubId) {
+    return [...state.team.squad]
+      .sort((a, b) => b.overall - a.overall)
+      .slice(0, count)
+      .map((p) => ({ name: p.name, overall: p.overall, role: p.role }))
+  }
   const real = EKSTRAKLASA_SQUADS[clubId]
   if (real?.length) {
     return [...real]
@@ -209,9 +237,10 @@ export function simulateAiMatch(
   homeId: string,
   awayId: string,
   mods: Record<string, number> = {},
+  state?: GameState | null,
 ): { homeGoals: number; awayGoals: number } {
-  const homePow = aiClubPower(homeId, mods) + 1.5
-  const awayPow = aiClubPower(awayId, mods)
+  const homePow = aiClubPower(homeId, mods, state) + 1.5
+  const awayPow = aiClubPower(awayId, mods, state)
   return {
     homeGoals: scoreline(homePow, awayPow * 0.92),
     awayGoals: scoreline(awayPow, homePow * 0.92),

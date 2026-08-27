@@ -27,8 +27,9 @@ import {
   tickLiveMinute,
   type MotivationId,
 } from './liveMatch'
-import { createTeamState, pickDefaultLineup, normalizeTeamSquad } from './squadGen'
+import { createTeamState, pickDefaultLineup, normalizeTeamSquad, normalizeSquadPlayer } from './squadGen'
 import { applyFormationDefaultOrder, validateLineup } from './tactics'
+import { recomputeTeamChemistry } from './chemistry'
 import { playerTablePosition, sortedStandings, standingsAroundPlayer } from './standings'
 import {
   applyBoardTrust,
@@ -82,6 +83,20 @@ export {
 } from './transfers'
 export { renewContract, suggestRenewTerms } from './contracts'
 export { playerMarketValue, weeklyWageBill, expectedWage } from './finance'
+export {
+  TRAINING_FOCUS_LABELS,
+  TRAINING_FOCUSES,
+  setTrainingFocus,
+  cycleTrainingFocus,
+  applyWeekTraining,
+} from './training'
+export {
+  recomputeTeamChemistry,
+  setCaptain,
+  dressingRoomStatus,
+} from './chemistry'
+export { workRateLabel } from './squadGen'
+export { tickAiWorldTransfers } from './transfers'
 
 export function polishLeagues() {
   return LEAGUES.filter((l) => l.country === 'PL').sort((a, b) => b.tier - a.tier)
@@ -170,6 +185,8 @@ export function seekNewClub(state: GameState): void {
 export function openLineup(state: GameState): void {
   if (!state.team || !state.season || state.season.phase !== 'playing') return
   state.team.tactics = normalizeTactics(state.team.tactics)
+  normalizeTeamSquad(state.team)
+  recomputeTeamChemistry(state.team)
   state.screen = 'lineup'
 }
 
@@ -355,15 +372,20 @@ export function startNextSeason(state: GameState): void {
     p.fitness = 80 + Math.floor(Math.random() * 15)
     p.form = 48 + Math.floor(Math.random() * 16)
     if (p.age <= 24 && Math.random() < 0.45) {
-      p.overall = Math.min(92, p.overall + 1)
+      p.overall = Math.min(p.potential ?? 92, p.overall + 1)
     } else if (p.age >= 33 && Math.random() < 0.4) {
       p.overall = Math.max(32, p.overall - 1)
+      if (p.potential != null) p.potential = Math.max(p.overall, p.potential - (Math.random() < 0.3 ? 1 : 0))
     }
     p.age += 1
     p.seasonApps = 0
     p.seasonGoals = 0
+    p.seasonAssists = 0
+    p.seasonMinutes = 0
+    p.sharpness = 65 + Math.floor(Math.random() * 20)
     p.contractYears = Math.max(0, (p.contractYears ?? 1) - 1)
     p.wantsToLeave = false
+    if (p.potential != null) p.overall = Math.min(p.potential, p.overall)
   }
   if (manager.lastBoardReviewRound != null) manager.lastBoardReviewRound = 0
   normalizeTeamSquad(team)
@@ -382,7 +404,28 @@ export function startNextSeason(state: GameState): void {
   state.season.teamChemistry = team.teamChemistry
   state.seasonReport = null
   ensureMarket(state)
-  state.market = emptyMarket()
+  const keptAi = { ...(state.market.aiSquads ?? {}) }
+  state.market.listings = []
+  state.market.offers = []
+  state.market.seededWeek = undefined
+  state.market.aiSquads = keptAi
+  for (const sq of Object.values(state.market.aiSquads)) {
+    for (const p of sq) {
+      normalizeSquadPlayer(p)
+      p.seasonApps = 0
+      p.seasonGoals = 0
+      p.seasonAssists = 0
+      p.seasonMinutes = 0
+      p.age += 1
+      p.contractYears = Math.max(0, (p.contractYears ?? 1) - 1)
+      p.fitness = 80 + Math.floor(Math.random() * 15)
+      p.form = 48 + Math.floor(Math.random() * 16)
+      p.sharpness = 65 + Math.floor(Math.random() * 20)
+      if (p.age <= 24 && Math.random() < 0.4 && p.overall < p.potential) {
+        p.overall = Math.min(p.potential, p.overall + 1)
+      }
+    }
+  }
   ensureAiSquads(state)
   if (isTransferWindowOpen(state)) onTransferWindowOpened(state)
   state.screen = 'hub'
