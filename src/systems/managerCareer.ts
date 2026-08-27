@@ -83,8 +83,8 @@ export {
   ensureAiSquads,
   findPlayerAnywhere,
 } from './transfers'
-export { renewContract, suggestRenewTerms } from './contracts'
-export { playerMarketValue, weeklyWageBill, expectedWage } from './finance'
+export { renewContract, suggestRenewTerms, makeRenewOffer, acceptRenewCounter } from './contracts'
+export { playerMarketValue, weeklyWageBill, expectedWage, wageRoom, normalizeTeamFinance } from './finance'
 export {
   TRAINING_FOCUS_LABELS,
   TRAINING_FOCUSES,
@@ -385,7 +385,7 @@ export function finalizeSeason(state: GameState): void {
     cupSummary: cupLine ?? undefined,
     europaSummary: europaLine ?? undefined,
     financeSummary: state.team
-      ? `Budżet ${Math.round(state.team.budget).toLocaleString('pl-PL')} · płace ${weeklyWageBill(state.team).toLocaleString('pl-PL')}/tyg. · bilans +${Math.round(state.team.seasonIncome).toLocaleString('pl-PL')} / −${Math.round(state.team.seasonExpense).toLocaleString('pl-PL')}`
+      ? `Transferowy ${Math.round(state.team.transferBudget).toLocaleString('pl-PL')} · płace ${weeklyWageBill(state.team).toLocaleString('pl-PL')}/${Math.round(state.team.wageBudget).toLocaleString('pl-PL')} /tyg. · bilans +${Math.round(state.team.seasonIncome).toLocaleString('pl-PL')} / −${Math.round(state.team.seasonExpense).toLocaleString('pl-PL')}`
       : undefined,
   }
   state.seasonReport = report

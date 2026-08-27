@@ -2,6 +2,7 @@ import { getClub } from '../data/clubs'
 import type { GameState, SquadPlayer } from '../state/types'
 import { pushLog } from '../state/gameState'
 import {
+  canAffordWageIncrease,
   clampWageOffer,
   defaultReleaseClause,
   expectedWage,
@@ -29,6 +30,9 @@ export function renewContract(
   const y = Math.max(1, Math.min(5, Math.round(years)))
   const w = clampWageOffer(wage)
 
+  const wageErr = canAffordWageIncrease(team, p.wage, w)
+  if (wageErr) return wageErr
+
   if (w < need * 0.92) {
     return p.wantsToLeave
       ? 'Zawodnik chce odejść — za niska pensja (wymaga ~+20%).'
@@ -49,6 +53,102 @@ export function renewContract(
     `Kontrakt: ${p.name} · ${y} lat · ${w.toLocaleString('pl-PL')}/tyg.${p.releaseClause ? ` · klauzula ${p.releaseClause.toLocaleString('pl-PL')}` : ''}`,
   )
   return null
+}
+
+/**
+ * Negocjacja przedłużenia — accept / counter / reject zamiast jednego klika.
+ * Zwraca komunikat; przy counter zapisuje ofertę kind:'renew' w market.offers.
+ */
+export function makeRenewOffer(
+  state: GameState,
+  playerId: string,
+  years: number,
+  wage: number,
+  releaseClause: number | null = null,
+): string | null {
+  const team = state.team
+  if (!team) return 'Brak drużyny'
+  if (!state.market) return 'Brak rynku'
+  const p = team.squad.find((x) => x.id === playerId)
+  if (!p) return 'Brak zawodnika'
+  if (p.loanFromClubId) return 'Nie możesz przedłużyć kontraktu wypożyczonego'
+  normalizeSquadPlayer(p)
+
+  const need = expectedWage(p)
+  const y = Math.max(1, Math.min(5, Math.round(years)))
+  const w = clampWageOffer(wage)
+  const wageErr = canAffordWageIncrease(team, p.wage, w)
+  if (wageErr) return wageErr
+
+  const existing = state.market.offers.find(
+    (o) => o.kind === 'renew' && o.playerId === playerId && (o.status === 'pending' || o.status === 'countered'),
+  )
+  const rounds = (existing?.rounds ?? 0) + 1
+  if (rounds > 3) {
+    if (existing) existing.status = 'rejected'
+    return 'Negocjacje zerwane — zbyt wiele rund.'
+  }
+
+  const accept = w >= need * 0.96 && (!p.wantsToLeave || w >= need)
+  const mid = w >= need * 0.82
+
+  if (accept) {
+    if (existing) existing.status = 'accepted'
+    return renewContract(state, playerId, y, w, releaseClause)
+  }
+
+  if (!mid || w < need * 0.7) {
+    if (existing) existing.status = 'rejected'
+    return p.wantsToLeave
+      ? 'Zawodnik odrzucił warunki (chce odejść / za niska pensja).'
+      : `Zawodnik odrzucił — oczekuje ok. ${need.toLocaleString('pl-PL')} / tyg.`
+  }
+
+  const counterWage = Math.round(need * (p.wantsToLeave ? 1.05 : 1))
+  const counterYears = p.age >= 32 ? Math.min(y, 2) : Math.max(y, p.age <= 22 ? 4 : 3)
+  const offer = existing ?? {
+    id: `ren-${Date.now()}`,
+    kind: 'renew' as const,
+    playerId,
+    fromClubId: team.clubId,
+    toClubId: team.clubId,
+    fee: 0,
+    wageOffer: w,
+    yearsOffer: y,
+    releaseClauseOffer: releaseClause,
+    status: 'countered' as const,
+    fromAi: false,
+    rounds: 0,
+  }
+  offer.wageOffer = w
+  offer.yearsOffer = y
+  offer.releaseClauseOffer = releaseClause
+  offer.status = 'countered'
+  offer.rounds = rounds
+  offer.counter = {
+    fee: 0,
+    wage: clampWageOffer(Math.max(w, counterWage)),
+    years: counterYears,
+  }
+  if (!existing) state.market.offers.unshift(offer)
+  return `Kontrpropozycja: ${offer.counter.wage.toLocaleString('pl-PL')} /tyg. · ${offer.counter.years} lat.`
+}
+
+/** Akceptuj kontrpropozycję przedłużenia. */
+export function acceptRenewCounter(state: GameState, offerId: string): string | null {
+  const offer = state.market?.offers.find((o) => o.id === offerId)
+  if (!offer || offer.kind !== 'renew' || offer.status !== 'countered' || !offer.counter) {
+    return 'Brak kontrpropozycji'
+  }
+  const err = renewContract(
+    state,
+    offer.playerId,
+    offer.counter.years,
+    offer.counter.wage,
+    offer.releaseClauseOffer ?? null,
+  )
+  if (!err) offer.status = 'accepted'
+  return err
 }
 
 /** Propozycja domyślna do UI. */

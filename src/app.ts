@@ -47,10 +47,13 @@ import {
   exerciseLoanBuyOption,
   isTransferWindowOpen,
   refreshListingsIfNeeded,
-  renewContract,
   suggestRenewTerms,
+  makeRenewOffer,
   playerMarketValue,
   weeklyWageBill,
+  wageRoom,
+  normalizeTeamFinance,
+  expectedWage,
   setCaptain,
   dressingRoomStatus,
   workRateLabel,
@@ -131,6 +134,20 @@ export class App {
   private trainingSlots: TrainingSlot[] = []
   private trainingResults: TrainingSlotResult[] | null = null
   private transferFilter = { pos: 'all', minOvr: 0, maxPrice: 0 }
+  private negotiate: {
+    mode: 'buy' | 'renew'
+    playerId: string
+    name: string
+    fee: number
+    wage: number
+    years: number
+    ask: number
+    clause: number | null
+  } | null = null
+  private weekOverlay: { fromWeek: number; toWeek: number } | null = null
+  private transferToast: string | null = null
+  private moneyFlash: number | null = null
+  private hubAnimate = true
 
   /** Otwarty mail w skrzynce (Biuro) */
   private openMailId: string | null = null
@@ -258,12 +275,18 @@ export class App {
         this.bindPickClub()
         break
       case 'hub':
-        this.root.innerHTML = this.hubHtml()
+        this.root.innerHTML = this.hubHtml() + this.fxLayersHtml()
         this.bindHub()
+        this.bindFxLayers()
+        if (this.hubAnimate) {
+          this.root.querySelector('.career-tiles')?.classList.add('tiles-enter')
+          this.hubAnimate = false
+        }
         break
       case 'lineup':
-        this.root.innerHTML = this.lineupHtml()
+        this.root.innerHTML = this.lineupHtml() + this.fxLayersHtml()
         this.bindLineup()
+        this.bindFxLayers()
         break
       case 'tactics':
         this.root.innerHTML = this.tacticsHtml()
@@ -293,6 +316,115 @@ export class App {
       default:
         this.state.screen = 'home'
         this.render()
+    }
+    this.scheduleFxClear()
+  }
+
+  private fxLayersHtml(): string {
+    let html = ''
+    if (this.weekOverlay) {
+      html += `<div class="fx-week" id="fx-week"><div class="fx-week-card"><span>Kolejny tydzień</span><strong>${this.weekOverlay.fromWeek + 1} → ${this.weekOverlay.toWeek + 1}</strong></div></div>`
+    }
+    if (this.transferToast) {
+      html += `<div class="fx-transfer-toast" id="fx-transfer">${this.transferToast}</div>`
+    }
+    if (this.moneyFlash != null) {
+      const sign = this.moneyFlash >= 0 ? '+' : ''
+      html += `<div class="fx-money ${this.moneyFlash < 0 ? 'neg' : 'pos'}" id="fx-money">${sign}${Math.round(this.moneyFlash / 1000)}k zł</div>`
+    }
+    const n = this.negotiate
+    if (n) {
+      const team = this.state.team
+      if (team) normalizeTeamFinance(team)
+      const bill = team ? weeklyWageBill(team) : 0
+      const room = team ? wageRoom(team) : 0
+      html += `<div class="nego-backdrop" id="nego-modal">
+        <div class="nego-panel">
+          <h3>${n.mode === 'buy' ? 'Negocjacje transferu' : 'Negocjacje kontraktu'}</h3>
+          <p class="meta">${n.name}</p>
+          <p class="muted">Transferowy ${team ? Math.round(team.transferBudget).toLocaleString('pl-PL') : '—'} · wolne płace ${room.toLocaleString('pl-PL')} /tyg. (masa ${bill.toLocaleString('pl-PL')})</p>
+          ${
+            n.mode === 'buy'
+              ? `<label class="nego-field">Opłata (pytanie ${n.ask.toLocaleString('pl-PL')})
+                  <input type="number" id="nego-fee" min="0" step="10000" value="${n.fee}">
+                </label>`
+              : ''
+          }
+          <label class="nego-field">Pensja / tyg.
+            <input type="number" id="nego-wage" min="200" step="100" value="${n.wage}">
+          </label>
+          <label class="nego-field">Lata kontraktu
+            <input type="number" id="nego-years" min="1" max="5" value="${n.years}">
+          </label>
+          <div class="actions nego-actions">
+            <button type="button" class="btn primary" id="nego-submit">Wyślij ofertę</button>
+            <button type="button" class="btn ghost" id="nego-cancel">Anuluj</button>
+          </div>
+        </div>
+      </div>`
+    }
+    return html
+  }
+
+  private bindFxLayers(): void {
+    this.root.querySelector('#nego-cancel')?.addEventListener('click', () => {
+      this.negotiate = null
+      this.render()
+    })
+    this.root.querySelector('#nego-submit')?.addEventListener('click', () => {
+      const n = this.negotiate
+      if (!n) return
+      const fee =
+        n.mode === 'buy' ? Number((this.root.querySelector('#nego-fee') as HTMLInputElement)?.value || 0) : 0
+      const wage = Number((this.root.querySelector('#nego-wage') as HTMLInputElement)?.value || 0)
+      const years = Number((this.root.querySelector('#nego-years') as HTMLInputElement)?.value || 1)
+      const before = this.state.team?.transferBudget ?? 0
+      this.go(() => {
+        if (n.mode === 'buy') {
+          const err = makeBuyOffer(this.state, n.playerId, fee, wage, years, n.clause)
+          if (err && !err.startsWith('Kontrpropozycja')) {
+            pushTempAlert(err)
+            return
+          }
+          if (err?.startsWith('Kontrpropozycja')) pushTempAlert(err)
+          else {
+            this.transferToast = `Transfer: ${n.name}`
+            this.moneyFlash = (this.state.team?.transferBudget ?? before) - before
+          }
+        } else {
+          const err = makeRenewOffer(this.state, n.playerId, years, wage, n.clause)
+          if (err && !err.startsWith('Kontrpropozycja')) {
+            pushTempAlert(err)
+            return
+          }
+          if (err?.startsWith('Kontrpropozycja')) pushTempAlert(err)
+          else this.transferToast = `Kontrakt: ${n.name}`
+        }
+        this.negotiate = null
+      })
+    })
+  }
+
+  private scheduleFxClear(): void {
+    if (this.weekOverlay) {
+      window.setTimeout(() => {
+        this.weekOverlay = null
+        const el = document.getElementById('fx-week')
+        el?.classList.add('fx-out')
+        window.setTimeout(() => el?.remove(), 280)
+      }, 900)
+    }
+    if (this.transferToast) {
+      window.setTimeout(() => {
+        this.transferToast = null
+        document.getElementById('fx-transfer')?.remove()
+      }, 2200)
+    }
+    if (this.moneyFlash != null) {
+      window.setTimeout(() => {
+        this.moneyFlash = null
+        document.getElementById('fx-money')?.remove()
+      }, 1200)
     }
   }
 
@@ -444,6 +576,7 @@ export class App {
   private hubHtml(): string {
     const m = this.state.manager!
     const team = this.state.team!
+    normalizeTeamFinance(team)
     const s = this.state.season!
     normalizeTeamSquad(team)
     ensureFanTrust(this.state)
@@ -1083,8 +1216,8 @@ export class App {
           </section>
           <section class="career-panel">
             <h3>Finanse</h3>
-            <p class="meta">Budżet <strong>${Math.round(team.budget).toLocaleString('pl-PL')} zł</strong></p>
-            <p class="muted">Płace: ${weeklyWageBill(team).toLocaleString('pl-PL')} zł / tyg. · ${team.squad.length} zawodników</p>
+            <p class="meta">Budżet transferowy <strong>${Math.round(team.transferBudget).toLocaleString('pl-PL')} zł</strong></p>
+            <p class="muted">Płace: ${weeklyWageBill(team).toLocaleString('pl-PL')} / limit ${Math.round(team.wageBudget).toLocaleString('pl-PL')} /tyg. · wolne ${wageRoom(team).toLocaleString('pl-PL')}</p>
             <p class="muted">Sezon: +${Math.round(team.seasonIncome ?? 0).toLocaleString('pl-PL')} / −${Math.round(team.seasonExpense ?? 0).toLocaleString('pl-PL')}</p>
             <p class="muted">${isTransferWindowOpen(this.state) ? 'Okienko transferowe otwarte' : 'Okienko zamknięte — możesz przedłużać kontrakty'}</p>
             <div class="actions" style="margin-top:10px">
@@ -1159,7 +1292,7 @@ export class App {
                 own
                   ? `<button type="button" class="btn ghost compact" data-unlist="${p.id}">Zdejmij</button>`
                   : windowOpen
-                    ? `<button type="button" class="btn primary compact" data-buy="${p.id}" data-ask="${l.askingPrice}">Kup</button>
+                    ? `<button type="button" class="btn primary compact" data-buy="${p.id}" data-ask="${l.askingPrice}">Negocjuj</button>
                        <button type="button" class="btn ghost compact" data-loan="${p.id}">Wypożycz</button>
                        ${p.releaseClause ? `<button type="button" class="btn ghost compact" data-clause="${p.id}">Klauzula</button>` : ''}`
                     : `<span class="muted">Zamknięte</span>`
@@ -1198,8 +1331,8 @@ export class App {
           })()
           return `<article class="transfer-offer ${o.status}">
             <div>
-              <strong>${o.kind === 'sell' ? 'Oferta kupna' : o.kind === 'loan' ? 'Wypożyczenie' : 'Negocjacja'}: ${name}</strong>
-              <p class="muted" style="margin:4px 0 0">${o.fee.toLocaleString('pl-PL')} zł · ${o.wageOffer.toLocaleString('pl-PL')}/tyg. · ${o.yearsOffer || '—'} lat · ${o.status}${o.counter ? ` · kontrpropozycja ${o.counter.fee.toLocaleString('pl-PL')}` : ''}</p>
+              <strong>${o.kind === 'sell' ? 'Oferta kupna' : o.kind === 'loan' ? 'Wypożyczenie' : o.kind === 'renew' ? 'Przedłużenie' : 'Negocjacja'}: ${name}</strong>
+              <p class="muted" style="margin:4px 0 0">${o.kind === 'renew' ? '' : `${o.fee.toLocaleString('pl-PL')} zł · `}${o.wageOffer.toLocaleString('pl-PL')}/tyg. · ${o.yearsOffer || '—'} lat · ${o.status}${o.counter ? ` · kontrpropozycja ${o.counter.wage.toLocaleString('pl-PL')}/tyg.${o.kind !== 'renew' ? ` · ${o.counter.fee.toLocaleString('pl-PL')} zł` : ''}` : ''}</p>
             </div>
             <div class="transfer-row-actions">
               ${
@@ -1223,7 +1356,7 @@ export class App {
               <h3>Rynek PL</h3>
               <span class="cal-window-badge ${windowOpen ? 'open' : ''}">${windowOpen ? 'Okienko otwarte' : 'Okienko zamknięte'}</span>
             </div>
-            <p class="muted" style="margin:0 0 10px">Budżet ${Math.round(team.budget).toLocaleString('pl-PL')} zł · kadra ${team.squad.length}/30</p>
+            <p class="muted" style="margin:0 0 10px">Transferowy ${Math.round(team.transferBudget).toLocaleString('pl-PL')} · płace ${weeklyWageBill(team).toLocaleString('pl-PL')}/${Math.round(team.wageBudget).toLocaleString('pl-PL')} · kadra ${team.squad.length}/30</p>
             ${filterBar}
             <div class="transfer-list">${listings}</div>
           </section>
@@ -1240,7 +1373,7 @@ export class App {
           <div class="career-status">
             <div class="career-pill">Sezon ${s.year}</div>
             <div class="career-pill">${league.name}</div>
-            <div class="career-pill money-pill">${Math.round(team.budget / 1000)}k zł</div>
+            <div class="career-pill money-pill" title="Budżet transferowy">${Math.round(team.transferBudget / 1000)}k zł</div>
           </div>
           <div class="career-brand">GRA TRENERA</div>
           <div class="career-profile">
@@ -1292,9 +1425,15 @@ export class App {
       })
     })
     this.root.querySelector('#btn-advance-week')?.addEventListener('click', () => {
+      const cal = this.state.season?.calendar
+      const fromWeek = cal?.weekIndex ?? 0
       this.go(() => {
         const err = advanceWeek(this.state)
         if (err) pushTempAlert(err)
+        else {
+          this.weekOverlay = { fromWeek, toWeek: this.state.season?.calendar?.weekIndex ?? fromWeek + 1 }
+          this.hubAnimate = true
+        }
       })
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-training]').forEach((btn) => {
@@ -1401,17 +1540,24 @@ export class App {
       btn.addEventListener('click', () => {
         const id = btn.dataset.buy!
         const ask = Number(btn.dataset.ask || 0)
-        this.go(() => {
-          const found =
-            this.state.team?.squad.find((p) => p.id === id) ??
-            Object.values(this.state.market?.aiSquads ?? {})
-              .flat()
-              .find((p) => p.id === id)
-          if (!found) return
-          const wage = Math.max(found.wage, Math.round(playerMarketValue(found) / 80))
-          const err = makeBuyOffer(this.state, id, ask, wage, 3, found.releaseClause)
-          if (err) pushTempAlert(err)
-        })
+        const found =
+          this.state.team?.squad.find((p) => p.id === id) ??
+          Object.values(this.state.market?.aiSquads ?? {})
+            .flat()
+            .find((p) => p.id === id)
+        if (!found) return
+        const wage = Math.max(found.wage, expectedWage(found))
+        this.negotiate = {
+          mode: 'buy',
+          playerId: id,
+          name: found.name,
+          fee: ask,
+          wage,
+          years: 3,
+          ask,
+          clause: found.releaseClause ?? null,
+        }
+        this.render()
       })
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-loan]').forEach((btn) => {
@@ -1438,9 +1584,14 @@ export class App {
     })
     this.root.querySelectorAll<HTMLButtonElement>('[data-accept-counter]').forEach((btn) => {
       btn.addEventListener('click', () => {
+        const before = this.state.team?.transferBudget ?? 0
         this.go(() => {
           const err = acceptCounterOffer(this.state, btn.dataset.acceptCounter!)
           if (err) pushTempAlert(err)
+          else {
+            this.transferToast = 'Umowa zamknięta'
+            this.moneyFlash = (this.state.team?.transferBudget ?? before) - before
+          }
         })
       })
     })
@@ -1596,7 +1747,7 @@ export class App {
                 }
                 ${
                   !profile.loanFromClubId
-                    ? `<button type="button" class="btn primary compact" id="btn-renew">Przedłuż</button>
+                    ? `<button type="button" class="btn primary compact" id="btn-renew">Negocjuj kontrakt</button>
                        ${
                          isTransferWindowOpen(this.state)
                            ? `<button type="button" class="btn ghost compact" id="btn-list-player">Wystaw</button>
@@ -1889,11 +2040,18 @@ export class App {
       const p = this.state.team?.squad.find((x) => x.id === id)
       if (!p) return
       const sug = suggestRenewTerms(p)
-      this.go(() => {
-        const err = renewContract(this.state, id, sug.years, sug.wage, sug.clause)
-        if (err) pushTempAlert(err)
-        else this.profilePlayerId = null
-      })
+      this.negotiate = {
+        mode: 'renew',
+        playerId: id,
+        name: p.name,
+        fee: 0,
+        wage: sug.wage,
+        years: sug.years,
+        ask: 0,
+        clause: sug.clause,
+      }
+      this.profilePlayerId = null
+      this.render()
     })
     this.root.querySelector('#btn-make-captain')?.addEventListener('click', () => {
       const id = this.profilePlayerId
@@ -2043,7 +2201,7 @@ export class App {
     const scoreboard = `
       <div class="live-scoreboard compact">
         <div class="live-team">${home.short}</div>
-        <div class="live-score">${live.homeGoals} : ${live.awayGoals}</div>
+        <div class="live-score ${live.events[0]?.kind === 'goal' ? 'goal-pulse' : ''}">${live.homeGoals} : ${live.awayGoals}</div>
         <div class="live-team">${away.short}</div>
         <div class="live-clock">${clock} · zmiany ${live.subsUsed}/3</div>
       </div>
@@ -2307,7 +2465,7 @@ export class App {
       <section class="lineup-fifa live-pause-lineup">
         <div class="live-scoreboard compact">
           <div class="live-team">${home.short}</div>
-          <div class="live-score">${live.homeGoals} : ${live.awayGoals}</div>
+          <div class="live-score ${live.events[0]?.kind === 'goal' ? 'goal-pulse' : ''}">${live.homeGoals} : ${live.awayGoals}</div>
           <div class="live-team">${away.short}</div>
           <div class="live-clock">HT · zmiany ${live.subsUsed}/3</div>
         </div>

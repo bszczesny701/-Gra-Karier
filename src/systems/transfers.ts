@@ -16,6 +16,7 @@ import {
   expectedWage,
   playerMarketValue,
 } from './finance'
+import { renewContract } from './contracts'
 import { generateSquad, normalizeSquadPlayer, pickDefaultLineup } from './squadGen'
 import { pushMail } from './mailbox'
 import { pushNews } from './news'
@@ -190,13 +191,25 @@ function nextOfferId(): string {
   return `off-${Date.now()}-${Math.floor(Math.random() * 9999)}`
 }
 
-function evaluateFee(asking: number, value: number, fee: number): 'accept' | 'counter' | 'reject' {
-  if (fee >= asking * 0.95 || fee >= value * 1.05) return 'accept'
-  if (fee >= asking * 0.75 || fee >= value * 0.85) return 'counter'
+function evaluateDeal(
+  asking: number,
+  value: number,
+  fee: number,
+  needWage: number,
+  wage: number,
+): 'accept' | 'counter' | 'reject' {
+  const feeAccept = fee >= asking * 0.95 || fee >= value * 1.05
+  const wageAccept = wage >= needWage * 0.95
+  const feeMid = fee >= asking * 0.72 || fee >= value * 0.82
+  const wageMid = wage >= needWage * 0.8
+  if (fee < asking * 0.55 && fee < value * 0.68) return 'reject'
+  if (wage < needWage * 0.68) return 'reject'
+  if (feeAccept && wageAccept) return 'accept'
+  if (feeMid || wageMid) return 'counter'
   return 'reject'
 }
 
-/** Oferta kupna od gracza do AI. */
+/** Oferta kupna od gracza do AI (negocjacja fee + pensja + lata). */
 export function makeBuyOffer(
   state: GameState,
   playerId: string,
@@ -214,10 +227,24 @@ export function makeBuyOffer(
   const listing = state.market.listings.find((l) => l.playerId === playerId)
   const value = playerMarketValue(found.player)
   const asking = listing?.askingPrice ?? Math.round(value * 1.1)
+  const needWage = expectedWage(found.player)
   const err = canAffordTransfer(team, fee, wage)
   if (err) return err
 
-  const offer: TransferOffer = {
+  const prev = state.market.offers.find(
+    (o) =>
+      o.kind === 'buy' &&
+      o.playerId === playerId &&
+      !o.fromAi &&
+      (o.status === 'pending' || o.status === 'countered'),
+  )
+  const rounds = (prev?.rounds ?? 0) + 1
+  if (rounds > 3) {
+    if (prev) prev.status = 'rejected'
+    return 'Negocjacje zerwane — klub nie wraca do rozmów.'
+  }
+
+  const offer: TransferOffer = prev ?? {
     id: nextOfferId(),
     kind: 'buy',
     playerId,
@@ -229,23 +256,30 @@ export function makeBuyOffer(
     releaseClauseOffer: releaseClause,
     status: 'pending',
     fromAi: false,
+    rounds: 0,
   }
+  offer.fee = Math.round(fee)
+  offer.wageOffer = clampWageOffer(wage)
+  offer.yearsOffer = Math.max(1, Math.min(5, years))
+  offer.releaseClauseOffer = releaseClause
+  offer.rounds = rounds
+  offer.counter = undefined
 
-  const verdict = evaluateFee(asking, value, offer.fee)
+  const verdict = evaluateDeal(asking, value, offer.fee, needWage, offer.wageOffer)
   if (verdict === 'reject') {
     offer.status = 'rejected'
-    state.market.offers.unshift(offer)
-    return 'Klub odrzucił ofertę (za niska kwota).'
+    if (!prev) state.market.offers.unshift(offer)
+    return 'Klub odrzucił ofertę (warunki za słabe).'
   }
   if (verdict === 'counter') {
     offer.status = 'countered'
     offer.counter = {
       fee: Math.round((asking + offer.fee) / 2),
-      wage: Math.max(offer.wageOffer, expectedWage(found.player)),
-      years: offer.yearsOffer,
+      wage: Math.max(offer.wageOffer, needWage),
+      years: offer.yearsOffer < 2 ? 3 : offer.yearsOffer,
     }
-    state.market.offers.unshift(offer)
-    return `Kontrpropozycja: ${offer.counter.fee.toLocaleString('pl-PL')} zł + pensja ${offer.counter.wage.toLocaleString('pl-PL')}.`
+    if (!prev) state.market.offers.unshift(offer)
+    return `Kontrpropozycja: ${offer.counter.fee.toLocaleString('pl-PL')} zł · ${offer.counter.wage.toLocaleString('pl-PL')}/tyg. · ${offer.counter.years} lat.`
   }
 
   return completeBuy(state, offer)
@@ -255,6 +289,21 @@ export function acceptCounterOffer(state: GameState, offerId: string): string | 
   ensureMarket(state)
   const offer = state.market.offers.find((o) => o.id === offerId)
   if (!offer || offer.status !== 'countered' || !offer.counter) return 'Brak kontrpropozycji'
+  if (offer.kind === 'renew') {
+    const c = offer.counter
+    const err = renewContract(
+      state,
+      offer.playerId,
+      c.years,
+      c.wage,
+      offer.releaseClauseOffer ?? null,
+    )
+    if (!err) {
+      offer.status = 'accepted'
+      offer.counter = undefined
+    }
+    return err
+  }
   offer.fee = offer.counter.fee
   offer.wageOffer = offer.counter.wage
   offer.yearsOffer = offer.counter.years
@@ -535,7 +584,7 @@ export function tickLoans(state: GameState): void {
     p.loanWeeksLeft -= 1
     if (p.loanWeeksLeft > 0) continue
     // return or buy
-    if (p.loanBuyOption != null && team.budget >= p.loanBuyOption && Math.random() < 0.01) {
+    if (p.loanBuyOption != null && team.transferBudget >= p.loanBuyOption && Math.random() < 0.01) {
       // rare auto — player must confirm via UI; just return
     }
     const parent = p.loanFromClubId

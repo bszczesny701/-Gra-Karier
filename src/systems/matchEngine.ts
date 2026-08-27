@@ -10,7 +10,6 @@ import {
 } from './leagueSim'
 import { createLiveMatch } from './liveMatch'
 import { publishRoundNews } from './news'
-import { chargeWeeklyWages } from './finance'
 import {
   isTransferWindowOpen,
   maybeAiBuyOffers,
@@ -126,7 +125,6 @@ export function advanceWeek(state: GameState): string | null {
     syncLeagueRoundProgress(season)
   }
 
-  chargeWeeklyWages(state)
   tickLoans(state)
   const nowOpen = isTransferWindowOpen(state)
   if (nowOpen && !prevOpen) onTransferWindowOpened(state)

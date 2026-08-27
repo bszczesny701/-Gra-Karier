@@ -11,6 +11,7 @@ import type {
 } from '../state/types'
 import { clamp, defaultTactics, formationPlan, roleBase } from '../state/types'
 import { attrsFromOverall, calcOverall } from './playerFactory'
+import { seedClubBudgets, weeklyWageBill } from './finance'
 
 const FIRST = [
   'Jakub', 'Piotr', 'Mateusz', 'Kamil', 'Adam', 'Michał', 'Bartosz', 'Paweł',
@@ -296,12 +297,14 @@ export function createTeamState(clubId: string): TeamState {
     .map((id) => squad.find((p) => p.id === id))
     .filter(Boolean) as SquadPlayer[]
   const captain = [...xi].sort((a, b) => b.overall + b.morale - (a.overall + a.morale))[0]
-  return {
+  const club = getClub(clubId)
+  const draft: TeamState = {
     clubId,
     squad,
     tactics: defaultTactics('4-4-2'),
     teamChemistry: 52,
-    budget: Math.round(getClub(clubId).wage * 40 + getClub(clubId).strength * 80),
+    transferBudget: 0,
+    wageBudget: 0,
     seasonIncome: 0,
     seasonExpense: 0,
     startingIds,
@@ -312,6 +315,10 @@ export function createTeamState(clubId: string): TeamState {
     playerInstructions: {},
     setPieces: { corners: null, freeKicks: null, penalties: null },
   }
+  const pots = seedClubBudgets(club.wage, club.strength, weeklyWageBill(draft))
+  draft.transferBudget = pots.transferBudget
+  draft.wageBudget = pots.wageBudget
+  return draft
 }
 
 export function squadById(team: TeamState): Map<string, SquadPlayer> {

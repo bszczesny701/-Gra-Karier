@@ -200,7 +200,10 @@ export interface TeamState {
   squad: SquadPlayer[]
   tactics: Tactics
   teamChemistry: number
-  budget: number
+  /** Budżet transferowy (opłaty za transfery) */
+  transferBudget: number
+  /** Limit tygodniowej masy płac (FIFA — nie ściągany co tydzień) */
+  wageBudget: number
   seasonIncome: number
   seasonExpense: number
   /** 11 id startujących (kolejność: wg slotów formacji) */
@@ -530,6 +533,8 @@ export interface TransferOffer {
   counter?: TransferOfferCounter
   /** true = oferta od AI do gracza */
   fromAi?: boolean
+  /** Liczba rund negocjacji */
+  rounds?: number
 }
 
 export interface TransferMarketState {
@@ -567,7 +572,7 @@ export const SAVE_KEY = 'gra-karier-manager-v1'
 export const SAVE_SLOTS_META_KEY = 'gra-karier-slots-meta'
 export const SAVE_ACTIVE_SLOT_KEY = 'gra-karier-active-slot'
 export const SAVE_SLOT_COUNT = 3
-export const SAVE_VERSION = 118
+export const SAVE_VERSION = 119
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

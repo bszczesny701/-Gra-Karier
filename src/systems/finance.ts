@@ -25,36 +25,65 @@ export function weeklyWageBill(team: TeamState): number {
     .reduce((s, p) => s + (normalizeSquadPlayer(p).wage || 0), 0)
 }
 
-export function canAffordFee(team: TeamState, fee: number): boolean {
-  return team.budget >= fee
+export function wageRoom(team: TeamState): number {
+  normalizeTeamFinance(team)
+  return Math.max(0, team.wageBudget - weeklyWageBill(team))
 }
 
-/** Fee + nowa pensja: roczny wage bill nie powinien zjeść >65% budżetu po transakcji. */
-export function canAffordTransfer(team: TeamState, fee: number, newWage: number, replacingWage = 0): string | null {
-  if (fee > team.budget) return 'Za mały budżet transferowy'
+export function canAffordFee(team: TeamState, fee: number): boolean {
+  normalizeTeamFinance(team)
+  return team.transferBudget >= fee
+}
+
+/** Opłata z budżetu transferowego; pensja z limitu płac (FIFA). */
+export function canAffordTransfer(
+  team: TeamState,
+  fee: number,
+  newWage: number,
+  replacingWage = 0,
+): string | null {
+  normalizeTeamFinance(team)
+  if (fee > team.transferBudget) return 'Za mały budżet transferowy'
   const bill = weeklyWageBill(team) - replacingWage + newWage
-  const after = team.budget - fee
-  if (bill * 52 > after * 0.65) return 'Za wysoka masa płac względem budżetu'
+  if (bill > team.wageBudget) {
+    return `Za mały budżet płac (masa ${Math.round(bill).toLocaleString('pl-PL')} / limit ${Math.round(team.wageBudget).toLocaleString('pl-PL')} /tyg.)`
+  }
   return null
 }
 
+export function canAffordWageIncrease(team: TeamState, oldWage: number, newWage: number): string | null {
+  normalizeTeamFinance(team)
+  const delta = Math.max(0, newWage - oldWage)
+  if (delta <= 0) return null
+  if (weeklyWageBill(team) + delta > team.wageBudget) {
+    return `Za mały budżet płac (wolne ${wageRoom(team).toLocaleString('pl-PL')} /tyg.)`
+  }
+  return null
+}
+
+/** Zmiana budżetu transferowego (+ nagrody / sprzedaże / kupna). */
 export function applyBudgetDelta(state: GameState, amount: number, reason: string): void {
   const team = state.team
   if (!team) return
-  if (team.seasonIncome == null) team.seasonIncome = 0
-  if (team.seasonExpense == null) team.seasonExpense = 0
-  team.budget = Math.max(0, Math.round(team.budget + amount))
+  normalizeTeamFinance(team)
+  team.transferBudget = Math.max(0, Math.round(team.transferBudget + amount))
   if (amount >= 0) team.seasonIncome += amount
   else team.seasonExpense += -amount
-  pushLog(state, `${reason}: ${amount >= 0 ? '+' : ''}${Math.round(amount).toLocaleString('pl-PL')} zł · budżet ${Math.round(team.budget).toLocaleString('pl-PL')}`)
+  pushLog(
+    state,
+    `${reason}: ${amount >= 0 ? '+' : ''}${Math.round(amount).toLocaleString('pl-PL')} zł · transferowy ${Math.round(team.transferBudget).toLocaleString('pl-PL')}`,
+  )
 }
 
-export function chargeWeeklyWages(state: GameState): void {
+export function applyWageBudgetDelta(state: GameState, amount: number, reason: string): void {
   const team = state.team
   if (!team) return
-  const bill = weeklyWageBill(team)
-  if (bill <= 0) return
-  applyBudgetDelta(state, -bill, `Płace tygodniowe (${team.squad.filter((p) => !p.loanToClubId).length} zaw.)`)
+  normalizeTeamFinance(team)
+  team.wageBudget = Math.max(0, Math.round(team.wageBudget + amount))
+  pushLog(
+    state,
+    `${reason}: płace ${amount >= 0 ? '+' : ''}${Math.round(amount).toLocaleString('pl-PL')} /tyg. · limit ${Math.round(team.wageBudget).toLocaleString('pl-PL')}`,
+  )
 }
 
 export function seasonPrizeMoney(place: number, leagueId: string, clubs: number): number {
@@ -67,20 +96,42 @@ export function seasonPrizeMoney(place: number, leagueId: string, clubs: number)
 export function applySeasonPrize(state: GameState, place: number): number {
   const season = state.season!
   const prize = seasonPrizeMoney(place, season.leagueId, season.clubIds.length)
-  applyBudgetDelta(state, prize, `Nagroda za ${place}. miejsce`)
+  const transferShare = Math.round(prize * 0.75)
+  const wageShare = Math.round(prize * 0.08)
+  applyBudgetDelta(state, transferShare, `Nagroda za ${place}. miejsce (transferowy)`)
+  if (wageShare > 0) applyWageBudgetDelta(state, wageShare, `Nagroda — podniesienie limitu płac`)
   return prize
 }
 
 export function normalizeTeamFinance(team: TeamState): void {
   if (team.seasonIncome == null) team.seasonIncome = 0
   if (team.seasonExpense == null) team.seasonExpense = 0
+  const legacy = team as TeamState & { budget?: number }
+  if (team.transferBudget == null || Number.isNaN(team.transferBudget)) {
+    team.transferBudget = Math.max(0, Math.round(legacy.budget ?? 0))
+  }
+  if (team.wageBudget == null || Number.isNaN(team.wageBudget)) {
+    const bill = weeklyWageBill(team)
+    team.wageBudget = Math.max(bill, Math.round(bill * 1.2 + 50_000))
+  }
   for (const p of team.squad) normalizeSquadPlayer(p)
 }
 
 export function defaultReleaseClause(p: SquadPlayer): number {
-  return Math.round(playerMarketValue(p) * 1.4)
+  return Math.round(playerMarketValue(p) * 1.65)
 }
 
-export function clampWageOffer(n: number): number {
-  return clamp(Math.round(n), 500, 200_000)
+export function clampWageOffer(wage: number): number {
+  return clamp(Math.round(wage), 200, 250_000)
+}
+
+/** Seed FIFA-style pots for a new club. */
+export function seedClubBudgets(
+  clubWage: number,
+  clubStrength: number,
+  squadBill: number,
+): { transferBudget: number; wageBudget: number } {
+  const transferBudget = Math.round(clubWage * 380 + clubStrength * 1400 + 400_000)
+  const wageBudget = Math.round(Math.max(squadBill * 1.28, squadBill + clubWage * 12 + 40_000))
+  return { transferBudget, wageBudget }
 }
