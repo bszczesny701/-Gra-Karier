@@ -446,11 +446,14 @@ export class App {
       .join('')
     return `
       <div class="app-shell home-shell">
-        <main class="content home-content">
-          <section class="home-hero">
+        <main class="home-desktop">
+          <section class="home-left">
             <p class="home-brand">Gra Trenera</p>
             <h1>Prowadź zespół</h1>
-            <p class="home-lead">Wybierz klub, ustaw skład i taktykę — graj sezon mecz po meczu.</p>
+            <p class="home-lead">Menedżer kariery na PC — wybierz klub, ustaw skład i taktykę, graj sezon ligowy mecz po meczu.</p>
+          </section>
+          <section class="home-right">
+            <h2 class="home-slots-title">Zapisy</h2>
             <div class="save-slots">${slotCards}</div>
             <div class="home-actions">
               ${canContinue ? `<button class="btn primary" id="btn-continue">Kontynuuj</button>` : ''}
@@ -507,6 +510,7 @@ export class App {
         </div>
       </section>`,
       'Trener',
+      'wide',
     )
   }
 
@@ -558,6 +562,7 @@ export class App {
         <div class="club-list">${clubs}</div>
       </section>`,
       'Klub',
+      'wide',
     )
   }
 
