@@ -1873,6 +1873,64 @@ h3 {
   background: #ff7a6e;
 }
 
+.live-mini-pitch {
+  margin: 0 0 6px;
+}
+
+.live-mini-hint {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+}
+
+.live-mini-pitch .mini-pitch.fifa-pitch {
+  position: relative;
+  min-height: 220px !important;
+  height: 240px;
+  max-height: 260px;
+  border-radius: 12px;
+}
+
+.live-mini-pitch .fifa-card.mini {
+  width: 52px;
+  gap: 2px;
+  cursor: default;
+  pointer-events: none;
+}
+
+.live-mini-pitch .fifa-badge {
+  min-width: 44px;
+  padding: 2px 4px;
+  font-size: 0.65rem;
+}
+
+.live-mini-pitch .fifa-ovr {
+  font-size: 0.75rem;
+}
+
+.live-mini-pitch .fifa-name {
+  font-size: 0.62rem;
+  max-width: 52px;
+}
+
+.live-mini-pitch .fifa-fatigue {
+  width: 44px;
+  height: 3px;
+}
+
+.live-mini-pitch .fifa-card-mark {
+  font-size: 0.55rem;
+  padding: 1px 3px;
+}
+
+.live-main .event-feed {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.live-main > h3 {
+  margin: 4px 0 8px;
+}
+
 .fifa-bench-fat {
   display: block;
   width: 36px;

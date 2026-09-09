@@ -275,13 +275,45 @@ export class App {
       set('xg-them', them.xg.toFixed(1))
     }
 
+    const miniWrap = this.root.querySelector('.live-mini-pitch') as HTMLElement | null
+    if (miniWrap) {
+      const sig = live.onPitchIds.map((id) => id ?? '-').join(',')
+      if (miniWrap.getAttribute('data-lineup-sig') !== sig) {
+        const main = this.root.querySelector('.live-main')
+        const hint = main?.querySelector('.live-mini-hint')
+        const fresh = document.createElement('div')
+        fresh.innerHTML = this.liveMiniPitchHtml()
+        const next = fresh.firstElementChild
+        if (next && miniWrap.parentElement) {
+          miniWrap.replaceWith(next)
+        } else if (main && next) {
+          if (hint) main.insertBefore(next, hint)
+          else main.prepend(next)
+        }
+      } else {
+        miniWrap.querySelectorAll<HTMLElement>('[data-pid]').forEach((card) => {
+          const id = card.dataset.pid!
+          const fat = Math.round(live.fatigue[id] ?? 50)
+          const bar = card.querySelector('[data-fat-bar]')
+          const i = bar?.querySelector('i') as HTMLElement | null
+          if (bar) {
+            bar.classList.toggle('crit', fat < 30)
+            bar.classList.toggle('low', fat >= 30 && fat < 55)
+            bar.setAttribute('title', `Zmęczenie ${fat}%`)
+          }
+          if (i) i.style.width = `${fat}%`
+          card.title = `${card.querySelector('.fifa-name')?.textContent ?? ''} · zmęczenie ${fat}%`.trim()
+        })
+      }
+    }
+
     const feed = this.root.querySelector('.event-feed')
     if (feed) {
       const sig = `${live.events[0]?.minute}:${live.events[0]?.kind}:${live.events[0]?.text}:${live.events.length}`
       if (feed.getAttribute('data-sig') !== sig) {
         feed.setAttribute('data-sig', sig)
         feed.innerHTML =
-          live.events.slice(0, 12).map((e, i) => this.eventCardHtml(e, i === 0)).join('') ||
+          live.events.slice(0, 8).map((e, i) => this.eventCardHtml(e, i === 0)).join('') ||
           '<p class="muted">Mecz się zaczyna…</p>'
       }
     }
@@ -2276,7 +2308,7 @@ export class App {
     }
 
     const feed = live.events
-      .slice(0, 12)
+      .slice(0, 8)
       .map((e, i) => this.eventCardHtml(e, i === 0))
       .join('')
 
@@ -2287,6 +2319,8 @@ export class App {
         ${this.momentumBarHtml(live.momentum ?? 0)}
         <div class="live-grid">
           <div class="live-main">
+            ${this.liveMiniPitchHtml()}
+            <p class="muted live-mini-hint">Pauza = zmiany i pełny skład</p>
             <h3>Przebieg</h3>
             <div class="event-feed">${feed || '<p class="muted">Mecz się zaczyna…</p>'}</div>
           </div>
@@ -2296,6 +2330,52 @@ export class App {
       'Mecz',
       'fifa',
     )
+  }
+
+  /** Małe boisko tylko do podglądu (bez drag / bez ławki). */
+  private liveMiniPitchHtml(): string {
+    const live = this.state.liveMatch!
+    const team = this.state.team!
+    team.tactics = normalizeTactics(team.tactics)
+    const map = new Map(team.squad.map((p) => [p.id, p]))
+    const plan = visualFormationPlan(team.tactics.formation, team.tactics.width, team.tactics.defLine)
+    const sig = live.onPitchIds.map((id) => id ?? '-').join(',')
+
+    const pitchPlayers = live.onPitchIds
+      .map((id, i) => {
+        const slot = plan[i]!
+        if (!id) {
+          const locked = live.redLockedSlots[i]
+          return `<div class="fifa-card empty mini ${locked ? 'red-lock' : 'injury-hole'}" style="left:${slot.x}%;top:${slot.y}%">
+            <div class="fifa-badge empty-badge">
+              <span class="fifa-pos">${slot.role}</span>
+              <span class="fifa-empty-label">${locked ? 'CZERW.' : 'PUSTY'}</span>
+            </div>
+          </div>`
+        }
+        const p = map.get(id)!
+        const short = p.name.split(' ').pop() ?? p.name
+        const fat = Math.round(live.fatigue[id] ?? 50)
+        const fatCls = fat < 30 ? 'crit' : fat < 55 ? 'low' : ''
+        const y = live.yellows[id] ?? 0
+        return `<div class="fifa-card mini" data-pid="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · zmęczenie ${fat}%">
+          <div class="fifa-badge">
+            <span class="fifa-ovr">${p.overall}</span>
+            <span class="fifa-pos">${slot.role}</span>
+          </div>
+          ${y ? `<span class="fifa-card-mark yellow">YK</span>` : ''}
+          <div class="fifa-fatigue ${fatCls}" data-fat-bar title="Zmęczenie ${fat}%"><i style="width:${fat}%"></i></div>
+          <div class="fifa-meta"><span class="fifa-name">${short}</span></div>
+        </div>`
+      })
+      .join('')
+
+    return `<div class="live-mini-pitch" data-lineup-sig="${sig}">
+      <div class="pitch fifa-pitch mini-pitch" aria-label="Skład na żywo">
+        <div class="pitch-markings fifa-marks"></div>
+        ${pitchPlayers}
+      </div>
+    </div>`
   }
 
   private momentumStatusLabel(momentum: number): string {
