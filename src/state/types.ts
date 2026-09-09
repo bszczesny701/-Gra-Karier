@@ -235,6 +235,17 @@ export interface ClubStanding {
   form: Array<'W' | 'D' | 'L'>
 }
 
+/** Statystyki jednej strony meczu (jak FIFA CM). */
+export interface MatchSideStats {
+  /** Minuty posiadania (na FT → % z sumy obu stron) */
+  possession: number
+  shots: number
+  shotsOnTarget: number
+  xg: number
+  corners?: number
+  fouls?: number
+}
+
 export interface ManagerMatchResult {
   homeId: string
   awayId: string
@@ -254,6 +265,10 @@ export interface ManagerMatchResult {
   /** Oczekiwane gole (przybliżone) */
   yourXg?: number
   theirXg?: number
+  yourStats?: MatchSideStats
+  theirStats?: MatchSideStats
+  /** Oceny wszystkich, którzy grali */
+  allRatings?: Array<{ name: string; rating: number }>
 }
 
 export type MatchEventKind =
@@ -265,6 +280,8 @@ export type MatchEventKind =
   | 'ft'
   | 'motivation'
   | 'chance'
+  | 'shot'
+  | 'save'
   | 'yellow'
   | 'red'
   | 'injury'
@@ -322,6 +339,10 @@ export interface LiveMatchState {
   /** Skumulowane xG (suma λ/min ≈ minuta * p) */
   xgYou: number
   xgThem: number
+  statsYou: MatchSideStats
+  statsThem: MatchSideStats
+  /** Momentum −100…100 (plus = Ty) */
+  momentum: number
 }
 
 export interface PendingMatchMoment {
@@ -580,7 +601,7 @@ export const SAVE_KEY = 'gra-karier-manager-v1'
 export const SAVE_SLOTS_META_KEY = 'gra-karier-slots-meta'
 export const SAVE_ACTIVE_SLOT_KEY = 'gra-karier-active-slot'
 export const SAVE_SLOT_COUNT = 3
-export const SAVE_VERSION = 120
+export const SAVE_VERSION = 121
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

@@ -2265,6 +2265,8 @@ export class App {
       injury: 'KONTUZJA',
       sub: 'ZMIANA',
       chance: 'OKAZJA',
+      shot: 'STRZAŁ',
+      save: 'OBRONA',
       fatigue: 'ZMĘCZENIE',
       kickoff: 'START',
       ht: 'PRZERWA',
@@ -2272,8 +2274,8 @@ export class App {
       motivation: 'MOTYWACJA',
     }
     const short = e.playerName ? (e.playerName.split(' ').pop() ?? e.playerName) : ''
-    const headlineKinds: MatchEvent['kind'][] = ['goal', 'yellow', 'red', 'injury', 'sub']
-    const title = short && headlineKinds.includes(e.kind) ? short : e.text
+    const headlineKinds: MatchEvent['kind'][] = ['goal', 'yellow', 'red', 'injury', 'sub', 'shot', 'save']
+    const title = short && headlineKinds.includes(e.kind) && e.kind !== 'shot' && e.kind !== 'save' ? short : e.text
     let detail = ''
     if (e.kind === 'goal' && e.side === 'you' && this.state.liveMatch) {
       detail = `${this.state.liveMatch.homeGoals} : ${this.state.liveMatch.awayGoals}`
@@ -2513,9 +2515,11 @@ export class App {
         <h2>${getClub(r.homeId).short} ${r.homeGoals}:${r.awayGoals} ${getClub(r.awayId).short}</h2>
         <p>${r.narrative}</p>
         ${
-          r.yourXg != null && r.theirXg != null
-            ? `<p class="meta">xG: ${r.yourXg.toFixed(1)} – ${r.theirXg.toFixed(1)}</p>`
-            : ''
+          r.yourStats && r.theirStats
+            ? `<p class="meta">Posiadanie ${r.yourStats.possession}%–${r.theirStats.possession}% · Strzały ${r.yourStats.shots}–${r.theirStats.shots} (${r.yourStats.shotsOnTarget}–${r.theirStats.shotsOnTarget} SoT) · xG ${(r.yourXg ?? r.yourStats.xg).toFixed(1)}–${(r.theirXg ?? r.theirStats.xg).toFixed(1)}</p>`
+            : r.yourXg != null && r.theirXg != null
+              ? `<p class="meta">xG: ${r.yourXg.toFixed(1)} – ${r.theirXg.toFixed(1)}</p>`
+              : ''
         }
         <p class="meta">Chemia: ${Math.round(r.chemistryAfter)}</p>
         <ul class="log">${ratings}</ul>

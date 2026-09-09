@@ -70,6 +70,8 @@ export {
   sampleGoals,
   minuteGoalProb,
   simulateScoreFromPowers,
+  sampleMatchFromPowers,
+  tickChancePipeline,
 } from './matchResult'
 
 export {
