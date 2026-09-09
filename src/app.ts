@@ -332,8 +332,15 @@ export class App {
     }
   }
 
-  private shell(body: string, title: string, mode: 'narrow' | 'wide' | 'fifa' = 'narrow'): string {
-    const cls = mode === 'narrow' ? 'app-shell' : mode === 'fifa' ? 'app-shell fifa' : 'app-shell wide'
+  private shell(body: string, title: string, mode: 'narrow' | 'wide' | 'fifa' | 'onboarding' = 'narrow'): string {
+    const cls =
+      mode === 'narrow'
+        ? 'app-shell'
+        : mode === 'fifa'
+          ? 'app-shell fifa'
+          : mode === 'onboarding'
+            ? 'app-shell onboarding-shell'
+            : 'app-shell wide'
     return `
       <div class="${cls}">
         <header class="topbar">
@@ -582,7 +589,7 @@ export class App {
   private createManagerHtml(): string {
     return this.shell(
       `
-      <section class="panel">
+      <section class="panel onboarding-panel">
         <h2>Twój profil</h2>
         <p class="muted">Jak masz na imię, trenerze?</p>
         <label class="field">
@@ -594,7 +601,7 @@ export class App {
         </div>
       </section>`,
       'Trener',
-      'wide',
+      'onboarding',
     )
   }
 
