@@ -545,6 +545,36 @@ export function simulateScoreFromPowers(
   }
 }
 
+export function computeLiveRatings(
+  squad: SquadPlayer[],
+  playedIds: string[],
+  events: Array<{ kind: string; side?: string; playerId?: string }>,
+  onPitchIds: string[],
+  minute: number,
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  const played = squad.filter((p) => playedIds.includes(p.id))
+  const pool = played.length ? played : squad.slice(0, 11)
+  for (const p of pool) {
+    let r = 6.2 + (p.overall - 65) * 0.035 + (p.form - 50) * 0.02
+    const goals = events.filter((e) => e.kind === 'goal' && e.side === 'you' && e.playerId === p.id)
+      .length
+    const shots = events.filter(
+      (e) =>
+        (e.kind === 'shot' || e.kind === 'goal' || e.kind === 'save') &&
+        e.side === 'you' &&
+        e.playerId === p.id,
+    ).length
+    r += goals * 0.85
+    r += Math.min(0.6, shots * 0.08)
+    if (events.some((e) => e.kind === 'red' && e.playerId === p.id)) r -= 1.4
+    if (events.some((e) => e.kind === 'yellow' && e.playerId === p.id)) r -= 0.25
+    if (onPitchIds.includes(p.id)) r += Math.min(0.35, minute * 0.002)
+    out[p.id] = Math.round(clamp(r, 4.5, 9.5) * 10) / 10
+  }
+  return out
+}
+
 export function allRatingsFromMatchEvents(
   squad: SquadPlayer[],
   playedIds: string[],

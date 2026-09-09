@@ -1922,6 +1922,63 @@ h3 {
   padding: 1px 3px;
 }
 
+.live-rating {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #e8eef2;
+  line-height: 1.2;
+}
+
+.live-rating.bad {
+  color: #ff8a7a;
+}
+
+.live-rating.good {
+  color: #7ddea8;
+}
+
+.live-mini-pitch .live-rating {
+  font-size: 0.62rem;
+  padding: 0 4px;
+}
+
+.live-pause-tactics {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.live-tactics-hint {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+}
+
+.live-pause-tactics .tactics-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.live-tactics-axes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-tactics-axes .muted {
+  margin-left: 4px;
+  font-size: 0.75rem;
+}
+
 .live-main .event-feed {
   max-height: 280px;
   overflow-y: auto;

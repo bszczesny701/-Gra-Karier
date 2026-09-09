@@ -24,6 +24,7 @@ import {
   powerOffsetFromTactics,
   tacticChanceMultipliers,
   allRatingsFromMatchEvents,
+  computeLiveRatings,
   emptyMatchSideStats,
   tickChancePipeline,
   applyPipelineEventToStats,
@@ -371,10 +372,12 @@ export function createLiveMatch(
     statsYou: emptyMatchSideStats(),
     statsThem: emptyMatchSideStats(),
     momentum: 0,
+    liveRatings: {},
   }
   const tag =
     competition === 'cup' ? 'Puchar Polski' : competition === 'europa' ? 'Europa' : 'Liga'
   pushEvent(live, 'kickoff', `${tag}: początek meczu vs ${getClub(opponentId).name}.`)
+  refreshLiveRatings(state, live)
   return live
 }
 
@@ -632,6 +635,8 @@ export function tickLiveMinute(state: GameState): boolean {
 
   if (!live.paused) maybeDisciplineAndInjuries(state, live)
 
+  refreshLiveRatings(state, live)
+
   // Koniec regulaminowego czasu → doliczony
   if (live.stoppageUntil == null && live.minute === halfEnd) {
     maybeEnterStoppage(live, halfEnd)
@@ -659,6 +664,16 @@ export function tickLiveMinute(state: GameState): boolean {
   }
 
   return false
+}
+
+function refreshLiveRatings(state: GameState, live: LiveMatchState): void {
+  live.liveRatings = computeLiveRatings(
+    state.team!.squad,
+    live.playedIds,
+    live.events,
+    live.onPitchIds.filter((id): id is string => Boolean(id)),
+    live.minute,
+  )
 }
 
 export function finishLiveMatch(state: GameState): void {

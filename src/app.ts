@@ -302,7 +302,14 @@ export class App {
             bar.setAttribute('title', `Zmęczenie ${fat}%`)
           }
           if (i) i.style.width = `${fat}%`
-          card.title = `${card.querySelector('.fifa-name')?.textContent ?? ''} · zmęczenie ${fat}%`.trim()
+          const rating = live.liveRatings?.[id]
+          const ratingEl = card.querySelector('[data-rating]') as HTMLElement | null
+          if (ratingEl && rating != null) {
+            ratingEl.textContent = rating.toFixed(1)
+            ratingEl.classList.toggle('bad', rating < 6)
+            ratingEl.classList.toggle('good', rating >= 7.5)
+          }
+          card.title = `${card.querySelector('.fifa-name')?.textContent ?? ''} · zmęczenie ${fat}%${rating != null ? ` · ocena ${rating.toFixed(1)}` : ''}`.trim()
         })
       }
     }
@@ -2299,6 +2306,7 @@ export class App {
         `
         <section class="lineup-fifa live-pause-lineup">
           ${scoreboard}
+          ${this.livePauseTacticsHtml()}
           <p class="muted pause-hint">Przeciągnij: ławka ↔ boisko = zmiana (${3 - live.subsUsed} pozostało) · slot ↔ slot = przestawienie${live.onPitchIds.some((id, i) => !id && !live.redLockedSlots[i]) ? ' · uzupełnij pusty slot po kontuzji' : ''}${live.redLockedSlots.some(Boolean) ? ' · czerwona blokuje slot' : ''}</p>
           ${this.liveFifaLineupInner()}
         </section>`,
@@ -2358,11 +2366,15 @@ export class App {
         const fat = Math.round(live.fatigue[id] ?? 50)
         const fatCls = fat < 30 ? 'crit' : fat < 55 ? 'low' : ''
         const y = live.yellows[id] ?? 0
-        return `<div class="fifa-card mini" data-pid="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · zmęczenie ${fat}%">
+        const rating = live.liveRatings?.[id]
+        const ratingCls =
+          rating == null ? '' : rating < 6 ? 'bad' : rating >= 7.5 ? 'good' : ''
+        return `<div class="fifa-card mini" data-pid="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · zmęczenie ${fat}%${rating != null ? ` · ocena ${rating.toFixed(1)}` : ''}">
           <div class="fifa-badge">
             <span class="fifa-ovr">${p.overall}</span>
             <span class="fifa-pos">${slot.role}</span>
           </div>
+          ${rating != null ? `<span class="live-rating ${ratingCls}" data-rating>${rating.toFixed(1)}</span>` : ''}
           ${y ? `<span class="fifa-card-mark yellow">YK</span>` : ''}
           <div class="fifa-fatigue ${fatCls}" data-fat-bar title="Zmęczenie ${fat}%"><i style="width:${fat}%"></i></div>
           <div class="fifa-meta"><span class="fifa-name">${short}</span></div>
@@ -2509,11 +2521,15 @@ export class App {
         const fat = Math.round(live.fatigue[id] ?? 50)
         const fatCls = fat < 30 ? 'crit' : fat < 55 ? 'low' : ''
         const y = live.yellows[id] ?? 0
-        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role} · zmęczenie ${fat}%${y ? ` · żółte ${y}` : ''}">
+        const rating = live.liveRatings?.[id]
+        const ratingCls =
+          rating == null ? '' : rating < 6 ? 'bad' : rating >= 7.5 ? 'good' : ''
+        return `<div class="fifa-card ${mismatch ? 'mismatch' : ''}" draggable="true" data-drag="slot" data-slot="${i}" data-id="${id}" data-pid="${id}" style="left:${slot.x}%;top:${slot.y}%" title="${p.name} · ${slot.role} · zmęczenie ${fat}%${y ? ` · żółte ${y}` : ''}${rating != null ? ` · ocena ${rating.toFixed(1)}` : ''}">
           <div class="fifa-badge">
             <span class="fifa-ovr">${p.overall}</span>
             <span class="fifa-pos">${slot.role}</span>
           </div>
+          ${rating != null ? `<span class="live-rating ${ratingCls}" data-rating>${rating.toFixed(1)}</span>` : ''}
           ${y ? `<span class="fifa-card-mark yellow" title="Żółta kartka">YK</span>` : ''}
           <div class="fifa-fatigue ${fatCls}" title="Zmęczenie ${fat}%"><i style="width:${fat}%"></i></div>
           <div class="fifa-meta">
@@ -2566,7 +2582,73 @@ export class App {
       })
     })
 
-    if (this.state.liveMatch?.paused) this.bindLiveLineupDrag()
+    if (this.state.liveMatch?.paused) {
+      this.bindLiveLineupDrag()
+      this.bindLivePauseTactics()
+    }
+  }
+
+  private livePauseTacticsHtml(): string {
+    const t = normalizeTactics(this.state.team!.tactics)
+    const plans: GamePlan[] = ['possession', 'balanced', 'counter', 'press', 'direct']
+    const mentalities: Mentality[] = [1, 2, 3, 4, 5]
+    const axes: TacticAxis[] = [1, 2, 3]
+    return `<div class="live-pause-tactics">
+      <h3 class="hub-sub">Taktyka</h3>
+      <p class="muted live-tactics-hint">Zmiany działają od razu po wznowieniu</p>
+      <div class="tactics-row wrap">
+        ${plans
+          .map(
+            (p) =>
+              `<button type="button" class="btn ghost ${t.plan === p ? 'active' : ''}" data-live-plan="${p}">${planLabel(p)}</button>`,
+          )
+          .join('')}
+      </div>
+      <div class="tactics-row compact wrap">
+        ${mentalities
+          .map(
+            (m) =>
+              `<button type="button" class="btn ghost ${t.mentality === m ? 'active' : ''}" data-live-mentality="${m}">${mentalityLabel(m)}</button>`,
+          )
+          .join('')}
+      </div>
+      <div class="live-tactics-axes">
+        <span class="muted">Tempo</span>
+        ${axes
+          .map(
+            (v) =>
+              `<button type="button" class="btn ghost ${t.tempo === v ? 'active' : ''}" data-live-axis="tempo" data-val="${v}">${tempoLabel(v)}</button>`,
+          )
+          .join('')}
+        <span class="muted">Press</span>
+        ${axes
+          .map(
+            (v) =>
+              `<button type="button" class="btn ghost ${t.press === v ? 'active' : ''}" data-live-axis="press" data-val="${v}">${pressLabel(v)}</button>`,
+          )
+          .join('')}
+      </div>
+    </div>`
+  }
+
+  private bindLivePauseTactics(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('[data-live-plan]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => setGamePlan(this.state, btn.dataset.livePlan as GamePlan))
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-live-mentality]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.go(() => setMentality(this.state, Number(btn.dataset.liveMentality) as Mentality))
+      })
+    })
+    this.root.querySelectorAll<HTMLButtonElement>('[data-live-axis]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.liveAxis as 'tempo' | 'press'
+        const val = Number(btn.dataset.val) as TacticAxis
+        this.go(() => setTacticAxis(this.state, key, val))
+      })
+    })
   }
 
   /** Drag: slot↔slot = przestawienie, ławka↔boisko = zmiana. */
@@ -2678,6 +2760,7 @@ export class App {
         }
         <h3 class="hub-sub">Motywacja</h3>
         ${motivation}
+        ${this.livePauseTacticsHtml()}
         <p class="muted pause-hint">Przeciągnij: ławka ↔ boisko = zmiana · slot ↔ slot = przestawienie</p>
         ${this.liveFifaLineupInner()}
         <div class="actions" style="margin-top:14px">
@@ -2696,6 +2779,7 @@ export class App {
       })
     })
     this.bindLiveLineupDrag()
+    this.bindLivePauseTactics()
     this.root.querySelector('#btn-second')?.addEventListener('click', () => {
       this.go(() => startSecondHalf(this.state))
     })
