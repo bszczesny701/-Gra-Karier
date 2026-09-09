@@ -2103,6 +2103,26 @@ h3 {
   font-size: 0.88rem;
 }
 
+.live-stats-live h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.live-momentum-status {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.live-stats-live .match-stat-row {
+  font-size: 0.95rem;
+}
+
+.live-stats-live .poss-bar {
+  margin: 0 4px;
+}
+
 .match-stats-panel {
   margin: 12px 0 16px;
   padding: 12px 14px;

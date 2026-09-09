@@ -223,7 +223,7 @@ export class App {
     }, ms)
   }
 
-  /** Odśwież wynik / zegar / feed bez niszczenia DOM (kliknięcia działają). */
+  /** Odśwież wynik / zegar / feed / momentum / stats bez niszczenia DOM. */
   private patchLiveMatchUi(): void {
     const live = this.state.liveMatch
     if (!live || live.paused || this.state.screen !== 'liveMatch') return
@@ -234,9 +234,46 @@ export class App {
         : `${live.minute}'`
 
     const scoreEl = this.root.querySelector('.live-score')
-    if (scoreEl) scoreEl.textContent = `${live.homeGoals} : ${live.awayGoals}`
+    if (scoreEl) {
+      const next = `${live.homeGoals}:${live.awayGoals}`
+      const prev = scoreEl.getAttribute('data-score')
+      if (prev && prev !== next) {
+        scoreEl.classList.remove('goal-pulse')
+        void (scoreEl as HTMLElement).offsetWidth
+        scoreEl.classList.add('goal-pulse')
+      }
+      scoreEl.setAttribute('data-score', next)
+      scoreEl.textContent = `${live.homeGoals} : ${live.awayGoals}`
+    }
     const clockEl = this.root.querySelector('.live-clock')
     if (clockEl) clockEl.textContent = `${clock} · zmiany ${live.subsUsed}/3`
+
+    const mom = live.momentum ?? 0
+    const momPct = Math.round(((mom + 100) / 200) * 100)
+    const fill = this.root.querySelector('.momentum-fill') as HTMLElement | null
+    if (fill) fill.style.width = `${momPct}%`
+    const momStatus = this.root.querySelector('[data-role="mom-status"]')
+    if (momStatus) momStatus.textContent = this.momentumStatusLabel(mom)
+
+    const you = live.statsYou
+    const them = live.statsThem
+    if (you && them) {
+      const poss = possessionPctNow(you, them)
+      const set = (role: string, text: string) => {
+        const el = this.root.querySelector(`[data-role="${role}"]`)
+        if (el) el.textContent = text
+      }
+      set('poss-you', `${poss.you}%`)
+      set('poss-them', `${poss.them}%`)
+      const possFill = this.root.querySelector('[data-role="poss-fill"]') as HTMLElement | null
+      if (possFill) possFill.style.width = `${poss.you}%`
+      set('shots-you', `${you.shots}`)
+      set('shots-them', `${them.shots}`)
+      set('sot-you', `${you.shotsOnTarget}`)
+      set('sot-them', `${them.shotsOnTarget}`)
+      set('xg-you', you.xg.toFixed(1))
+      set('xg-them', them.xg.toFixed(1))
+    }
 
     const feed = this.root.querySelector('.event-feed')
     if (feed) {
@@ -2210,7 +2247,7 @@ export class App {
     const scoreboard = `
       <div class="live-scoreboard compact">
         <div class="live-team">${home.short}</div>
-        <div class="live-score ${live.events[0]?.kind === 'goal' ? 'goal-pulse' : ''}">${live.homeGoals} : ${live.awayGoals}</div>
+        <div class="live-score ${live.events[0]?.kind === 'goal' ? 'goal-pulse' : ''}" data-score="${live.homeGoals}:${live.awayGoals}">${live.homeGoals} : ${live.awayGoals}</div>
         <div class="live-team">${away.short}</div>
         <div class="live-clock">${clock} · zmiany ${live.subsUsed}/3</div>
       </div>
@@ -2248,17 +2285,23 @@ export class App {
       <section class="live-match">
         ${scoreboard}
         ${this.momentumBarHtml(live.momentum ?? 0)}
-        ${this.liveStatsLineHtml(live.statsYou, live.statsThem)}
-        <div class="live-grid single">
+        <div class="live-grid">
           <div class="live-main">
             <h3>Przebieg</h3>
             <div class="event-feed">${feed || '<p class="muted">Mecz się zaczyna…</p>'}</div>
           </div>
+          ${this.liveSideStatsHtml(live.statsYou, live.statsThem, live.momentum ?? 0)}
         </div>
       </section>`,
       'Mecz',
       'fifa',
     )
+  }
+
+  private momentumStatusLabel(momentum: number): string {
+    if (momentum >= 12) return 'Przewaga: Ty'
+    if (momentum <= -12) return 'Przewaga: Oni'
+    return 'Przewaga: Równowaga'
   }
 
   private momentumBarHtml(momentum: number): string {
@@ -2270,10 +2313,23 @@ export class App {
     </div>`
   }
 
-  private liveStatsLineHtml(you?: MatchSideStats, them?: MatchSideStats): string {
-    if (!you || !them) return ''
-    const poss = possessionPctNow(you, them)
-    return `<p class="live-stats-line meta">Posiadanie ~${poss.you}%–${poss.them}% · Strzały ${you.shots}–${them.shots} · xG ${you.xg.toFixed(1)}–${them.xg.toFixed(1)}</p>`
+  private liveSideStatsHtml(you?: MatchSideStats, them?: MatchSideStats, momentum = 0): string {
+    const y = you ?? { possession: 0, shots: 0, shotsOnTarget: 0, xg: 0 }
+    const t = them ?? { possession: 0, shots: 0, shotsOnTarget: 0, xg: 0 }
+    const poss = possessionPctNow(y, t)
+    return `<aside class="live-side live-stats-live">
+      <h3>Mecz na żywo</h3>
+      <p class="live-momentum-status" data-role="mom-status">${this.momentumStatusLabel(momentum)}</p>
+      <div class="match-stat-row possession-row">
+        <span data-role="poss-you">${poss.you}%</span>
+        <div class="poss-bar"><div class="poss-fill" data-role="poss-fill" style="width:${poss.you}%"></div></div>
+        <span data-role="poss-them">${poss.them}%</span>
+      </div>
+      <div class="match-stat-label">Posiadanie</div>
+      <div class="match-stat-row"><span data-role="shots-you">${y.shots}</span><span class="match-stat-mid">Strzały</span><span data-role="shots-them">${t.shots}</span></div>
+      <div class="match-stat-row"><span data-role="sot-you">${y.shotsOnTarget}</span><span class="match-stat-mid">Celne</span><span data-role="sot-them">${t.shotsOnTarget}</span></div>
+      <div class="match-stat-row"><span data-role="xg-you">${y.xg.toFixed(1)}</span><span class="match-stat-mid">xG</span><span data-role="xg-them">${t.xg.toFixed(1)}</span></div>
+    </aside>`
   }
 
   private matchStatsPanelHtml(you: MatchSideStats, them: MatchSideStats, title = 'Statystyki'): string {
@@ -2524,7 +2580,7 @@ export class App {
       <section class="lineup-fifa live-pause-lineup">
         <div class="live-scoreboard compact">
           <div class="live-team">${home.short}</div>
-          <div class="live-score ${live.events[0]?.kind === 'goal' ? 'goal-pulse' : ''}">${live.homeGoals} : ${live.awayGoals}</div>
+          <div class="live-score ${live.events[0]?.kind === 'goal' ? 'goal-pulse' : ''}" data-score="${live.homeGoals}:${live.awayGoals}">${live.homeGoals} : ${live.awayGoals}</div>
           <div class="live-team">${away.short}</div>
           <div class="live-clock">HT · zmiany ${live.subsUsed}/3</div>
         </div>
