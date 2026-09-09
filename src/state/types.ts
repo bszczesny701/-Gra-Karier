@@ -251,6 +251,9 @@ export interface ManagerMatchResult {
   competition?: CompetitionId
   /** Liczba czerwonych Twoich w meczu (osłabienie) */
   yourReds?: number
+  /** Oczekiwane gole (przybliżone) */
+  yourXg?: number
+  theirXg?: number
 }
 
 export type MatchEventKind =
@@ -314,6 +317,11 @@ export interface LiveMatchState {
   /** Id ScheduledMatch w sezonie */
   matchId: string | null
   competition: CompetitionId
+  /** Braki w XI rywala (czerwone/kontuzje narracyjne) */
+  oppMenDown: number
+  /** Skumulowane xG (suma λ/min ≈ minuta * p) */
+  xgYou: number
+  xgThem: number
 }
 
 export interface PendingMatchMoment {
@@ -572,7 +580,7 @@ export const SAVE_KEY = 'gra-karier-manager-v1'
 export const SAVE_SLOTS_META_KEY = 'gra-karier-slots-meta'
 export const SAVE_ACTIVE_SLOT_KEY = 'gra-karier-active-slot'
 export const SAVE_SLOT_COUNT = 3
-export const SAVE_VERSION = 119
+export const SAVE_VERSION = 120
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

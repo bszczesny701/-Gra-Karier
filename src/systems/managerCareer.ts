@@ -65,6 +65,12 @@ export {
   tickLiveMinute,
 }
 export type { MotivationId }
+export {
+  expectedGoals,
+  sampleGoals,
+  minuteGoalProb,
+  simulateScoreFromPowers,
+} from './matchResult'
 
 export {
   makeBuyOffer,

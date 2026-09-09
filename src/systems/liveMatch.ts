@@ -13,15 +13,21 @@ import type {
 } from '../state/types'
 import { clamp, clampFloat, normalizeTactics } from '../state/types'
 import {
-  aiClubPower,
   applyResultToStandings,
   chance,
-  keyPlayerRatings,
   rngInt,
 } from './leagueSim'
+import {
+  liveSideAttackPower,
+  minuteGoalProb,
+  expectedGoals,
+  opponentAttackPower,
+  powerOffsetFromTactics,
+  tacticChanceMultipliers,
+  ratingsFromMatchEvents,
+} from './matchResult'
 import { deliverPostMatchMail, deliverBoardReviewMail } from './mailbox'
 import { publishYourMatchNews } from './news'
-import { formationFit } from './tactics'
 import { applyCupMatchResult } from './cup'
 import { applyEuropaMatchResult } from './europa'
 import { nextUserMatch } from './calendar'
@@ -64,36 +70,6 @@ function pitchIds(live: LiveMatchState): string[] {
   return live.onPitchIds.filter((id): id is string => Boolean(id))
 }
 
-function effectiveOvr(p: SquadPlayer, fatigue: number): number {
-  const f = clampFloat(fatigue, 0, 100)
-  const sharp = ((p.sharpness ?? 70) - 70) * 0.06
-  return p.overall * (0.55 + 0.45 * (f / 100)) + (p.form - 50) * 0.08 + sharp
-}
-
-export function liveTeamPower(state: GameState, live: LiveMatchState): number {
-  const team = state.team!
-  const map = mapPlayers(state)
-  const ids = pitchIds(live)
-  const xs = ids.map((id) => map.get(id)).filter(Boolean) as SquadPlayer[]
-  if (!xs.length) return 28
-  const avg =
-    xs.reduce((s, p) => s + effectiveOvr(p, live.fatigue[p.id] ?? 50), 0) / xs.length
-  const fit =
-    ids.length === 11
-      ? (formationFit({ ...team, startingIds: ids }) - 0.65) * 6
-      : ((ids.length / 11) - 0.65) * 6
-  const t = normalizeTactics(team.tactics)
-  const chem = (team.teamChemistry - 50) * 0.05
-  const captBonus =
-    team.captainId && pitchIds(live).includes(team.captainId) ? 0.7 : 0
-  const styleBias = (t.mentality - 3) * 0.45
-  const planBias =
-    t.plan === 'press' ? 0.5 : t.plan === 'direct' ? 0.4 : t.plan === 'possession' ? -0.15 : 0.2
-  const morale = live.moraleBoost * 1.4
-  const menDown = (11 - xs.length) * 3.8
-  return avg + fit + chem + captBonus + styleBias + planBias + morale - menDown
-}
-
 function drainPerMinute(state: GameState, live: LiveMatchState): number {
   const t = normalizeTactics(state.team!.tactics)
   let d = 0.38 + (t.mentality - 3) * 0.06
@@ -107,59 +83,25 @@ function drainPerMinute(state: GameState, live: LiveMatchState): number {
   return d
 }
 
-function tacticAttackMods(state: GameState): { you: number; them: number; chanceYou: number; chanceThem: number } {
-  const t = normalizeTactics(state.team!.tactics)
-  const ment = t.mentality - 3
-  let you = (t.width - 2) * 0.7 + (t.tempo - 2) * 0.55 + (t.press - 2) * 0.25 + ment * 0.5
-  let them = (t.width - 2) * 0.4 + (t.press - 2) * 0.55 - (t.tempo - 2) * 0.15 - ment * 0.35
-  let chanceYou = 1 + (t.tempo - 2) * 0.08 + (t.width - 2) * 0.05 + (t.press - 2) * 0.04
-  let chanceThem = 1 + (t.press - 2) * 0.09 + (t.width - 2) * 0.04 - (t.tempo - 2) * 0.02
-
-  if (t.plan === 'possession') {
-    you -= 0.2
-    them -= 0.35
-    chanceYou *= 0.92
-    chanceThem *= 0.9
-  } else if (t.plan === 'press') {
-    you += 0.35
-    them += 0.45
-    chanceYou *= 1.08
-    chanceThem *= 1.1
-  } else if (t.plan === 'counter') {
-    you += 0.45
-    them -= 0.15
-    chanceYou *= 1.06
-  } else if (t.plan === 'direct') {
-    you += 0.55
-    them += 0.2
-    chanceYou *= 1.1
-    chanceThem *= 1.04
-  }
-
-  you += (t.defLine - 2) * 0.25
-  them += (t.defLine - 2) * 0.35
-  you += (t.buildUp - 2) * 0.15
-  if (t.buildUp === 1) {
-    chanceYou *= 0.96
-    chanceThem *= 0.94
-  } else if (t.buildUp === 3) {
-    chanceYou *= 1.05
-  }
-
-  return { you, them, chanceYou, chanceThem }
-}
-
 function yourGoals(live: LiveMatchState, clubId: string): { yours: number; theirs: number } {
   if (live.homeId === clubId) return { yours: live.homeGoals, theirs: live.awayGoals }
   return { yours: live.awayGoals, theirs: live.homeGoals }
 }
 
-function addGoal(live: LiveMatchState, forYou: boolean, clubId: string, scorerName: string): void {
+function addGoal(
+  live: LiveMatchState,
+  forYou: boolean,
+  clubId: string,
+  scorer: { name: string; id?: string },
+): void {
   const isHome = live.homeId === clubId
   if (forYou) {
     if (isHome) live.homeGoals += 1
     else live.awayGoals += 1
-    pushEvent(live, 'goal', `${scorerName}`, 'you', { playerName: scorerName })
+    pushEvent(live, 'goal', `${scorer.name}`, 'you', {
+      playerName: scorer.name,
+      playerId: scorer.id,
+    })
   } else {
     if (isHome) live.awayGoals += 1
     else live.homeGoals += 1
@@ -168,7 +110,7 @@ function addGoal(live: LiveMatchState, forYou: boolean, clubId: string, scorerNa
   }
 }
 
-function pickScorer(state: GameState, live: LiveMatchState): string {
+function pickScorer(state: GameState, live: LiveMatchState): { name: string; id: string } {
   const map = mapPlayers(state)
   const pool = pitchIds(live)
     .map((id) => map.get(id)!)
@@ -176,17 +118,22 @@ function pickScorer(state: GameState, live: LiveMatchState): string {
     .map((p) => ({
       p,
       w:
-        (p.role === 'ŚN' || p.role === 'LN' || p.role === 'PN' ? 3.2 : p.role === 'OP' || p.role === 'PP' || p.role === 'LP' ? 1.6 : 0.7) *
-        (live.fatigue[p.id] ?? 50) /
-        50,
+        (p.role === 'ŚN' || p.role === 'LN' || p.role === 'PN'
+          ? 3.2
+          : p.role === 'OP' || p.role === 'PP' || p.role === 'LP'
+            ? 1.6
+            : 0.7) *
+        ((live.fatigue[p.id] ?? 50) / 50) *
+        (0.85 + (p.attrs.shooting ?? 50) / 200),
     }))
   const total = pool.reduce((s, x) => s + x.w, 0) || 1
   let r = Math.random() * total
   for (const x of pool) {
     r -= x.w
-    if (r <= 0) return x.p.name
+    if (r <= 0) return { name: x.p.name, id: x.p.id }
   }
-  return pool[0]?.p.name ?? 'Zawodnik'
+  const fallback = pool[0]?.p
+  return { name: fallback?.name ?? 'Zawodnik', id: fallback?.id ?? '' }
 }
 
 function pickPitchPlayer(state: GameState, live: LiveMatchState): SquadPlayer | null {
@@ -256,23 +203,24 @@ function issueInjury(state: GameState, live: LiveMatchState, p: SquadPlayer): vo
 }
 
 function maybeDisciplineAndInjuries(state: GameState, live: LiveMatchState): void {
-  // Rywal — tylko narracja
+  // Rywal — narracja + realne menDown
   if (chance(0.012)) {
     const opp = getClub(live.opponentId).short
     pushEvent(live, 'yellow', `Żółta dla ${opp}`, 'them', { playerName: opp })
   } else if (chance(0.0025)) {
     const opp = getClub(live.opponentId).short
     pushEvent(live, 'red', `Czerwona dla ${opp}`, 'them', { playerName: opp })
+    live.oppMenDown = Math.min(3, (live.oppMenDown ?? 0) + 1)
   } else if (chance(0.003)) {
     const opp = getClub(live.opponentId).short
     pushEvent(live, 'injury', `Kontuzja u ${opp}`, 'them', { playerName: opp })
+    live.oppMenDown = Math.min(3, (live.oppMenDown ?? 0) + 1)
   }
 
   const p = pickPitchPlayer(state, live)
   if (!p) return
 
   const fat = live.fatigue[p.id] ?? 50
-  // Im niższa świeżość (fatigue), tym większa szansa kontuzji
   const tiredFactor = Math.pow((100 - fat) / 100, 1.45)
   const injuryChance = clampFloat(
     (0.0018 + tiredFactor * 0.032 + (fat < 30 ? 0.01 : 0)) *
@@ -340,6 +288,9 @@ export function createLiveMatch(
     stoppageUntil: null,
     matchId,
     competition,
+    oppMenDown: 0,
+    xgYou: 0,
+    xgThem: 0,
   }
   const tag =
     competition === 'cup' ? 'Puchar Polski' : competition === 'europa' ? 'Europa' : 'Liga'
@@ -493,29 +444,38 @@ export function tickLiveMinute(state: GameState): boolean {
     live.fatigue[id] = clampFloat((live.fatigue[id] ?? 80) + 0.22, 45, 100)
   }
 
-  const mods = tacticAttackMods(state)
-  const yourPow = liveTeamPower(state, live)
+  const modsPow = powerOffsetFromTactics(state)
+  const modsChance = tacticChanceMultipliers(state)
+  const yourPow = liveSideAttackPower(state, live) + modsPow.you
   const isHome = live.homeId === clubId
-  const oppPow = aiClubPower(live.opponentId) + (isHome ? 0 : 1.0)
-  const youAtt = yourPow + (isHome ? 1.5 : 0) + live.moraleBoost * 0.5 + mods.you
-  const themAtt = oppPow + (isHome ? 0 : 1.2) - live.moraleBoost * 0.3 + mods.them
+  const oppPow =
+    opponentAttackPower(state, live.opponentId, true) + (isHome ? 0 : 1.0) + modsPow.them
 
-  // Osłabienie po czerwonej / kontuzji bez zmiany: więcej szans rywala
   const menOnPitch = pitchIds(live).length
-  const menDown = Math.max(0, 11 - menOnPitch)
-  const understrengthThem = 1 + menDown * 0.42
-  const understrengthYou = Math.max(0.55, 1 - menDown * 0.14)
+  const menDownYou = Math.max(0, 11 - menOnPitch)
+  const menDownThem = live.oppMenDown ?? 0
+  const diff = state.settings?.difficulty
 
-  const youChance = clampFloat(
-    (0.006 + (youAtt - themAtt) / 900) * mods.chanceYou * understrengthYou,
-    0.002,
-    0.032,
-  )
-  const themChance = clampFloat(
-    (0.006 + (themAtt - youAtt) / 900) * mods.chanceThem * understrengthThem,
-    0.003,
-    menDown > 0 ? 0.055 : 0.032,
-  )
+  const lambdaYou = expectedGoals(yourPow + live.moraleBoost * 0.5, oppPow, {
+    isHome,
+    menDownAtt: menDownYou,
+    menDownDef: menDownThem,
+    difficulty: diff,
+    forPlayerSide: true,
+  })
+  const lambdaThem = expectedGoals(oppPow - live.moraleBoost * 0.3, yourPow, {
+    isHome: !isHome,
+    menDownAtt: menDownThem,
+    menDownDef: menDownYou,
+    difficulty: diff,
+    forPlayerSide: false,
+  })
+
+  const youChance = clampFloat(minuteGoalProb(lambdaYou) * modsChance.you, 0.0015, 0.055)
+  const themChance = clampFloat(minuteGoalProb(lambdaThem) * modsChance.them, 0.0015, 0.055)
+
+  live.xgYou = (live.xgYou ?? 0) + youChance
+  live.xgThem = (live.xgThem ?? 0) + themChance
 
   let scored = false
   if (chance(youChance)) {
@@ -523,7 +483,7 @@ export function tickLiveMinute(state: GameState): boolean {
     scored = true
   }
   if (!scored && chance(themChance)) {
-    addGoal(live, false, clubId, '')
+    addGoal(live, false, clubId, { name: '' })
   } else if (!scored && chance(0.04)) {
     pushEvent(live, 'chance', chance(0.5) ? 'Groźna okazja — obrona na miejscu.' : 'Strzał obok słupka.')
   }
@@ -684,12 +644,20 @@ export function finishLiveMatch(state: GameState): void {
   if (state.manager?.fanTrust != null) applyFanTrustToChemistry(team, state.manager.fanTrust)
   season.teamChemistry = team.teamChemistry
 
-  const ratings = keyPlayerRatings(state)
+  const ratings = ratingsFromMatchEvents(
+    team.squad,
+    live.playedIds,
+    live.events,
+    won,
+    drawn,
+  )
 
   const home = getClub(live.homeId)
   const away = getClub(live.awayId)
   const yourReds = live.events.filter((e) => e.kind === 'red' && e.side === 'you').length
   const yourInj = live.events.filter((e) => e.kind === 'injury' && e.side === 'you').length
+  const yourXg = Math.round((live.xgYou ?? 0) * 10) / 10
+  const theirXg = Math.round((live.xgThem ?? 0) * 10) / 10
   let narrative =
     live.competition === 'cup'
       ? 'Puchar Polski · '
@@ -720,6 +688,8 @@ export function finishLiveMatch(state: GameState): void {
     chemistryAfter: team.teamChemistry,
     competition: live.competition,
     yourReds,
+    yourXg,
+    theirXg,
   }
   season.lastMatch = result
 

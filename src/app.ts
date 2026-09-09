@@ -2512,6 +2512,11 @@ export class App {
       <section class="panel">
         <h2>${getClub(r.homeId).short} ${r.homeGoals}:${r.awayGoals} ${getClub(r.awayId).short}</h2>
         <p>${r.narrative}</p>
+        ${
+          r.yourXg != null && r.theirXg != null
+            ? `<p class="meta">xG: ${r.yourXg.toFixed(1)} – ${r.theirXg.toFixed(1)}</p>`
+            : ''
+        }
         <p class="meta">Chemia: ${Math.round(r.chemistryAfter)}</p>
         <ul class="log">${ratings}</ul>
         <div class="actions">

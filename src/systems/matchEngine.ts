@@ -152,7 +152,7 @@ function beginMatchdayLegacy(state: GameState): void {
     []
   for (const f of round) {
     if (yourFix && f.homeId === yourFix.homeId && f.awayId === yourFix.awayId) continue
-    const { homeGoals, awayGoals } = simulateAiMatch(f.homeId, f.awayId)
+    const { homeGoals, awayGoals } = simulateAiMatch(f.homeId, f.awayId, {}, state)
     applyResultToStandings(season.standings, f.homeId, f.awayId, homeGoals, awayGoals)
     aiResults.push({ homeId: f.homeId, awayId: f.awayId, homeGoals, awayGoals })
   }

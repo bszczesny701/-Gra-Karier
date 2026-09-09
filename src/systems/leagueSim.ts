@@ -9,6 +9,7 @@ import type {
 import { clamp, normalizeTactics } from '../state/types'
 import { lineupPower, styleMatchupBonus } from './tactics'
 import { averageStarterOvr, playerName, starters } from './squadGen'
+import { simulateScoreFromPowers } from './matchResult'
 
 export function rngInt(n: number): number {
   return Math.floor(Math.random() * n)
@@ -253,13 +254,14 @@ export function simulateAiMatch(
   mods: Record<string, number> = {},
   state?: GameState | null,
 ): { homeGoals: number; awayGoals: number } {
-  const bias = difficultyAiBias(state)
-  const homePow = aiClubPower(homeId, mods, state) + 1.5 + bias
-  const awayPow = aiClubPower(awayId, mods, state) + bias
-  return {
-    homeGoals: scoreline(homePow, awayPow * 0.92),
-    awayGoals: scoreline(awayPow, homePow * 0.92),
-  }
+  const homePow = aiClubPower(homeId, mods, state) + 1.5
+  const awayPow = aiClubPower(awayId, mods, state)
+  const { homeGoals, awayGoals } = simulateScoreFromPowers(
+    homePow,
+    awayPow,
+    state?.settings?.difficulty,
+  )
+  return { homeGoals, awayGoals }
 }
 
 export function applyResultToStandings(
@@ -297,17 +299,12 @@ export function simulateYourMatchBase(
     getEffectiveStrength(opponentId),
     yourOvr,
   )
-  const oppPower = aiClubPower(opponentId) + (isHome ? 0 : 1.2)
-
-  let homeGoals: number
-  let awayGoals: number
-  if (isHome) {
-    homeGoals = scoreline(yourPower, oppPower * 0.9)
-    awayGoals = scoreline(oppPower, yourPower * 0.92)
-  } else {
-    homeGoals = scoreline(oppPower, yourPower * 0.92)
-    awayGoals = scoreline(yourPower, oppPower * 0.9)
-  }
+  const oppPower = aiClubPower(opponentId, {}, state) + (isHome ? 0 : 1.2)
+  const scored = isHome
+    ? simulateScoreFromPowers(yourPower, oppPower, state.settings?.difficulty)
+    : simulateScoreFromPowers(oppPower, yourPower, state.settings?.difficulty)
+  const homeGoals = scored.homeGoals
+  const awayGoals = scored.awayGoals
 
   const bits: string[] = []
   const fitNote =
