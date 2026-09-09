@@ -282,6 +282,9 @@ export type MatchEventKind =
   | 'chance'
   | 'shot'
   | 'save'
+  | 'corner'
+  | 'freekick'
+  | 'penalty'
   | 'yellow'
   | 'red'
   | 'injury'
@@ -608,7 +611,7 @@ export const SAVE_KEY = 'gra-karier-manager-v1'
 export const SAVE_SLOTS_META_KEY = 'gra-karier-slots-meta'
 export const SAVE_ACTIVE_SLOT_KEY = 'gra-karier-active-slot'
 export const SAVE_SLOT_COUNT = 3
-export const SAVE_VERSION = 125
+export const SAVE_VERSION = 126
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

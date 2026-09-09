@@ -273,6 +273,12 @@ export class App {
       set('sot-them', `${them.shotsOnTarget}`)
       set('xg-you', you.xg.toFixed(1))
       set('xg-them', them.xg.toFixed(1))
+      set('cor-you', `${you.corners ?? 0}`)
+      set('cor-them', `${them.corners ?? 0}`)
+      const corRow = this.root.querySelector('.corners-row') as HTMLElement | null
+      if (corRow) {
+        corRow.hidden = (you.corners ?? 0) + (them.corners ?? 0) === 0
+      }
     }
 
     const miniWrap = this.root.querySelector('.live-mini-pitch') as HTMLElement | null
@@ -2421,6 +2427,11 @@ export class App {
       <div class="match-stat-row"><span data-role="shots-you">${y.shots}</span><span class="match-stat-mid">Strzały</span><span data-role="shots-them">${t.shots}</span></div>
       <div class="match-stat-row"><span data-role="sot-you">${y.shotsOnTarget}</span><span class="match-stat-mid">Celne</span><span data-role="sot-them">${t.shotsOnTarget}</span></div>
       <div class="match-stat-row"><span data-role="xg-you">${y.xg.toFixed(1)}</span><span class="match-stat-mid">xG</span><span data-role="xg-them">${t.xg.toFixed(1)}</span></div>
+      ${
+        (y.corners ?? 0) + (t.corners ?? 0) > 0
+          ? `<div class="match-stat-row"><span data-role="cor-you">${y.corners ?? 0}</span><span class="match-stat-mid">Rożne</span><span data-role="cor-them">${t.corners ?? 0}</span></div>`
+          : `<div class="match-stat-row corners-row" hidden><span data-role="cor-you">0</span><span class="match-stat-mid">Rożne</span><span data-role="cor-them">0</span></div>`
+      }
     </aside>`
   }
 
@@ -2463,6 +2474,9 @@ export class App {
       chance: 'OKAZJA',
       shot: 'STRZAŁ',
       save: 'OBRONA',
+      corner: 'ROŻNY',
+      freekick: 'WOLNY',
+      penalty: 'KARNY',
       fatigue: 'ZMĘCZENIE',
       kickoff: 'START',
       ht: 'PRZERWA',
@@ -2470,8 +2484,20 @@ export class App {
       motivation: 'MOTYWACJA',
     }
     const short = e.playerName ? (e.playerName.split(' ').pop() ?? e.playerName) : ''
-    const headlineKinds: MatchEvent['kind'][] = ['goal', 'yellow', 'red', 'injury', 'sub']
-    const title = short && headlineKinds.includes(e.kind) ? short : e.text
+    const headlineKinds: MatchEvent['kind'][] = [
+      'goal',
+      'yellow',
+      'red',
+      'injury',
+      'sub',
+      'penalty',
+      'corner',
+      'freekick',
+    ]
+    const title =
+      short && headlineKinds.includes(e.kind) && (e.kind === 'goal' || e.kind === 'yellow' || e.kind === 'red' || e.kind === 'injury' || e.kind === 'sub')
+        ? short
+        : e.text
     let detail = ''
     if (e.kind === 'goal' && e.side === 'you' && this.state.liveMatch) {
       detail = e.assistName

@@ -619,16 +619,16 @@ export function tickLiveMinute(state: GameState): boolean {
       )
     }
   }
-  if (!scored && tick.events.length === 0 && chance(0.025)) {
-    pushEvent(live, 'chance', chance(0.5) ? 'Próba wyjścia z pressingu.' : 'Walka w środku pola.')
+
+  if (!scored) {
+    scored = maybeSetPieceMoments(state, live, clubId, tick.possessionYou) || scored
   }
 
-  // Lekkie rożne / faule do raportu
-  if (chance(0.028)) {
-    const st = tick.possessionYou ? live.statsYou : live.statsThem
-    st.corners = (st.corners ?? 0) + 1
+  if (!scored && tick.events.length === 0 && chance(0.028)) {
+    pushEvent(live, 'chance', commentaryLine(state), undefined)
   }
-  if (chance(0.022)) {
+
+  if (chance(0.02)) {
     const st = chance(0.55) ? live.statsYou : live.statsThem
     st.fouls = (st.fouls ?? 0) + 1
   }
@@ -663,6 +663,231 @@ export function tickLiveMinute(state: GameState): boolean {
     return true
   }
 
+  return false
+}
+
+function commentaryLine(state: GameState): string {
+  const t = normalizeTactics(state.team!.tactics)
+  const pressLines = [
+    'Wysoki pressing — piłka odzyskana w środku.',
+    'Pressing na skrzydle, rywal pod ścianą.',
+    'Próba wyjścia z pressingu.',
+  ]
+  const possLines = [
+    'Cierpliwe podania w środku pola.',
+    'Dośrodkowanie za mocne — piłka na aut.',
+    'Kontrola tempa, szukanie dziury.',
+  ]
+  const counterLines = [
+    'Kontrę zatrzymano w zarodku.',
+    'Szybkie przejście — ostatnie podanie niecelne.',
+    'Wybicie i natychmiastowy atak.',
+  ]
+  const generic = [
+    'Walka w środku pola.',
+    'Faul taktyczny zanim zrobiło się groźnie.',
+    'Strzał z dystansu — wysoko nad poprzeczką.',
+    'Dobry odbiór w polu karnym.',
+    'Zmiana strony, szukanie wolnego człowieka.',
+    'Wrzutka odcięta przez obrońcę.',
+  ]
+  let pool = generic
+  if (t.plan === 'press' || t.press === 3) pool = [...pressLines, ...generic]
+  else if (t.plan === 'possession') pool = [...possLines, ...generic]
+  else if (t.plan === 'counter') pool = [...counterLines, ...generic]
+  return pool[rngInt(pool.length)]!
+}
+
+/** Rożny / wolny / karny. Zwraca true jeśli padł gol. */
+function maybeSetPieceMoments(
+  state: GameState,
+  live: LiveMatchState,
+  clubId: string,
+  possessionYou: boolean,
+): boolean {
+  const diff = state.settings?.difficulty
+  const forYou = possessionYou
+
+  // Karny — rzadko
+  if (chance(0.0035)) {
+    const side: 'you' | 'them' = forYou ? 'you' : chance(0.45) ? 'you' : 'them'
+    if (side === 'you') {
+      const taker = pickScorer(state, live)
+      pushEvent(live, 'penalty', `Rzut karny! ${shortName(taker.name)} podchodzi…`, 'you', {
+        playerName: taker.name,
+        playerId: taker.id,
+      })
+      let pGoal = 0.75
+      if (diff === 'easy') pGoal = 0.82
+      if (diff === 'hard') pGoal = 0.68
+      if (chance(pGoal)) {
+        addGoal(live, true, clubId, taker, null)
+        live.statsYou.shots = (live.statsYou.shots ?? 0) + 1
+        live.statsYou.shotsOnTarget = (live.statsYou.shotsOnTarget ?? 0) + 1
+        live.statsYou.xg = (live.statsYou.xg ?? 0) + 0.76
+        live.momentum = applyMomentumDelta(live.momentum ?? 0, 16)
+        return true
+      }
+      if (chance(0.55)) {
+        pushEvent(live, 'save', 'Karny — bramkarz broni!', 'you', {
+          playerName: taker.name,
+          playerId: taker.id,
+        })
+      } else {
+        pushEvent(live, 'shot', `${shortName(taker.name)} — karny nad poprzeczką.`, 'you', {
+          playerName: taker.name,
+          playerId: taker.id,
+        })
+      }
+      live.statsYou.shots = (live.statsYou.shots ?? 0) + 1
+      live.statsYou.xg = (live.statsYou.xg ?? 0) + 0.76
+      return false
+    }
+    const opp = pickOppScorer(state, live.opponentId)
+    pushEvent(live, 'penalty', `Rzut karny dla rywala! ${opp.name}…`, 'them', {
+      playerName: opp.name,
+      playerId: opp.id,
+    })
+    let pGoal = 0.74
+    if (diff === 'easy') pGoal = 0.62
+    if (diff === 'hard') pGoal = 0.8
+    if (chance(pGoal)) {
+      addGoal(live, false, clubId, opp)
+      live.statsThem.shots = (live.statsThem.shots ?? 0) + 1
+      live.statsThem.shotsOnTarget = (live.statsThem.shotsOnTarget ?? 0) + 1
+      live.statsThem.xg = (live.statsThem.xg ?? 0) + 0.76
+      live.momentum = applyMomentumDelta(live.momentum ?? 0, -16)
+      return true
+    }
+    pushEvent(live, 'save', 'Twój bramkarz broni karnego!', 'them', { playerName: opp.name })
+    live.statsThem.shots = (live.statsThem.shots ?? 0) + 1
+    live.statsThem.xg = (live.statsThem.xg ?? 0) + 0.76
+    return false
+  }
+
+  // Rożny
+  if (chance(0.027)) {
+    if (forYou) {
+      const taker = pickScorer(state, live)
+      live.statsYou.corners = (live.statsYou.corners ?? 0) + 1
+      pushEvent(live, 'corner', `Rożny — wykonuje ${shortName(taker.name)}`, 'you', {
+        playerName: taker.name,
+        playerId: taker.id,
+      })
+      if (chance(0.35)) {
+        if (chance(0.22)) {
+          const scorer = pickScorer(state, live)
+          addGoal(live, true, clubId, scorer, {
+            name: taker.name,
+            id: taker.id,
+          })
+          live.statsYou.shots += 1
+          live.statsYou.shotsOnTarget += 1
+          live.statsYou.xg += 0.18
+          live.momentum = applyMomentumDelta(live.momentum ?? 0, 10)
+          return true
+        }
+        if (chance(0.5)) {
+          pushEvent(live, 'save', 'Główka z rożnego — bramkarz zbija.', 'you', {
+            playerName: taker.name,
+            playerId: taker.id,
+          })
+          live.statsYou.shots += 1
+          live.statsYou.shotsOnTarget += 1
+          live.statsYou.xg += 0.12
+        } else {
+          pushEvent(live, 'shot', 'Główka z rożnego obok słupka.', 'you', {
+            playerName: taker.name,
+            playerId: taker.id,
+          })
+          live.statsYou.shots += 1
+          live.statsYou.xg += 0.08
+        }
+      }
+    } else {
+      const opp = pickOppScorer(state, live.opponentId)
+      live.statsThem.corners = (live.statsThem.corners ?? 0) + 1
+      pushEvent(live, 'corner', `Rożny dla rywala — ${opp.name}`, 'them', {
+        playerName: opp.name,
+        playerId: opp.id,
+      })
+      if (chance(0.35)) {
+        if (chance(0.2)) {
+          addGoal(live, false, clubId, opp)
+          live.statsThem.shots += 1
+          live.statsThem.shotsOnTarget += 1
+          live.statsThem.xg += 0.18
+          live.momentum = applyMomentumDelta(live.momentum ?? 0, -10)
+          return true
+        }
+        if (chance(0.5)) {
+          pushEvent(live, 'save', 'Główka rywala — bronisz!', 'them', { playerName: opp.name })
+          live.statsThem.shots += 1
+          live.statsThem.shotsOnTarget += 1
+        } else {
+          pushEvent(live, 'shot', 'Główka rywala obok.', 'them', { playerName: opp.name })
+          live.statsThem.shots += 1
+        }
+      }
+    }
+    return false
+  }
+
+  // Wolny
+  if (chance(0.012)) {
+    if (forYou) {
+      const taker = pickScorer(state, live)
+      pushEvent(live, 'freekick', `Rzut wolny — ${shortName(taker.name)}`, 'you', {
+        playerName: taker.name,
+        playerId: taker.id,
+      })
+      if (chance(0.25)) {
+        if (chance(0.28)) {
+          addGoal(live, true, clubId, taker, null)
+          live.statsYou.shots += 1
+          live.statsYou.shotsOnTarget += 1
+          live.statsYou.xg += 0.22
+          live.momentum = applyMomentumDelta(live.momentum ?? 0, 12)
+          return true
+        }
+        if (chance(0.45)) {
+          pushEvent(live, 'save', 'Wolny — świetna interwencja bramkarza.', 'you', {
+            playerName: taker.name,
+            playerId: taker.id,
+          })
+          live.statsYou.shots += 1
+          live.statsYou.shotsOnTarget += 1
+          live.statsYou.xg += 0.15
+        } else {
+          pushEvent(live, 'shot', 'Wolny w mur / obok.', 'you', {
+            playerName: taker.name,
+            playerId: taker.id,
+          })
+          live.statsYou.shots += 1
+          live.statsYou.xg += 0.1
+        }
+      }
+    } else {
+      const opp = pickOppScorer(state, live.opponentId)
+      pushEvent(live, 'freekick', `Wolny dla rywala — ${opp.name}`, 'them', {
+        playerName: opp.name,
+        playerId: opp.id,
+      })
+      if (chance(0.25)) {
+        if (chance(0.26)) {
+          addGoal(live, false, clubId, opp)
+          live.statsThem.shots += 1
+          live.statsThem.shotsOnTarget += 1
+          live.statsThem.xg += 0.22
+          live.momentum = applyMomentumDelta(live.momentum ?? 0, -12)
+          return true
+        }
+        pushEvent(live, 'save', 'Wolny rywala — bronisz!', 'them', { playerName: opp.name })
+        live.statsThem.shots += 1
+        live.statsThem.shotsOnTarget += 1
+      }
+    }
+  }
   return false
 }
 
