@@ -35,6 +35,7 @@ import {
   advanceWeek,
   nextUserMatch,
   canAdvanceWeek,
+  possessionPctNow,
   makeBuyOffer,
   acceptCounterOffer,
   rejectOffer,
@@ -105,6 +106,7 @@ import type {
   GamePlan,
   GameState,
   MatchEvent,
+  MatchSideStats,
   MatchSpeed,
   Mentality,
   TacticAxis,
@@ -2245,6 +2247,8 @@ export class App {
       `
       <section class="live-match">
         ${scoreboard}
+        ${this.momentumBarHtml(live.momentum ?? 0)}
+        ${this.liveStatsLineHtml(live.statsYou, live.statsThem)}
         <div class="live-grid single">
           <div class="live-main">
             <h3>Przebieg</h3>
@@ -2255,6 +2259,50 @@ export class App {
       'Mecz',
       'fifa',
     )
+  }
+
+  private momentumBarHtml(momentum: number): string {
+    const pct = Math.round(((momentum + 100) / 200) * 100)
+    return `<div class="momentum-bar" title="Momentum">
+      <span class="momentum-label">Oni</span>
+      <div class="momentum-track"><div class="momentum-fill" style="width:${pct}%"></div></div>
+      <span class="momentum-label">Ty</span>
+    </div>`
+  }
+
+  private liveStatsLineHtml(you?: MatchSideStats, them?: MatchSideStats): string {
+    if (!you || !them) return ''
+    const poss = possessionPctNow(you, them)
+    return `<p class="live-stats-line meta">Posiadanie ~${poss.you}%–${poss.them}% · Strzały ${you.shots}–${them.shots} · xG ${you.xg.toFixed(1)}–${them.xg.toFixed(1)}</p>`
+  }
+
+  private matchStatsPanelHtml(you: MatchSideStats, them: MatchSideStats, title = 'Statystyki'): string {
+    const rows: Array<[string, string, string]> = [
+      ['Posiadanie', `${you.possession}%`, `${them.possession}%`],
+      ['Strzały', `${you.shots}`, `${them.shots}`],
+      ['Celne', `${you.shotsOnTarget}`, `${them.shotsOnTarget}`],
+      ['xG', you.xg.toFixed(1), them.xg.toFixed(1)],
+    ]
+    if ((you.corners ?? 0) + (them.corners ?? 0) > 0) {
+      rows.push(['Rożne', `${you.corners ?? 0}`, `${them.corners ?? 0}`])
+    }
+    if ((you.fouls ?? 0) + (them.fouls ?? 0) > 0) {
+      rows.push(['Faule', `${you.fouls ?? 0}`, `${them.fouls ?? 0}`])
+    }
+    const body = rows
+      .map(
+        ([label, a, b]) =>
+          label === 'Posiadanie'
+            ? `<div class="match-stat-row possession-row">
+                <span>${a}</span>
+                <div class="poss-bar"><div class="poss-fill" style="width:${you.possession}%"></div></div>
+                <span>${b}</span>
+              </div>
+              <div class="match-stat-label">${label}</div>`
+            : `<div class="match-stat-row"><span>${a}</span><span class="match-stat-mid">${label}</span><span>${b}</span></div>`,
+      )
+      .join('')
+    return `<div class="match-stats-panel"><h3 class="hub-sub">${title}</h3>${body}</div>`
   }
 
   private eventCardHtml(e: MatchEvent, featured = false): string {
@@ -2274,13 +2322,15 @@ export class App {
       motivation: 'MOTYWACJA',
     }
     const short = e.playerName ? (e.playerName.split(' ').pop() ?? e.playerName) : ''
-    const headlineKinds: MatchEvent['kind'][] = ['goal', 'yellow', 'red', 'injury', 'sub', 'shot', 'save']
-    const title = short && headlineKinds.includes(e.kind) && e.kind !== 'shot' && e.kind !== 'save' ? short : e.text
+    const headlineKinds: MatchEvent['kind'][] = ['goal', 'yellow', 'red', 'injury', 'sub']
+    const title = short && headlineKinds.includes(e.kind) ? short : e.text
     let detail = ''
     if (e.kind === 'goal' && e.side === 'you' && this.state.liveMatch) {
-      detail = `${this.state.liveMatch.homeGoals} : ${this.state.liveMatch.awayGoals}`
+      detail = e.assistName
+        ? `Asysta: ${e.assistName.split(' ').pop()} · ${this.state.liveMatch.homeGoals} : ${this.state.liveMatch.awayGoals}`
+        : `${this.state.liveMatch.homeGoals} : ${this.state.liveMatch.awayGoals}`
     } else if (e.kind === 'goal' && e.side === 'them') {
-      detail = e.text
+      detail = e.text.includes(e.playerName ?? '') ? '' : e.text
     } else if (e.kind === 'yellow' || e.kind === 'red' || e.kind === 'injury') {
       detail = e.side === 'them' ? e.text : e.kind === 'red' && e.text.includes('druga') ? 'Druga żółta' : ''
     } else if (title !== e.text) {
@@ -2479,6 +2529,17 @@ export class App {
           <div class="live-clock">HT · zmiany ${live.subsUsed}/3</div>
         </div>
         <h2>Przerwa</h2>
+        ${
+          live.htSnapshotYou && live.htSnapshotThem
+            ? this.matchStatsPanelHtml(live.htSnapshotYou, live.htSnapshotThem, '1. połowa')
+            : live.statsYou && live.statsThem
+              ? this.matchStatsPanelHtml(
+                  { ...live.statsYou, possession: possessionPctNow(live.statsYou, live.statsThem).you },
+                  { ...live.statsThem, possession: possessionPctNow(live.statsYou, live.statsThem).them },
+                  '1. połowa',
+                )
+              : ''
+        }
         <h3 class="hub-sub">Motywacja</h3>
         ${motivation}
         <p class="muted pause-hint">Przeciągnij: ławka ↔ boisko = zmiana · slot ↔ slot = przestawienie</p>
@@ -2506,23 +2567,29 @@ export class App {
 
   private matchResultHtml(): string {
     const r = this.state.season!.lastMatch!
-    const ratings = r.keyRatings
-      .map((x) => `<li>${x.name}: <strong>${x.rating}</strong></li>`)
+    const ratingsList = r.allRatings?.length ? r.allRatings : r.keyRatings
+    const topName = ratingsList[0]?.name
+    const ratings = ratingsList
+      .map(
+        (x) =>
+          `<li class="rating-chip ${x.name === topName ? 'top' : ''}"><span>${x.name}</span><strong>${x.rating.toFixed(1)}</strong></li>`,
+      )
       .join('')
+    const stats =
+      r.yourStats && r.theirStats
+        ? this.matchStatsPanelHtml(r.yourStats, r.theirStats, 'Raport meczu')
+        : r.yourXg != null && r.theirXg != null
+          ? `<p class="meta">xG: ${r.yourXg.toFixed(1)} – ${r.theirXg.toFixed(1)}</p>`
+          : ''
     return this.shell(
       `
-      <section class="panel">
+      <section class="panel match-report">
         <h2>${getClub(r.homeId).short} ${r.homeGoals}:${r.awayGoals} ${getClub(r.awayId).short}</h2>
         <p>${r.narrative}</p>
-        ${
-          r.yourStats && r.theirStats
-            ? `<p class="meta">Posiadanie ${r.yourStats.possession}%–${r.theirStats.possession}% · Strzały ${r.yourStats.shots}–${r.theirStats.shots} (${r.yourStats.shotsOnTarget}–${r.theirStats.shotsOnTarget} SoT) · xG ${(r.yourXg ?? r.yourStats.xg).toFixed(1)}–${(r.theirXg ?? r.theirStats.xg).toFixed(1)}</p>`
-            : r.yourXg != null && r.theirXg != null
-              ? `<p class="meta">xG: ${r.yourXg.toFixed(1)} – ${r.theirXg.toFixed(1)}</p>`
-              : ''
-        }
+        ${stats}
         <p class="meta">Chemia: ${Math.round(r.chemistryAfter)}</p>
-        <ul class="log">${ratings}</ul>
+        <h3 class="hub-sub">Oceny</h3>
+        <ul class="ratings-grid">${ratings}</ul>
         <div class="actions">
           <button class="btn primary" id="btn-next">Dalej</button>
         </div>

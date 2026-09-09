@@ -2052,8 +2052,146 @@ h3 {
   color: #9ec5ff;
 }
 
+.event-card.kind-shot .event-card-tag,
+.event-card.kind-save .event-card-tag {
+  background: rgba(180, 200, 220, 0.15);
+  color: #c5d4e4;
+}
+
 .event-card.them {
   opacity: 0.92;
+}
+
+.momentum-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+
+.momentum-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  min-width: 2.2rem;
+}
+
+.momentum-label:last-child {
+  text-align: right;
+}
+
+.momentum-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+.momentum-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #6a8fad, #3d9b6a);
+  transition: width 0.25s ease;
+}
+
+.live-stats-line {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+}
+
+.match-stats-panel {
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.match-stat-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  margin: 6px 0;
+}
+
+.match-stat-row > span:first-child {
+  text-align: left;
+}
+
+.match-stat-row > span:last-child {
+  text-align: right;
+}
+
+.match-stat-mid {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+  min-width: 5.5rem;
+}
+
+.match-stat-row.possession-row {
+  grid-template-columns: auto 1fr auto;
+  margin-bottom: 0;
+}
+
+.match-stat-label {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.poss-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.poss-fill {
+  height: 100%;
+  background: #3d9b6a;
+  border-radius: 4px;
+}
+
+.ratings-grid {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.rating-chip {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.9rem;
+}
+
+.rating-chip.top {
+  border: 1px solid rgba(61, 155, 106, 0.45);
+  background: rgba(61, 155, 106, 0.12);
+}
+
+.rating-chip strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.match-report .hub-sub {
+  margin-top: 8px;
 }
 
 .event-card-title {

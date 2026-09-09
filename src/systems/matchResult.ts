@@ -23,6 +23,28 @@ export function emptyMatchSideStats(): MatchSideStats {
   return { possession: 0, shots: 0, shotsOnTarget: 0, xg: 0, corners: 0, fouls: 0 }
 }
 
+/** Bieżące % posiadania z minut (bez clampu 25–75 — do LIVE). */
+export function possessionPctNow(
+  you: MatchSideStats,
+  them: MatchSideStats,
+): { you: number; them: number } {
+  const total = you.possession + them.possession
+  if (total <= 0) return { you: 50, them: 50 }
+  const youPct = Math.round((you.possession / total) * 100)
+  return { you: youPct, them: 100 - youPct }
+}
+
+/** Kopia stats z % posiadania (przerwa / raport). */
+export function snapshotSideStats(
+  you: MatchSideStats,
+  them: MatchSideStats,
+): { you: MatchSideStats; them: MatchSideStats } {
+  return finalizePossessionPercents(
+    { ...you, xg: you.xg, corners: you.corners ?? 0, fouls: you.fouls ?? 0 },
+    { ...them, xg: them.xg, corners: them.corners ?? 0, fouls: them.fouls ?? 0 },
+  )
+}
+
 export function finalizePossessionPercents(
   you: MatchSideStats,
   them: MatchSideStats,

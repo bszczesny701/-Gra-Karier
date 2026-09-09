@@ -293,6 +293,8 @@ export interface MatchEvent {
   side?: 'you' | 'them'
   playerName?: string
   playerId?: string
+  assistName?: string
+  assistId?: string
 }
 
 export type LiveHalf = '1' | 'ht' | '2' | 'done'
@@ -343,6 +345,9 @@ export interface LiveMatchState {
   statsThem: MatchSideStats
   /** Momentum −100…100 (plus = Ty) */
   momentum: number
+  /** Statystyki z chwili gwizdka przerwy (już z % posiadania) */
+  htSnapshotYou?: MatchSideStats
+  htSnapshotThem?: MatchSideStats
 }
 
 export interface PendingMatchMoment {
@@ -601,7 +606,7 @@ export const SAVE_KEY = 'gra-karier-manager-v1'
 export const SAVE_SLOTS_META_KEY = 'gra-karier-slots-meta'
 export const SAVE_ACTIVE_SLOT_KEY = 'gra-karier-active-slot'
 export const SAVE_SLOT_COUNT = 3
-export const SAVE_VERSION = 121
+export const SAVE_VERSION = 122
 
 export function clamp(n: number, min = 1, max = 99): number {
   return Math.max(min, Math.min(max, Math.round(n)))

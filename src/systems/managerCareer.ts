@@ -72,6 +72,8 @@ export {
   simulateScoreFromPowers,
   sampleMatchFromPowers,
   tickChancePipeline,
+  possessionPctNow,
+  snapshotSideStats,
 } from './matchResult'
 
 export {

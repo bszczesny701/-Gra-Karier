@@ -29,6 +29,7 @@ import {
   applyPipelineEventToStats,
   finalizePossessionPercents,
   applyMomentumDelta,
+  snapshotSideStats,
 } from './matchResult'
 import { deliverPostMatchMail, deliverBoardReviewMail } from './mailbox'
 import { publishYourMatchNews } from './news'
@@ -53,7 +54,12 @@ function pushEvent(
   kind: MatchEvent['kind'],
   text: string,
   side?: 'you' | 'them',
-  extra?: { playerName?: string; playerId?: string },
+  extra?: {
+    playerName?: string
+    playerId?: string
+    assistName?: string
+    assistId?: string
+  },
 ): void {
   live.events.unshift({
     minute: live.minute,
@@ -62,6 +68,8 @@ function pushEvent(
     side,
     playerName: extra?.playerName,
     playerId: extra?.playerId,
+    assistName: extra?.assistName,
+    assistId: extra?.assistId,
   })
   if (live.events.length > 40) live.events.length = 40
 }
@@ -97,21 +105,81 @@ function addGoal(
   forYou: boolean,
   clubId: string,
   scorer: { name: string; id?: string },
+  assist?: { name: string; id: string } | null,
 ): void {
   const isHome = live.homeId === clubId
   if (forYou) {
     if (isHome) live.homeGoals += 1
     else live.awayGoals += 1
-    pushEvent(live, 'goal', `${scorer.name}`, 'you', {
+    const text = assist
+      ? `${scorer.name} (Asysta: ${shortName(assist.name)})`
+      : scorer.name
+    pushEvent(live, 'goal', text, 'you', {
       playerName: scorer.name,
       playerId: scorer.id,
+      assistName: assist?.name,
+      assistId: assist?.id,
     })
   } else {
     if (isHome) live.awayGoals += 1
     else live.homeGoals += 1
-    const opp = getClub(live.opponentId).short
-    pushEvent(live, 'goal', `Gol dla ${opp}`, 'them', { playerName: opp })
+    pushEvent(live, 'goal', scorer.name, 'them', {
+      playerName: scorer.name,
+      playerId: scorer.id,
+    })
   }
+}
+
+const OPP_NAME_POOL = [
+  'Kowalski',
+  'Nowak',
+  'Wiśniewski',
+  'Wójcik',
+  'Kamiński',
+  'Lewandowski',
+  'Zieliński',
+  'Szymański',
+  'Dąbrowski',
+  'Kaczmarek',
+]
+
+function pickOppScorer(state: GameState, opponentId: string): { name: string; id?: string } {
+  const squad = state.market?.aiSquads?.[opponentId]
+  if (squad?.length) {
+    const attackers = [...squad]
+      .filter((p) => p.role !== 'BR')
+      .sort((a, b) => {
+        const wa =
+          (a.role === 'ŚN' || a.role === 'LN' || a.role === 'PN' ? 3 : a.role === 'OP' ? 2 : 1) *
+          a.overall
+        const wb =
+          (b.role === 'ŚN' || b.role === 'LN' || b.role === 'PN' ? 3 : b.role === 'OP' ? 2 : 1) *
+          b.overall
+        return wb - wa
+      })
+      .slice(0, 8)
+    if (attackers.length) {
+      const p = attackers[rngInt(attackers.length)]!
+      return { name: p.name, id: p.id }
+    }
+  }
+  return { name: OPP_NAME_POOL[rngInt(OPP_NAME_POOL.length)]! }
+}
+
+function pickAssist(
+  state: GameState,
+  live: LiveMatchState,
+  scorerId: string,
+): { name: string; id: string } | null {
+  if (Math.random() > 0.22) return null
+  const map = mapPlayers(state)
+  const others = pitchIds(live)
+    .filter((id) => id !== scorerId)
+    .map((id) => map.get(id))
+    .filter((p): p is SquadPlayer => p != null && p.role !== 'BR')
+  if (others.length < 1) return null
+  const p = others[rngInt(others.length)]!
+  return { name: p.name, id: p.id }
 }
 
 function pickScorer(state: GameState, live: LiveMatchState): { name: string; id: string } {
@@ -174,12 +242,14 @@ function issueYellow(state: GameState, live: LiveMatchState, p: SquadPlayer): vo
   const prev = live.yellows[p.id] ?? 0
   const next = prev + 1
   live.yellows[p.id] = next
+  live.statsYou.fouls = (live.statsYou.fouls ?? 0) + 1
   if (next >= 2) {
     pushEvent(live, 'red', `${shortName(p.name)} — druga żółta`, 'you', {
       playerName: p.name,
       playerId: p.id,
     })
     removeFromPitch(state, live, p.id, 'red')
+    live.momentum = applyMomentumDelta(live.momentum ?? 0, -15)
     return
   }
   pushEvent(live, 'yellow', `${shortName(p.name)}`, 'you', {
@@ -515,29 +585,49 @@ export function tickLiveMinute(state: GameState): boolean {
   for (const ev of tick.events) {
     if (ev.kind === 'goal') {
       if (ev.side === 'you') {
-        addGoal(live, true, clubId, pickScorer(state, live))
+        const scorer = pickScorer(state, live)
+        const assist = pickAssist(state, live, scorer.id)
+        addGoal(live, true, clubId, scorer, assist)
       } else {
-        addGoal(live, false, clubId, { name: '' })
+        addGoal(live, false, clubId, pickOppScorer(state, live.opponentId))
       }
       scored = true
     } else if (ev.kind === 'shot' && ev.onTarget && ev.saved) {
+      const youShooter = ev.side === 'you' ? pickScorer(state, live) : null
       pushEvent(
         live,
         'save',
-        ev.side === 'you' ? 'Strzał celny — świetna interwencja bramkarza.' : 'Twój bramkarz broni!',
+        ev.side === 'you'
+          ? `${shortName(youShooter?.name ?? 'Zawodnik')} — strzał celny, bramkarz broni.`
+          : 'Twój bramkarz broni!',
         ev.side,
+        youShooter ? { playerName: youShooter.name, playerId: youShooter.id } : undefined,
       )
     } else if (ev.kind === 'shot') {
+      const youShooter = ev.side === 'you' ? pickScorer(state, live) : null
       pushEvent(
         live,
         'shot',
-        ev.side === 'you' ? 'Strzał obok bramki.' : 'Strzał rywala obok słupka.',
+        ev.side === 'you'
+          ? `${shortName(youShooter?.name ?? 'Zawodnik')} — strzał obok.`
+          : 'Strzał rywala obok słupka.',
         ev.side,
+        youShooter ? { playerName: youShooter.name, playerId: youShooter.id } : undefined,
       )
     }
   }
   if (!scored && tick.events.length === 0 && chance(0.025)) {
-    pushEvent(live, 'chance', chance(0.5) ? 'Próba wyjścia zpressingu.' : 'Walka w środku pola.')
+    pushEvent(live, 'chance', chance(0.5) ? 'Próba wyjścia z pressingu.' : 'Walka w środku pola.')
+  }
+
+  // Lekkie rożne / faule do raportu
+  if (chance(0.028)) {
+    const st = tick.possessionYou ? live.statsYou : live.statsThem
+    st.corners = (st.corners ?? 0) + 1
+  }
+  if (chance(0.022)) {
+    const st = chance(0.55) ? live.statsYou : live.statsThem
+    st.fouls = (st.fouls ?? 0) + 1
   }
 
   if (!live.paused) maybeDisciplineAndInjuries(state, live)
@@ -554,6 +644,12 @@ export function tickLiveMinute(state: GameState): boolean {
       live.half = 'ht'
       live.paused = true
       live.stoppageUntil = null
+      const snap = snapshotSideStats(
+        live.statsYou ?? emptyMatchSideStats(),
+        live.statsThem ?? emptyMatchSideStats(),
+      )
+      live.htSnapshotYou = snap.you
+      live.htSnapshotThem = snap.them
       pushEvent(live, 'ht', 'Koniec pierwszej połowy.')
       state.screen = 'halfTime'
       return false
@@ -647,13 +743,10 @@ export function finishLiveMatch(state: GameState): void {
       scorer.seasonGoals = (scorer.seasonGoals ?? 0) + 1
     }
   }
-  // Asysty: ~20% goli przypisane losowemu innemu z XI
-  const assistPool = pitchIds(live)
+  // Asysty tylko z eventów (bez podwójnego liczenia)
   for (const e of yourGoalEvents) {
-    if (Math.random() > 0.22 || assistPool.length < 2) continue
-    const others = assistPool.filter((id) => id !== e.playerId)
-    const aid = others[rngInt(others.length)]
-    const asst = team.squad.find((p) => p.id === aid)
+    if (!e.assistId) continue
+    const asst = team.squad.find((p) => p.id === e.assistId)
     if (asst) {
       normalizeSquadPlayer(asst)
       asst.seasonAssists = (asst.seasonAssists ?? 0) + 1
